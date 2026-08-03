@@ -202,21 +202,22 @@ class SubscriptionScopeTests(unittest.TestCase):
         for call in runner.run.call_args_list:
             command = call.args[0]
             self.assertEqual(
-                command[:5],
+                command[:6],
                 [
                     "docker",
                     "exec",
                     "remnawave-subscription-page",
-                    "sh",
-                    "-c",
+                    "node",
+                    "--input-type=module",
+                    "--eval",
                 ],
             )
             self.assertNotIn("header.payload.signature", command)
             self.assertNotIn("--request", command)
             self.assertNotIn("input_text", call.kwargs)
-            self.assertIn("${REMNAWAVE_API_TOKEN}", command[5])
-            self.assertIn("${REMNAWAVE_PANEL_URL%/}", command[5])
-            self.assertEqual(command[-2], "rwm-scope-probe")
+            self.assertIn("process.env.REMNAWAVE_API_TOKEN", command[6])
+            self.assertIn("process.env.REMNAWAVE_PANEL_URL", command[6])
+            self.assertIn("AbortSignal.timeout(15_000)", command[6])
             self.assertTrue(command[-1].startswith("/api/"))
             self.assertTrue(call.kwargs["sensitive"])
 
@@ -227,6 +228,20 @@ class SubscriptionScopeTests(unittest.TestCase):
             "users:by-username.*subscription-page-configs:get",
         ):
             check_subscription_api_scopes(runner, self.panel, self.subscription)
+
+    def test_reports_safe_probe_exit_code_without_runtime_output(self) -> None:
+        runner = mock.Mock()
+        runner.run.return_value = Result(
+            ("docker", "exec"),
+            6,
+            "000",
+            "fetch failed with secret detail",
+        )
+
+        with self.assertRaisesRegex(TransactionError, r"system:metadata \(код probe 6\)") as raised:
+            check_subscription_api_scopes(runner, self.panel, self.subscription)
+
+        self.assertNotIn("secret detail", str(raised.exception))
 
 
 class ContainerHttpEndpointTests(unittest.TestCase):

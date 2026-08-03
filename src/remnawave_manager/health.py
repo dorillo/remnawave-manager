@@ -323,16 +323,17 @@ def check_subscription_api_scopes(
         ),
     )
     probe_script = """\
-set -eu
-test -n "${REMNAWAVE_API_TOKEN:-}" || exit 65
-base=${REMNAWAVE_PANEL_URL%/}
-case "$base" in
-    http://*|https://*) ;;
-    *) exit 64 ;;
-esac
-exec curl --silent --show-error --output /dev/null --write-out '%{http_code}' \\
-    --max-time 15 --noproxy '*' --proto '=http,https' \\
-    --header "Authorization: Bearer ${REMNAWAVE_API_TOKEN}" "${base}$1"
+const base = process.env.REMNAWAVE_PANEL_URL;
+const token = process.env.REMNAWAVE_API_TOKEN;
+if (!base || !token) process.exit(65);
+const target = new URL(process.argv.at(-1), base.endsWith('/') ? base : `${base}/`);
+if (!['http:', 'https:'].includes(target.protocol)) process.exit(64);
+const response = await fetch(target, {
+    headers: {Authorization: `Bearer ${token}`},
+    signal: AbortSignal.timeout(15_000),
+});
+await response.body?.cancel();
+process.stdout.write(String(response.status));
 """
     for scope, path, accepted_statuses in probes:
         result = runner.run(
@@ -340,10 +341,10 @@ exec curl --silent --show-error --output /dev/null --write-out '%{http_code}' \\
                 "docker",
                 "exec",
                 subscription_container,
-                "sh",
-                "-c",
+                "node",
+                "--input-type=module",
+                "--eval",
                 probe_script,
-                "rwm-scope-probe",
                 path,
             ],
             check=False,
@@ -352,7 +353,8 @@ exec curl --silent --show-error --output /dev/null --write-out '%{http_code}' \\
         )
         if result.returncode != 0:
             raise TransactionError(
-                f"Не удалось выполнить локальную проверку scope {scope}."
+                f"Не удалось выполнить локальную проверку scope {scope} "
+                f"(код probe {result.returncode})."
             )
         try:
             status = int(result.stdout.strip())
