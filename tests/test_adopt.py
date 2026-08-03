@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -83,6 +84,29 @@ class AdoptBindSourceTests(unittest.TestCase):
             else:
                 with self.assertRaisesRegex(ValidationError, "символическую ссылку"):
                     _regular_files(root)
+
+    def test_nginx_sources_skip_valid_certbot_live_symlink(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            letsencrypt = root / "letsencrypt"
+            live = letsencrypt / "live/panel.example.com"
+            archive = letsencrypt / "archive/panel.example.com"
+            live.mkdir(parents=True)
+            archive.mkdir(parents=True)
+            archived_certificate = archive / "fullchain1.pem"
+            archived_certificate.write_text("certificate\n", encoding="utf-8")
+            certificate = live / "fullchain.pem"
+            try:
+                certificate.symlink_to("../../archive/panel.example.com/fullchain1.pem")
+            except OSError as error:
+                self.skipTest(f"symbolic links unavailable: {error}")
+            if os.name == "posix":
+                archived_certificate.chmod(0o600)
+
+            with mock.patch(
+                "remnawave_manager.runner._LETSENCRYPT_ROOT", letsencrypt
+            ):
+                self.assertEqual(_regular_files(certificate), [])
 
     def test_nginx_feature_scan_rejects_hardlinked_config(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

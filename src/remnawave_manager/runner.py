@@ -502,7 +502,13 @@ def _validate_compose_env_reference(
     _validate_compose_input_path(str(path), label="Внутренний Compose env_file")
 
 
-def _validate_certbot_live_bind(path: Path, before: os.stat_result) -> None:
+def validate_certbot_live_symlink(path: Path) -> Path:
+    try:
+        before = path.lstat()
+    except OSError as error:
+        raise ValidationError(f"Certbot live-ссылка отсутствует: {path}") from error
+    if not stat.S_ISLNK(before.st_mode):
+        raise ValidationError(f"Ожидалась Certbot live-ссылка: {path}")
     live_root = _LETSENCRYPT_ROOT / "live"
     archive_root = _LETSENCRYPT_ROOT / "archive"
     try:
@@ -555,6 +561,7 @@ def _validate_certbot_live_bind(path: Path, before: os.stat_result) -> None:
         raise ValidationError(
             f"Certbot live-ссылка изменилась во время проверки: {path}"
         )
+    return target
 
 
 def _validate_compose_bind_reference(
@@ -579,7 +586,7 @@ def _validate_compose_bind_reference(
         _validate_compose_input_path(str(path), label="Compose bind source")
         return
     if stat.S_ISLNK(info.st_mode):
-        _validate_certbot_live_bind(path, info)
+        validate_certbot_live_symlink(path)
         return
     if not stat.S_ISDIR(info.st_mode):
         raise ValidationError(

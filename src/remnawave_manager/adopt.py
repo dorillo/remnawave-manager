@@ -11,7 +11,12 @@ from .compose import inspect_compose
 from .errors import ValidationError
 from .journal import TransactionJournal
 from .models import Component, Inventory, ManagedFile, Role
-from .runner import Runner, read_stable_regular_file, sha256_file
+from .runner import (
+    Runner,
+    read_stable_regular_file,
+    sha256_file,
+    validate_certbot_live_symlink,
+)
 from .state import StateStore, utc_now
 
 COMPOSE_NAMES = ("docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml")
@@ -96,7 +101,8 @@ def _bind_sources(service: dict[str, Any], target_fragment: str) -> list[Path]:
 
 def _regular_files(source: Path) -> list[Path]:
     if source.is_symlink():
-        raise ValidationError(f"Bind source nginx является symlink: {source}")
+        validate_certbot_live_symlink(source)
+        return []
     if source.is_file():
         return [source]
     if not source.is_dir():
