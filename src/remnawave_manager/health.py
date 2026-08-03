@@ -318,7 +318,9 @@ def check_subscription_api_scopes(
         panel,
         default_port=3000,
         path="",
+        container_loopback=True,
     )
+    panel_container = panel.container or panel.service
     missing: list[str] = []
     probes = (
         ("system:metadata", "/api/system/metadata", {200}),
@@ -352,6 +354,10 @@ def check_subscription_api_scopes(
     for scope, path, accepted_statuses in probes:
         result = runner.run(
             [
+                "docker",
+                "exec",
+                "-i",
+                panel_container,
                 "curl",
                 "--silent",
                 "--show-error",

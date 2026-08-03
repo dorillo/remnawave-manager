@@ -200,12 +200,23 @@ class SubscriptionScopeTests(unittest.TestCase):
         with mock.patch(
             "remnawave_manager.health._container_http_url",
             return_value="http://127.0.0.1:3000",
-        ):
+        ) as endpoint:
             check_subscription_api_scopes(runner, self.panel, self.subscription)
 
         self.assertEqual(runner.run.call_count, 7)
+        endpoint.assert_called_once_with(
+            runner,
+            self.panel,
+            default_port=3000,
+            path="",
+            container_loopback=True,
+        )
         for call in runner.run.call_args_list[1:]:
             command = call.args[0]
+            self.assertEqual(
+                command[:5],
+                ["docker", "exec", "-i", "remnawave", "curl"],
+            )
             self.assertNotIn("header.payload.signature", command)
             self.assertNotIn("--request", command)
             self.assertEqual(
