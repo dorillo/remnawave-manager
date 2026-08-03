@@ -11,6 +11,7 @@ from typing import Literal
 
 from .api import REALITY_RECOVERY_NAME
 from .backup import _postgres_identity
+from .certificates import CERTBOT_HOOK_VERSION_MARKER
 from .compat import detect_component_version
 from .compose import compose_command, inspect_compose
 from .errors import TransactionError, ValidationError
@@ -684,7 +685,11 @@ def _certbot_renewal_checks(
                 else f"certbot.timer не {label}",
             )
         )
-    required = [hook_root / "deploy" / "remnawave-manager-nginx"]
+    all_hook_paths = [
+        hook_root / phase / "remnawave-manager-nginx"
+        for phase in ("deploy", "pre", "post")
+    ]
+    required = [all_hook_paths[0]]
     if inventory.features.get("certbot_standalone"):
         required.extend(
             (
@@ -693,7 +698,11 @@ def _certbot_renewal_checks(
             )
         )
     invalid: list[str] = []
-    for path in required:
+    for path in all_hook_paths:
+        if path not in required:
+            if path.exists() or path.is_symlink():
+                invalid.append(str(path))
+            continue
         try:
             snapshot = read_stable_regular_file(
                 path,
@@ -713,13 +722,16 @@ def _certbot_renewal_checks(
             or (os.name == "posix" and mode & 0o111 == 0)
             or (os.name == "posix" and unsafe_mode)
             or _CERTBOT_HOOK_MARKER not in text.splitlines()
+            or CERTBOT_HOOK_VERSION_MARKER not in text.splitlines()
         ):
             invalid.append(str(path))
     checks.append(
         Check(
             "error" if invalid else "ok",
             "Certbot renewal hooks",
-            "повреждены или отсутствуют: " + ", ".join(invalid)
+            "устарели, повреждены, отсутствуют или лишние: "
+            + ", ".join(invalid)
+            + "; выполните sudo rwm certificate repair-renewal"
             if invalid
             else "manager hooks установлены",
         )

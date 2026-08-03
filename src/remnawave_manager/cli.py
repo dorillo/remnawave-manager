@@ -171,6 +171,63 @@ class CliContext:
             file=self.stdout,
         )
 
+    def interactive_ui(self) -> bool:
+        """Return whether destructive screen redraws are safe for this output."""
+        try:
+            return bool(self.stdout.isatty()) and os.environ.get("TERM", "") != "dumb"
+        except (AttributeError, OSError):
+            return False
+
+    def clear_screen(self) -> None:
+        if not self.interactive_ui():
+            return
+        self.stdout.write("\033[2J\033[H")
+        self.stdout.flush()
+
+    def pause(self) -> None:
+        if not self.interactive_ui():
+            return
+        try:
+            self.input_fn("\nНажмите Enter, чтобы продолжить...")
+        except (EOFError, KeyboardInterrupt):
+            return
+
+    def render_menu(
+        self,
+        title: str,
+        choices: Sequence[str],
+        *,
+        allow_back: bool,
+        zero_label: str,
+    ) -> None:
+        self.clear_screen()
+        labels = [f"{index}. {label}" for index, label in enumerate(choices, 1)]
+        if allow_back:
+            labels.append(f"0. {zero_label}")
+        width = max(
+            52,
+            min(
+                96,
+                max(
+                    len(title) + 2,
+                    len(f"Remnawave Manager {__version__}") + 2,
+                    *(len(label) + 2 for label in labels),
+                ),
+            ),
+        )
+        border = "+" + "-" * width + "+"
+        self.write(border)
+        self.write(f"|{'Remnawave Manager ' + __version__:^{width}}|")
+        self.write(f"|{title:^{width}}|")
+        self.write(border)
+        self.write()
+        for label in labels[:-1] if allow_back else labels:
+            self.write(f"  {label}")
+        if allow_back:
+            self.write()
+            self.write(f"  {labels[-1]}")
+        self.write()
+
 
 def _terminal_safe_text(value: object) -> str:
     try:
@@ -1807,11 +1864,12 @@ def _choose(
     allow_back: bool = True,
     zero_label: str = "Назад",
 ) -> int:
-    context.write(title)
-    for index, label in enumerate(choices, 1):
-        context.write(f"  {index}. {label}")
-    if allow_back:
-        context.write(f"  0. {zero_label}")
+    context.render_menu(
+        title,
+        choices,
+        allow_back=allow_back,
+        zero_label=zero_label,
+    )
     while True:
         raw = context.input_fn("Выберите пункт: ").strip()
         try:
@@ -2260,8 +2318,14 @@ def _interactive_arguments(context: CliContext, section: int) -> list[str] | Non
             ("Определить из inventory", "Panel", "Node"),
             allow_back=False,
         )
-        result = ["firewall", "apply", "--role", ("auto", "panel", "node")[role - 1]]
-        if role == 3:
+        selected_role = ("auto", "panel", "node")[role - 1]
+        effective_role = (
+            context.store.load_inventory().role
+            if selected_role == "auto"
+            else selected_role
+        )
+        result = ["firewall", "apply", "--role", selected_role]
+        if effective_role == "node":
             result += ["--panel-ip", _ask(context, "IPv4-адрес Panel")]
         return result
     if section == 13:
@@ -2329,24 +2393,32 @@ def interactive_menu(parser: RussianArgumentParser, context: CliContext) -> int:
         "BBR и автоматические security updates",
         "Архивировать стек перед удалением или переустановкой",
     )
-    context.write(f"Remnawave Manager {__version__}")
     while True:
         selected = _choose(context, "Главное меню:", sections, zero_label="Выход")
         if selected == 0:
             context.write("Работа завершена.")
             return 0
+        pause_after_result = False
         try:
             arguments = _interactive_arguments(context, selected)
             if arguments is None:
                 continue
+            pause_after_result = True
             args = parser.parse_args(arguments)
             args.json = False
             context.json_output = False
-            execute(args, context)
+            return_code = execute(args, context)
+            if return_code != 0:
+                context.error(f"Операция завершилась с кодом {return_code}.")
         except ManagerError as error:
+            pause_after_result = True
             context.error(f"Ошибка: {sanitize_external_text(str(error))}")
         except (EOFError, KeyboardInterrupt):
             context.error("Операция прервана пользователем.")
+            return 130
+        finally:
+            if pause_after_result:
+                context.pause()
 
 
 def main(

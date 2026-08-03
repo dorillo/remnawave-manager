@@ -211,6 +211,10 @@ class InstallScriptTests(unittest.TestCase):
             INSTALL_SCRIPT,
         )
         self.assertIn(
+            'readonly MANAGER_INVENTORY="/var/lib/remnawave-manager/inventory.json"',
+            INSTALL_SCRIPT,
+        )
+        self.assertIn(
             'install -d -o root -g root -m 0700 -- "${MANAGER_LOCK_DIR}"',
             INSTALL_SCRIPT,
         )
@@ -221,6 +225,16 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn('chmod 0755 "${staged_venv}"', INSTALL_SCRIPT)
         self.assertNotIn("--force-reinstall", INSTALL_SCRIPT)
         self.assertIn("активная версия не изменена", INSTALL_SCRIPT)
+        self.assertIn(
+            '"${ENTRYPOINT}" certificate repair-renewal --yes',
+            INSTALL_SCRIPT,
+        )
+        self.assertGreater(
+            INSTALL_SCRIPT.index(
+                '"${ENTRYPOINT}" certificate repair-renewal --yes'
+            ),
+            release_install_lock,
+        )
         self.assertLess(
             INSTALL_SCRIPT.index(
                 'assert_managed_link_unchanged "${ACTIVE_VENV_LINK}"'

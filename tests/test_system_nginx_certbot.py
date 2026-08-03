@@ -111,6 +111,10 @@ class SystemNginxCertbotTests(unittest.TestCase):
             self.assertLess(deploy.index("is-active"), deploy.index("nginx -t"))
             self.assertLess(deploy.index("nginx -t"), deploy.index("reload nginx"))
             self.assertNotIn("docker", deploy + pre + post)
+            for script in (deploy, pre, post):
+                self.assertIn(
+                    "# Remnawave Manager Certbot hook version: 2", script
+                )
             marker = 'marker="/run/remnawave-manager-certbot-nginx-${PPID}"'
             marker_search = (
                 'marker_prefix="/run/remnawave-manager-certbot-nginx-"'
@@ -260,6 +264,10 @@ class SystemNginxCertbotTests(unittest.TestCase):
                 for phase in ("deploy", "pre", "post")
             }
             scripts = "\n".join(phase_scripts.values())
+            for script in phase_scripts.values():
+                self.assertIn(
+                    "# Remnawave Manager Certbot hook version: 2", script
+                )
             docker = "/usr/bin/docker --host=unix:///run/docker.sock"
             self.assertIn(f"{docker} inspect", scripts)
             self.assertIn(f"{docker} exec remnawave-nginx nginx -t", scripts)

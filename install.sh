@@ -100,6 +100,7 @@ readonly PREVIOUS_VENV_LINK="${RUNTIME_DIR}/previous"
 readonly ENTRYPOINT="/usr/local/bin/rwm"
 readonly MANAGER_LOCK_DIR="/run/remnawave-manager"
 readonly MANAGER_LOCK="${MANAGER_LOCK_DIR}/manager.lock"
+readonly MANAGER_INVENTORY="/var/lib/remnawave-manager/inventory.json"
 readonly MARKER_TEXT='Этот каталог управляется Remnawave Manager.'
 readonly VENV_MARKER='.managed-by-remnawave-manager'
 readonly GCORE_PLUGIN_VERSION='0.1.8'
@@ -733,6 +734,16 @@ exec 9>&-
 if ! "${ENTRYPOINT}" system apply --yes; then
     printf '%s\n' \
         'Remnawave Manager установлен, но BBR/fq или unattended-upgrades не удалось применить. Выполните позднее: sudo rwm system apply' \
+        >&2
+fi
+if [[ -L "${MANAGER_INVENTORY}" || ( -e "${MANAGER_INVENTORY}" && ! -f "${MANAGER_INVENTORY}" ) ]]; then
+    printf '%s\n' \
+        'Remnawave Manager установлен, но inventory имеет небезопасный тип; автоматическое обновление Certbot hooks пропущено.' \
+        >&2
+elif [[ -f "${MANAGER_INVENTORY}" ]] \
+    && ! "${ENTRYPOINT}" certificate repair-renewal --yes; then
+    printf '%s\n' \
+        'Remnawave Manager установлен, но Certbot hooks существующей установки обновить не удалось. Выполните позднее: sudo rwm certificate repair-renewal' \
         >&2
 fi
 printf '%s\n' 'Remnawave Manager установлен. Запустите: sudo rwm'

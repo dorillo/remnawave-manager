@@ -35,6 +35,10 @@ CertbotTimerEnablement = Literal[
     "indirect",
 ]
 _HOOK_MARKER = "# Managed by remnawave-manager"
+CERTBOT_HOOK_VERSION = 2
+CERTBOT_HOOK_VERSION_MARKER = (
+    f"# Remnawave Manager Certbot hook version: {CERTBOT_HOOK_VERSION}"
+)
 _CREDENTIAL_MARKER = "# Managed by remnawave-manager"
 _LEGACY_CRON_LOG = ">> /usr/local/remnawave_reverse/cron_jobs.log 2>&1"
 _DEFAULT_HOOK_ROOT = Path("/etc/letsencrypt/renewal-hooks")
@@ -1151,6 +1155,7 @@ def install_renewal_hooks(
         deploy_script = (
             "#!/bin/sh\n"
             f"{_HOOK_MARKER}\n"
+            f"{CERTBOT_HOOK_VERSION_MARKER}\n"
             f"{hook_lock_prelude}"
             "if /usr/bin/systemctl is-active --quiet nginx; then\n"
             "    /usr/sbin/nginx -t >/dev/null\n"
@@ -1162,6 +1167,7 @@ def install_renewal_hooks(
         deploy_script = (
             "#!/bin/sh\n"
             f"{_HOOK_MARKER}\n"
+            f"{CERTBOT_HOOK_VERSION_MARKER}\n"
             f"{hook_lock_prelude}"
             f"running=\"$({docker} inspect -f '{{{{.State.Running}}}}' {nginx_container})\"\n"
             "if [ \"$running\" = true ]; then\n"
@@ -1181,12 +1187,14 @@ def install_renewal_hooks(
     pre_hook_prelude = (
         "#!/bin/sh\n"
         f"{_HOOK_MARKER}\n"
+        f"{CERTBOT_HOOK_VERSION_MARKER}\n"
         f"{hook_lock_prelude}"
         f'marker="{_CERTBOT_MARKER_ROOT}/{_CERTBOT_MARKER_PREFIX}${{PPID}}"\n'
     )
     post_hook_prelude = (
         "#!/bin/sh\n"
         f"{_HOOK_MARKER}\n"
+        f"{CERTBOT_HOOK_VERSION_MARKER}\n"
         f"{hook_lock_prelude}"
         f'marker_prefix="{_CERTBOT_MARKER_ROOT}/{_CERTBOT_MARKER_PREFIX}"\n'
         'set -- "${marker_prefix}"*\n'

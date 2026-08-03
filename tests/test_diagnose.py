@@ -596,7 +596,8 @@ class DiagnoseTests(unittest.TestCase):
                 hook = root / phase / "remnawave-manager-nginx"
                 hook.parent.mkdir(parents=True, exist_ok=True)
                 hook.write_text(
-                    "#!/bin/sh\n# Managed by remnawave-manager\n",
+                    "#!/bin/sh\n# Managed by remnawave-manager\n"
+                    "# Remnawave Manager Certbot hook version: 2\n",
                     encoding="utf-8",
                 )
                 if os.name == "posix":
@@ -620,6 +621,75 @@ class DiagnoseTests(unittest.TestCase):
 
             self.assertEqual([check.level for check in checks], ["ok", "ok", "ok"])
 
+    def test_certbot_diagnostics_reject_outdated_manager_hook(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            hook = root / "deploy" / "remnawave-manager-nginx"
+            hook.parent.mkdir(parents=True)
+            hook.write_text(
+                "#!/bin/sh\n# Managed by remnawave-manager\n",
+                encoding="utf-8",
+            )
+            if os.name == "posix":
+                hook.chmod(0o700)
+            current = Inventory(
+                schema_version=1,
+                role="node",
+                install_dir="/opt/remnanode",
+                compose_file="/opt/remnanode/docker-compose.yml",
+                env_file=None,
+                webserver="nginx",
+                features={"certbot_renewal": True},
+            )
+            runner = mock.Mock(spec=Runner)
+            runner.run.side_effect = (
+                Result(("systemctl",), 0, "enabled\n", ""),
+                Result(("systemctl",), 0, "active\n", ""),
+            )
+
+            checks = _certbot_renewal_checks(runner, current, hook_root=root)
+
+            self.assertEqual(checks[-1].level, "error")
+            self.assertIn(str(hook), checks[-1].detail)
+            self.assertIn("certificate repair-renewal", checks[-1].detail)
+
+    def test_certbot_diagnostics_reject_unexpected_standalone_hooks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            hooks: list[Path] = []
+            for phase in ("deploy", "pre", "post"):
+                hook = root / phase / "remnawave-manager-nginx"
+                hook.parent.mkdir(parents=True)
+                hook.write_text(
+                    "#!/bin/sh\n# Managed by remnawave-manager\n"
+                    "# Remnawave Manager Certbot hook version: 2\n",
+                    encoding="utf-8",
+                )
+                if os.name == "posix":
+                    hook.chmod(0o700)
+                hooks.append(hook)
+            current = Inventory(
+                schema_version=1,
+                role="node",
+                install_dir="/opt/remnanode",
+                compose_file="/opt/remnanode/docker-compose.yml",
+                env_file=None,
+                webserver="nginx",
+                features={"certbot_renewal": True},
+            )
+            runner = mock.Mock(spec=Runner)
+            runner.run.side_effect = (
+                Result(("systemctl",), 0, "enabled\n", ""),
+                Result(("systemctl",), 0, "active\n", ""),
+            )
+
+            checks = _certbot_renewal_checks(runner, current, hook_root=root)
+
+            self.assertEqual(checks[-1].level, "error")
+            self.assertNotIn(str(hooks[0]), checks[-1].detail)
+            self.assertIn(str(hooks[1]), checks[-1].detail)
+            self.assertIn(str(hooks[2]), checks[-1].detail)
+
     @unittest.skipUnless(
         os.name == "posix", "POSIX ownership and modes are unavailable"
     )
@@ -631,7 +701,8 @@ class DiagnoseTests(unittest.TestCase):
                 hook = root / phase / "remnawave-manager-nginx"
                 hook.parent.mkdir(parents=True, exist_ok=True)
                 hook.write_text(
-                    "#!/bin/sh\n# Managed by remnawave-manager\n",
+                    "#!/bin/sh\n# Managed by remnawave-manager\n"
+                    "# Remnawave Manager Certbot hook version: 2\n",
                     encoding="utf-8",
                 )
                 hook.chmod(0o700)

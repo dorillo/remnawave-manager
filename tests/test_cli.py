@@ -607,6 +607,155 @@ class CliDispatchTests(unittest.TestCase):
         self.assertIn("Главное меню", self.stdout.getvalue())
         self.assertIn("Работа завершена", self.stdout.getvalue())
 
+    def test_interactive_menu_redraws_only_on_a_real_terminal(self) -> None:
+        class TerminalBuffer(io.StringIO):
+            def isatty(self) -> bool:
+                return True
+
+        terminal = TerminalBuffer()
+        answers = iter(["0"])
+        with mock.patch.dict(os.environ, {"TERM": "xterm-256color"}, clear=False):
+            code = main(
+                [],
+                runtime_paths=self.paths,
+                runner=mock.Mock(),
+                input_fn=lambda _prompt: next(answers),
+                stdout=terminal,
+                stderr=self.stderr,
+            )
+
+        rendered = terminal.getvalue()
+        self.assertEqual(code, 0)
+        self.assertTrue(rendered.startswith("\033[2J\033[H"))
+        self.assertIn("Remnawave Manager", rendered)
+        self.assertIn("Главное меню", rendered)
+
+    def test_interactive_menu_pauses_before_redrawing_command_output(self) -> None:
+        class TerminalBuffer(io.StringIO):
+            def isatty(self) -> bool:
+                return True
+
+        terminal = TerminalBuffer()
+        answers = iter(["14", "", "0"])
+        prompts: list[str] = []
+
+        def prompt(message: str) -> str:
+            prompts.append(message)
+            return next(answers)
+
+        with (
+            mock.patch.dict(os.environ, {"TERM": "xterm-256color"}, clear=False),
+            mock.patch(
+                "remnawave_manager.cli.StateStore.load_inventory",
+                return_value=inventory(),
+            ),
+        ):
+            code = main(
+                [],
+                runtime_paths=self.paths,
+                runner=mock.Mock(),
+                input_fn=prompt,
+                stdout=terminal,
+                stderr=self.stderr,
+            )
+
+        self.assertEqual(code, 0, self.stderr.getvalue())
+        self.assertEqual(terminal.getvalue().count("\033[2J\033[H"), 2)
+        self.assertIn("Нажмите Enter, чтобы продолжить", prompts[1])
+
+    def test_interactive_firewall_auto_panel_does_not_request_panel_ip(self) -> None:
+        with (
+            mock.patch(
+                "remnawave_manager.cli.StateStore.load_inventory",
+                return_value=inventory("panel"),
+            ),
+            mock.patch(
+                "remnawave_manager.cli.configure_firewall", return_value=(22,)
+            ) as configure,
+        ):
+            code = self.run_main([], answers=["12", "2", "1", "ДА", "0"])
+
+        self.assertEqual(code, 0, self.stderr.getvalue())
+        configure.assert_called_once_with(
+            mock.ANY,
+            "panel",
+            panel_ip=None,
+            ssh_ports=None,
+            transaction_root=self.paths.state / "firewall-transactions",
+        )
+
+    def test_interactive_firewall_auto_node_requests_panel_ip(self) -> None:
+        with (
+            mock.patch(
+                "remnawave_manager.cli.StateStore.load_inventory",
+                return_value=inventory("node"),
+            ),
+            mock.patch(
+                "remnawave_manager.cli.configure_firewall", return_value=(22,)
+            ) as configure,
+        ):
+            code = self.run_main(
+                [], answers=["12", "2", "1", "192.0.2.10", "ДА", "0"]
+            )
+
+        self.assertEqual(code, 0, self.stderr.getvalue())
+        configure.assert_called_once_with(
+            mock.ANY,
+            "node",
+            panel_ip="192.0.2.10",
+            ssh_ports=None,
+            transaction_root=self.paths.state / "firewall-transactions",
+        )
+
+    def test_interactive_menu_pauses_after_argument_collection_error(self) -> None:
+        class TerminalBuffer(io.StringIO):
+            def isatty(self) -> bool:
+                return True
+
+        terminal = TerminalBuffer()
+        answers = iter(["12", "2", "1", "", "0"])
+        prompts: list[str] = []
+
+        def prompt(message: str) -> str:
+            prompts.append(message)
+            return next(answers)
+
+        with (
+            mock.patch.dict(os.environ, {"TERM": "xterm-256color"}, clear=False),
+            mock.patch(
+                "remnawave_manager.cli.StateStore.load_inventory",
+                side_effect=ValidationError("inventory не найден"),
+            ),
+        ):
+            code = main(
+                [],
+                runtime_paths=self.paths,
+                runner=mock.Mock(),
+                input_fn=prompt,
+                stdout=terminal,
+                stderr=self.stderr,
+            )
+
+        self.assertEqual(code, 0)
+        self.assertIn("Ошибка: inventory не найден", self.stderr.getvalue())
+        self.assertIn("Нажмите Enter, чтобы продолжить", prompts[3])
+
+    def test_interactive_menu_exits_on_end_of_input(self) -> None:
+        prompt = mock.Mock(side_effect=EOFError)
+
+        code = main(
+            [],
+            runtime_paths=self.paths,
+            runner=mock.Mock(),
+            input_fn=prompt,
+            stdout=self.stdout,
+            stderr=self.stderr,
+        )
+
+        self.assertEqual(code, 130)
+        self.assertIn("Интерактивный режим завершён", self.stderr.getvalue())
+        prompt.assert_called_once()
+
     def test_service_logs_dispatch_is_read_only(self) -> None:
         current = inventory()
         current.components["node"] = Component(
