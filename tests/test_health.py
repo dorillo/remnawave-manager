@@ -126,6 +126,16 @@ class SubscriptionHealthTests(unittest.TestCase):
                 runner, self.component, timeout=0, legacy=True  # type: ignore[arg-type]
             )
 
+    def test_legacy_726_accepts_intentional_socket_close(self) -> None:
+        runner = SequenceRunner([52], ["000"])
+        with mock.patch(
+            "remnawave_manager.health._container_http_url",
+            return_value="http://127.0.0.1:13010/",
+        ):
+            check_subscription_http(
+                runner, self.component, timeout=0, legacy=True  # type: ignore[arg-type]
+            )
+
     def test_legacy_726_rejects_missing_or_server_error_response(self) -> None:
         for returncode, status in ((7, "000"), (0, "500"), (0, "not-http")):
             with self.subTest(returncode=returncode, status=status):
@@ -135,7 +145,7 @@ class SubscriptionHealthTests(unittest.TestCase):
                         "remnawave_manager.health._container_http_url",
                         return_value="http://127.0.0.1:13010/",
                     ),
-                    self.assertRaisesRegex(TransactionError, "HTTP 2xx-4xx"),
+                    self.assertRaisesRegex(TransactionError, "liveness"),
                 ):
                     check_subscription_http(
                         runner,

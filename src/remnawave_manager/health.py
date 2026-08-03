@@ -247,13 +247,16 @@ def check_subscription_http(
         )
         if legacy:
             status = result.stdout.strip()
-            ready = (
+            http_response = (
                 result.returncode == 0
                 and len(status) == 3
                 and status.isascii()
                 and status.isdigit()
                 and 200 <= int(status) < 500
             )
+            # Version 7.2.6 deliberately destroys sockets for unknown requests.
+            closed_by_application = result.returncode == 52 and status == "000"
+            ready = http_response or closed_by_application
         else:
             ready = result.returncode == 0
         if ready:
@@ -261,8 +264,8 @@ def check_subscription_http(
         if time.monotonic() >= deadline:
             if legacy:
                 raise TransactionError(
-                    "Subscription Page 7.2.6 не отвечает допустимым HTTP 2xx-4xx "
-                    "на локальный /."
+                    "Subscription Page 7.2.6 не отвечает на локальную "
+                    "liveness-проверку /."
                 )
             raise TransactionError(
                 "Subscription Page не отвечает на локальный /internal/health."
