@@ -328,8 +328,27 @@ const token = process.env.REMNAWAVE_API_TOKEN;
 if (!base || !token) process.exit(65);
 const target = new URL(process.argv.at(-1), base.endsWith('/') ? base : `${base}/`);
 if (!['http:', 'https:'].includes(target.protocol)) process.exit(64);
+const headers = {
+    Authorization: `Bearer ${token}`,
+    'user-agent': 'Remnawave Subscription Page',
+};
+if (target.protocol === 'http:') {
+    headers['X-Forwarded-For'] = '127.0.0.1';
+    headers['X-Forwarded-Proto'] = 'https';
+}
+if (process.env.CADDY_AUTH_API_TOKEN) {
+    headers['X-Api-Key'] = process.env.CADDY_AUTH_API_TOKEN;
+}
+if (process.env.CLOUDFLARE_ZERO_TRUST_CLIENT_ID &&
+    process.env.CLOUDFLARE_ZERO_TRUST_CLIENT_SECRET) {
+    headers['CF-Access-Client-Id'] = process.env.CLOUDFLARE_ZERO_TRUST_CLIENT_ID;
+    headers['CF-Access-Client-Secret'] = process.env.CLOUDFLARE_ZERO_TRUST_CLIENT_SECRET;
+}
+if (process.env.EGAMES_COOKIE) {
+    headers.Cookie = process.env.EGAMES_COOKIE;
+}
 const response = await fetch(target, {
-    headers: {Authorization: `Bearer ${token}`},
+    headers,
     signal: AbortSignal.timeout(15_000),
 });
 await response.body?.cancel();

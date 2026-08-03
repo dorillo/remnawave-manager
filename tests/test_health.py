@@ -218,6 +218,11 @@ class SubscriptionScopeTests(unittest.TestCase):
             self.assertIn("process.env.REMNAWAVE_API_TOKEN", command[6])
             self.assertIn("process.env.REMNAWAVE_PANEL_URL", command[6])
             self.assertIn("AbortSignal.timeout(15_000)", command[6])
+            self.assertIn("headers['X-Forwarded-For'] = '127.0.0.1'", command[6])
+            self.assertIn("headers['X-Forwarded-Proto'] = 'https'", command[6])
+            self.assertIn("process.env.CADDY_AUTH_API_TOKEN", command[6])
+            self.assertIn("process.env.CLOUDFLARE_ZERO_TRUST_CLIENT_ID", command[6])
+            self.assertIn("process.env.EGAMES_COOKIE", command[6])
             self.assertTrue(command[-1].startswith("/api/"))
             self.assertTrue(call.kwargs["sensitive"])
 
