@@ -219,6 +219,11 @@ def scan_warp(runner: Runner, runtime: RuntimePaths) -> WarpScan:
     paths = WarpPaths(runtime)
     wireguard_dir = runtime.root / "etc/wireguard"
     conflicts: list[str] = []
+    manager_state = False
+    if paths.state.is_symlink() or (paths.state.exists() and not paths.state.is_file()):
+        conflicts.append(f"Состояние WARP имеет небезопасный тип: {paths.state}")
+    elif paths.state.is_file():
+        manager_state = True
     if wireguard_dir.is_symlink():
         conflicts.append(f"Каталог WireGuard является символической ссылкой: {wireguard_dir}")
         configs: list[Path] = []
@@ -273,12 +278,23 @@ def scan_warp(runner: Runner, runtime: RuntimePaths) -> WarpScan:
                 conflicts.append(str(error))
             else:
                 accounts.append(candidate)
-    if len(accounts) > 1:
+    legacy_accounts: list[Path] = []
+    if manager_state and paths.account in accounts:
+        account = paths.account
+        legacy_accounts = [item for item in accounts if item != paths.account]
+    elif manager_state:
+        account = None
+        conflicts.append(
+            f"WARP управляется менеджером, но account-файл отсутствует: {paths.account}"
+        )
+    elif len(accounts) > 1:
         conflicts.append(
             "Найдено несколько WARP account файлов; автоматический takeover неоднозначен: "
             + ", ".join(str(path) for path in accounts)
         )
-    account = accounts[0] if accounts else None
+        account = accounts[0]
+    else:
+        account = accounts[0] if accounts else None
     legacy_candidates = [
         runtime.root / "opt/warp-native",
         runtime.root / "etc/cron.d/warp-native",
@@ -287,14 +303,9 @@ def scan_warp(runner: Runner, runtime: RuntimePaths) -> WarpScan:
     ]
     legacy = [
         str(path)
-        for path in legacy_candidates
+        for path in [*legacy_candidates, *legacy_accounts]
         if path.exists() or path.is_symlink()
     ]
-    manager_state = False
-    if paths.state.is_symlink() or (paths.state.exists() and not paths.state.is_file()):
-        conflicts.append(f"Состояние WARP имеет небезопасный тип: {paths.state}")
-    elif paths.state.is_file():
-        manager_state = True
     official_active = _is_active(runner, "warp-svc.service")
     official_enabled = _is_enabled(runner, "warp-svc.service")
     unit_active = _is_active(runner, "wg-quick@warp.service")

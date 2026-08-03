@@ -1829,7 +1829,10 @@ def _show_warp_scan(context: CliContext, scan: Any) -> None:
     context.write(f"Интерфейс warp: {'есть' if scan.interface_exists else 'нет'}")
     context.write(f"Сервис активен: {'да' if scan.unit_active else 'нет'}")
     context.write(f"Управляется менеджером: {'да' if scan.manager_state else 'нет'}")
-    context.write(f"Безопасный takeover: {'да' if scan.safe_takeover else 'нет'}")
+    if scan.manager_state:
+        context.write("Повторный takeover: не требуется")
+    else:
+        context.write(f"Безопасный takeover: {'да' if scan.safe_takeover else 'нет'}")
     if scan.conflicts:
         context.write("Конфликты: " + "; ".join(scan.conflicts))
     if scan.legacy_paths:

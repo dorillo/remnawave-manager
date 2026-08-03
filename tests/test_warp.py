@@ -478,6 +478,48 @@ class WarpLifecycleTests(unittest.TestCase):
             self.assertIn(str(cron), scan.legacy_paths)
             self.assertIn(str(legacy_binary), scan.legacy_paths)
 
+    def test_managed_scan_prefers_managed_account_and_lists_legacy_copy(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            store = _store(root)
+            paths, _ = self._write_action_state(store, desired_enabled=True)
+            paths.account.write_text(WARP_ACCOUNT, encoding="utf-8")
+            _private(paths.account, 0o600)
+            legacy_account = root / "root/wgcf-account.toml"
+            legacy_account.parent.mkdir(parents=True)
+            legacy_account.write_text(WARP_ACCOUNT, encoding="utf-8")
+            _private(legacy_account, 0o600)
+            runner = mock.Mock()
+            runner.run.side_effect = _inactive_systemd
+
+            scan = scan_warp(runner, store.paths)
+
+            self.assertTrue(scan.manager_state)
+            self.assertFalse(scan.safe_takeover)
+            self.assertEqual(scan.account, str(paths.account))
+            self.assertIn(str(legacy_account), scan.legacy_paths)
+            self.assertFalse(any("несколько WARP account" in item for item in scan.conflicts))
+
+    def test_managed_scan_rejects_missing_managed_account(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            store = _store(root)
+            _paths, _ = self._write_action_state(store, desired_enabled=True)
+            legacy_account = root / "root/wgcf-account.toml"
+            legacy_account.parent.mkdir(parents=True)
+            legacy_account.write_text(WARP_ACCOUNT, encoding="utf-8")
+            _private(legacy_account, 0o600)
+            runner = mock.Mock()
+            runner.run.side_effect = _inactive_systemd
+
+            scan = scan_warp(runner, store.paths)
+
+            self.assertTrue(scan.manager_state)
+            self.assertIsNone(scan.account)
+            self.assertTrue(
+                any("account-файл отсутствует" in item for item in scan.conflicts)
+            )
+
     def test_scan_and_rotate_reject_pending_registration_credentials(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
