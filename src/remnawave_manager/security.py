@@ -59,6 +59,11 @@ _EMERGENCY_TIMER = "remnawave-manager-emergency-close.timer"
 _UNIT_MARKER = "X-Remnawave-Manager=true"
 _MAX_MANAGER_UNIT_SIZE = 1024 * 1024
 _MAX_NGINX_CONFIG_SIZE = 16 * 1024 * 1024
+_MIN_MAP_HASH_BUCKET_SIZE = 128
+_MAP_HASH_BUCKET_SIZE = re.compile(
+    r"(?m)^(?P<prefix>[ \t]*map_hash_bucket_size[ \t]+)"
+    r"(?P<size>\d+)(?P<suffix>[ \t]*;[ \t]*(?:#.*)?)\r?$"
+)
 
 SystemdEnablement = Literal[
     "enabled",
@@ -235,13 +240,33 @@ def _migrate_legacy_panel_access(
     new_name = "rwm_" + secrets.token_hex(12)
     new_value = secrets.token_urlsafe(48)
     new_path = "/_rwm/" + secrets.token_urlsafe(36)
-    manager_map = (
+    updated = original
+    map_hash_matches = list(_MAP_HASH_BUCKET_SIZE.finditer(updated))
+    if len(map_hash_matches) > 1:
+        raise ValidationError(
+            "Legacy nginx содержит несколько map_hash_bucket_size; "
+            "миграция остановлена."
+        )
+    manager_map_prefix = ""
+    if map_hash_matches:
+        match = map_hash_matches[0]
+        if int(match.group("size")) < _MIN_MAP_HASH_BUCKET_SIZE:
+            updated = (
+                updated[: match.start("size")]
+                + str(_MIN_MAP_HASH_BUCKET_SIZE)
+                + updated[match.end("size") :]
+            )
+    else:
+        manager_map_prefix = (
+            f"map_hash_bucket_size {_MIN_MAP_HASH_BUCKET_SIZE};\n\n"
+        )
+
+    manager_map = manager_map_prefix + (
         f"map $cookie_{new_name} $panel_authorized {{\n"
         "    default 0;\n"
         f'    "{new_value}" 1;\n'
         "}\n\n"
     )
-    updated = original
     map_targets = ("auth_cookie", "auth_query", "authorized", "set_cookie_header")
     for index, target in enumerate(map_targets):
         pattern = re.compile(

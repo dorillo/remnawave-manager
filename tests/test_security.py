@@ -404,12 +404,63 @@ server {
             self.assertEqual(access.mode, "manager-path")
             self.assertEqual(access.url, "https://panel.example.com/_rwm/" + "P" * 48)
             rendered = nginx.read_text(encoding="utf-8")
+            self.assertEqual(rendered.count("map_hash_bucket_size 128;"), 1)
             self.assertIn("$cookie_rwm_" + "a" * 24, rendered)
             self.assertNotIn("$auth_query", rendered)
             self.assertNotIn("$authorized", rendered)
             self.assertNotIn("$set_cookie_header", rendered)
             gate = rendered.split("location = /_rwm/", 1)[1].split("location /", 1)[0]
             self.assertIn("add_header Referrer-Policy no-referrer always;", gate)
+
+    def test_legacy_rotation_raises_small_map_hash_bucket_size(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            nginx = root / "nginx.conf"
+            nginx.write_text(
+                """map_hash_bucket_size 64;
+map $http_cookie $auth_cookie {
+    default 0;
+    "~*AbCdEfGh=QrStUvWx" 1;
+}
+map $arg_AbCdEfGh $auth_query {
+    default 0;
+    "QrStUvWx" 1;
+}
+map $auth_cookie$auth_query $authorized {
+    "~1" 1;
+    default 0;
+}
+map $arg_AbCdEfGh $set_cookie_header {
+    "QrStUvWx" "AbCdEfGh=QrStUvWx; Path=/; HttpOnly; Secure";
+    default "";
+}
+server {
+    server_name panel.example.com;
+    add_header Set-Cookie $set_cookie_header;
+    location / {
+        if ($authorized = 0) { return 418; }
+        proxy_pass http://127.0.0.1:3000;
+    }
+}
+""",
+                encoding="utf-8",
+            )
+            store = StateStore(RuntimePaths(root))
+            save_inventory(store, root, nginx)
+
+            with (
+                mock.patch("remnawave_manager.security.create_backup"),
+                mock.patch("remnawave_manager.security.activate_nginx_config"),
+                mock.patch(
+                    "remnawave_manager.security.nginx_is_running",
+                    return_value=True,
+                ),
+            ):
+                rotate_panel_access(mock.Mock(), store)
+
+            rendered = nginx.read_text(encoding="utf-8")
+            self.assertEqual(rendered.count("map_hash_bucket_size 128;"), 1)
+            self.assertNotIn("map_hash_bucket_size 64;", rendered)
 
     def test_rotation_updates_nginx_inventory_and_stored_url(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
