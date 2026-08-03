@@ -78,6 +78,7 @@ def _container_http_url(
     *,
     default_port: int,
     path: str,
+    container_loopback: bool = False,
 ) -> str:
     container = component.container or component.service
     result = runner.run(
@@ -117,6 +118,9 @@ def _container_http_url(
                 ) from error
     if not 1 <= port <= 65535:
         raise ValidationError(f"Контейнер {container} содержит некорректный APP_PORT.")
+
+    if container_loopback:
+        return f"http://127.0.0.1:{port}{path}"
 
     host_config = details.get("HostConfig") or {}
     if not isinstance(host_config, dict):
@@ -221,10 +225,18 @@ def check_subscription_http(
         component,
         default_port=3010,
         path="/" if legacy else "/internal/health",
+        container_loopback=not legacy,
     )
     deadline = time.monotonic() + timeout
     while True:
-        command = [
+        command: list[str] = []
+        if not legacy:
+            command += [
+                "docker",
+                "exec",
+                component.container or component.service,
+            ]
+        command += [
                 "curl",
                 "--silent",
                 "--show-error",

@@ -17,6 +17,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, BinaryIO
 
 from . import __version__
+from .compat import detect_component_version
 from .compose import compose_command, validate_rendered_compose
 from .errors import TransactionError, ValidationError
 from .health import (
@@ -1355,7 +1356,14 @@ def _restore_backup_snapshot(
             check_panel_http(runner, panel)
         subscription = inventory.components.get("subscription")
         if subscription is not None and subscription.service in expected:
-            check_subscription_http(runner, subscription)
+            subscription_version = detect_component_version(
+                runner, "subscription", subscription
+            )
+            check_subscription_http(
+                runner,
+                subscription,
+                legacy=subscription_version == "7.2.6",
+            )
         node = inventory.components.get("node")
         if node is not None and node.service in expected:
             check_node_runtime(runner, inventory)

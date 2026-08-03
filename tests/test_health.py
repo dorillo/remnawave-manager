@@ -106,6 +106,28 @@ class SubscriptionHealthTests(unittest.TestCase):
         ):
             check_subscription_http(runner, self.component, timeout=0)  # type: ignore[arg-type]
 
+    def test_v8_health_runs_inside_container_loopback(self) -> None:
+        runner = mock.Mock()
+        runner.run.return_value = Result(("curl",), 0, "", "")
+        with mock.patch(
+            "remnawave_manager.health._container_http_url",
+            return_value="http://127.0.0.1:3010/internal/health",
+        ) as endpoint:
+            check_subscription_http(runner, self.component, timeout=0)
+
+        endpoint.assert_called_once_with(
+            runner,
+            self.component,
+            default_port=3010,
+            path="/internal/health",
+            container_loopback=True,
+        )
+        command = runner.run.call_args.args[0]
+        self.assertEqual(
+            command[:4],
+            ["docker", "exec", "remnawave-subscription-page", "curl"],
+        )
+
     def test_legacy_726_accepts_expected_root_not_found_response(self) -> None:
         runner = SequenceRunner([0], ["404"])
         with mock.patch(
@@ -208,6 +230,31 @@ class SubscriptionScopeTests(unittest.TestCase):
 
 
 class ContainerHttpEndpointTests(unittest.TestCase):
+    def test_container_loopback_uses_effective_port_without_published_binding(self) -> None:
+        runner = mock.Mock()
+        runner.run.return_value = Result(
+            ("docker", "inspect"),
+            0,
+            json.dumps(
+                {
+                    "Config": {"Env": ["APP_PORT=4321"]},
+                    "HostConfig": {"NetworkMode": "bridge"},
+                    "NetworkSettings": {"Ports": {}},
+                }
+            ),
+            "",
+        )
+
+        url = _container_http_url(
+            runner,
+            Component("subscription", "subscription", "subscription"),
+            default_port=3010,
+            path="/internal/health",
+            container_loopback=True,
+        )
+
+        self.assertEqual(url, "http://127.0.0.1:4321/internal/health")
+
     def test_uses_effective_app_port_and_nonstandard_loopback_mapping(self) -> None:
         runner = mock.Mock()
         runner.run.return_value = Result(

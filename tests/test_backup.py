@@ -849,6 +849,50 @@ class RestoreTransactionTests(unittest.TestCase):
 
             self.assertTrue(journal.is_file())
 
+    def test_panel_restore_uses_legacy_health_for_saved_subscription_726(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            saved = inventory(root, role="panel")
+            panel = Component("panel", "remnawave", "remnawave")
+            subscription = Component(
+                "subscription",
+                "remnawave-subscription-page",
+                "remnawave-subscription-page",
+            )
+            saved.components.update(
+                {"panel": panel, "subscription": subscription}
+            )
+            compose = Path(saved.compose_file)
+            archive = root / "backup.tar.gz"
+            make_backup(archive, saved, [(compose, compose.read_bytes())])
+            running = {panel.service, subscription.service}
+
+            with (
+                mock.patch(
+                    "remnawave_manager.backup._running_component_services",
+                    return_value=running,
+                ),
+                mock.patch("remnawave_manager.backup.wait_container"),
+                mock.patch("remnawave_manager.backup.check_panel_http"),
+                mock.patch(
+                    "remnawave_manager.backup.detect_component_version",
+                    return_value="7.2.6",
+                ) as detect_version,
+                mock.patch(
+                    "remnawave_manager.backup.check_subscription_http"
+                ) as subscription_health,
+                mock.patch("remnawave_manager.backup.test_nginx"),
+                mock.patch("remnawave_manager.backup.reload_nginx"),
+            ):
+                restore_backup(DatabaseRunner(), Store(saved), archive)  # type: ignore[arg-type]
+
+            detect_version.assert_called_once_with(
+                mock.ANY, "subscription", subscription
+            )
+            subscription_health.assert_called_once_with(
+                mock.ANY, subscription, legacy=True
+            )
+
     def test_compose_candidate_is_validated_before_stop_or_file_replacement(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
