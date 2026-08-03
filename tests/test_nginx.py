@@ -418,7 +418,7 @@ class NginxMigrationTests(unittest.TestCase):
             self.assertEqual(runner.run.call_args_list[1].args[0], ["nginx", "-t"])
             self.assertEqual(runner.run.call_count, 2)
 
-    def test_container_activation_recreates_before_testing_loaded_config(self) -> None:
+    def test_container_activation_preflights_before_recreating_service(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             config = Path(temporary) / "nginx.conf"
             inventory = _container_inventory(config)
@@ -428,9 +428,13 @@ class NginxMigrationTests(unittest.TestCase):
             activate_nginx_config(runner, inventory)
 
             state_check = runner.run.call_args_list[0]
-            recreate = runner.run.call_args_list[1]
-            tested = runner.run.call_args_list[2]
+            preflight = runner.run.call_args_list[1]
+            recreate = runner.run.call_args_list[2]
+            tested = runner.run.call_args_list[3]
             self.assertIn("ps", state_check.args[0])
+            self.assertIn("run", preflight.args[0])
+            self.assertIn("--rm", preflight.args[0])
+            self.assertEqual(preflight.args[0][-3:], ["proxy", "nginx", "-t"])
             self.assertEqual(recreate.args[0][:3], ["docker", "compose", "--env-file"])
             self.assertIn("--force-recreate", recreate.args[0])
             self.assertIn("--pull", recreate.args[0])
@@ -438,7 +442,33 @@ class NginxMigrationTests(unittest.TestCase):
             self.assertEqual(recreate.args[0][-1], "proxy")
             self.assertEqual(tested.args[0][-5:], ["exec", "-T", "proxy", "nginx", "-t"])
             self.assertEqual(recreate.kwargs["cwd"], config.parent)
+            self.assertFalse(preflight.kwargs["check"])
             self.assertFalse(tested.kwargs["check"])
+
+    def test_failed_container_preflight_does_not_replace_running_service(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            config = Path(temporary) / "nginx.conf"
+            inventory = _container_inventory(config)
+            runner = mock.Mock(spec=Runner)
+            runner.run.side_effect = [
+                Result((), 0, "proxy\n", ""),
+                Result(
+                    (),
+                    1,
+                    "",
+                    'nginx: [emerg] invalid directive "secret" in /etc/nginx/nginx.conf:42',
+                ),
+            ]
+
+            with self.assertRaisesRegex(TransactionError, "Изолированный nginx -t") as raised:
+                activate_nginx_config(runner, inventory)
+
+            commands = [call.args[0] for call in runner.run.call_args_list]
+            self.assertEqual(len(commands), 2)
+            self.assertIn("run", commands[1])
+            self.assertFalse(any("up" in command for command in commands))
+            self.assertIn(":42", str(raised.exception))
+            self.assertNotIn("/etc/nginx", str(raised.exception))
 
     def test_container_activation_does_not_start_previously_stopped_nginx(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -492,8 +522,8 @@ class NginxMigrationTests(unittest.TestCase):
             runner = mock.Mock(spec=Runner)
             runner.run.side_effect = [
                 Result((), 0, "proxy\n", ""),
-                Result((), 0, "", ""),
                 Result((), 1, "", "invalid config"),
+                Result((), 0, "", ""),
                 Result((), 0, "", ""),
                 Result((), 0, "", ""),
             ]
@@ -507,7 +537,7 @@ class NginxMigrationTests(unittest.TestCase):
                 for call in runner.run.call_args_list
                 if "--force-recreate" in call.args[0]
             ]
-            self.assertEqual(len(recreate_calls), 2)
+            self.assertEqual(len(recreate_calls), 1)
             state_checks = [
                 call
                 for call in runner.run.call_args_list

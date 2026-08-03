@@ -521,7 +521,7 @@ server {
                 original_secrets,
             )
 
-    def test_rotation_recreates_container_again_after_new_config_is_rejected(self) -> None:
+    def test_rotation_does_not_replace_service_with_rejected_config(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             nginx = root / "nginx.conf"
@@ -542,8 +542,8 @@ server {
             runner = mock.Mock()
             runner.run.side_effect = [
                 Result((), 0, "remnawave-nginx\n", ""),
-                Result((), 0, "", ""),
                 Result((), 1, "", "new config rejected"),
+                Result((), 0, "", ""),
                 Result((), 0, "", ""),
                 Result((), 0, "", ""),
             ]
@@ -568,7 +568,7 @@ server {
                 for call in runner.run.call_args_list
                 if "--force-recreate" in call.args[0]
             ]
-            self.assertEqual(len(recreate_calls), 2)
+            self.assertEqual(len(recreate_calls), 1)
             state_checks = [
                 call
                 for call in runner.run.call_args_list

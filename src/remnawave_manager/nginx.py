@@ -537,11 +537,11 @@ def prepare_nginx_config(runner: Runner, inventory: Inventory) -> None:
         ),
         cwd=compose.parent,
     )
-    _test_prepared_nginx(runner, inventory)
+    _test_isolated_nginx(runner, inventory)
 
 
-def _test_prepared_nginx(runner: Runner, inventory: Inventory) -> None:
-    """Validate the new bind mounts without starting the stopped service."""
+def _test_isolated_nginx(runner: Runner, inventory: Inventory) -> None:
+    """Validate current bind sources without replacing the service container."""
 
     component = inventory.components.get("nginx")
     if component is None:
@@ -564,9 +564,12 @@ def _test_prepared_nginx(runner: Runner, inventory: Inventory) -> None:
         check=False,
     )
     if result.returncode != 0:
+        detail = _redact_nginx_test_error(result.stderr or result.stdout)
+        suffix = f" Причина: {detail}" if detail else ""
         raise TransactionError(
-            "nginx -t для остановленного контейнера завершился с ошибкой; "
-            "исходная конфигурация будет возвращена."
+            "Изолированный nginx -t завершился с ошибкой; "
+            "рабочий контейнер не будет заменён."
+            + suffix
         )
 
 
@@ -585,8 +588,9 @@ def activate_nginx_config(
     )
     if inventory.components.get("nginx") is not None:
         # A bind-mounted file remains attached to its old inode after os.replace().
-        # Recreate only nginx so the container sees the new host path before nginx -t.
+        # Validate the new host path before recreating the live nginx container.
         if running:
+            _test_isolated_nginx(runner, inventory)
             _recreate_nginx(runner, inventory)
             test_nginx(runner, inventory)
         else:
