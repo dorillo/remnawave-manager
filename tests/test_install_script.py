@@ -118,6 +118,17 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn("--no-deps", INSTALL_SCRIPT)
         self.assertIn("python3 -m pip --isolated install", INSTALL_SCRIPT)
         self.assertIn("certbot plugins", INSTALL_SCRIPT)
+        self.assertIn(
+            "mktemp -d --tmpdir rwm-certbot-dns-gcore.XXXXXXXX",
+            INSTALL_SCRIPT,
+        )
+        self.assertIn(
+            'wheel_path="${wheel_directory}/certbot_dns_gcore-'
+            '${GCORE_PLUGIN_VERSION}-py3-none-any.whl"',
+            INSTALL_SCRIPT,
+        )
+        self.assertNotIn("rwm-certbot-dns-gcore.XXXXXXXX.whl", INSTALL_SCRIPT)
+        self.assertIn('rm -rf -- "${wheel_directory}"', INSTALL_SCRIPT)
         self.assertLess(INSTALL_SCRIPT.index("python3-pip"), plugin_install)
 
     def test_certificate_config_root_has_ownership_and_private_permissions(self) -> None:

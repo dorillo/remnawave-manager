@@ -107,19 +107,20 @@ readonly GCORE_PLUGIN_SHA256='2302e05aee307732f94319081e74a4f17ee2765383a2ecae3f
 readonly GCORE_PLUGIN_URL='https://files.pythonhosted.org/packages/5e/89/a0b459ee378254fcba11831623e26e6c73f5eb88c65e6204a924bc55b8e6/certbot_dns_gcore-0.1.8-py3-none-any.whl'
 
 install_gcore_certbot_plugin() {
-    local wheel_path
-    wheel_path="$(mktemp --tmpdir rwm-certbot-dns-gcore.XXXXXXXX.whl)" \
-        || die 'Не удалось создать временный файл для Certbot DNS-плагина Gcore.'
+    local wheel_directory wheel_path
+    wheel_directory="$(mktemp -d --tmpdir rwm-certbot-dns-gcore.XXXXXXXX)" \
+        || die 'Не удалось создать временный каталог для Certbot DNS-плагина Gcore.'
+    wheel_path="${wheel_directory}/certbot_dns_gcore-${GCORE_PLUGIN_VERSION}-py3-none-any.whl"
 
     if ! curl --disable --fail --silent --show-error --location \
         --proto '=https' --proto-redir '=https' --tlsv1.2 \
         "${GCORE_PLUGIN_URL}" --output "${wheel_path}"; then
-        rm -f -- "${wheel_path}"
+        rm -rf -- "${wheel_directory}"
         die "Не удалось скачать закреплённый certbot-dns-gcore ${GCORE_PLUGIN_VERSION} с PyPI."
     fi
     if ! printf '%s  %s\n' "${GCORE_PLUGIN_SHA256}" "${wheel_path}" \
         | sha256sum --check --status; then
-        rm -f -- "${wheel_path}"
+        rm -rf -- "${wheel_directory}"
         die 'SHA-256 пакета certbot-dns-gcore не совпал; установка остановлена.'
     fi
     if ! python3 -m pip --isolated install \
@@ -127,10 +128,10 @@ install_gcore_certbot_plugin() {
         --disable-pip-version-check \
         --no-deps \
         "${wheel_path}"; then
-        rm -f -- "${wheel_path}"
+        rm -rf -- "${wheel_directory}"
         die 'Не удалось установить проверенный Certbot DNS-плагин Gcore в системный Python.'
     fi
-    rm -f -- "${wheel_path}"
+    rm -rf -- "${wheel_directory}"
 
     if ! certbot plugins 2>/dev/null \
         | grep -Eq '^[[:space:]]*\*?[[:space:]]*dns-gcore[[:space:]]*$'; then
