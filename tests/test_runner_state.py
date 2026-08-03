@@ -726,6 +726,28 @@ class RunnerSecurityTests(unittest.TestCase):
             with self.subTest(command=command), self.assertRaises(ValidationError):
                 Runner(dry_run=True).run(command)
 
+    def test_docker_exec_does_not_treat_inner_shell_c_as_global_context(self) -> None:
+        completed = subprocess.CompletedProcess([], 0, "", "")
+        with mock.patch(
+            "remnawave_manager.runner.subprocess.run", return_value=completed
+        ) as run:
+            Runner().run(
+                ["docker", "exec", "subscription", "sh", "-c", "printf ok"]
+            )
+
+        self.assertEqual(
+            run.call_args.args[0],
+            (
+                "docker",
+                "--host=unix:///run/docker.sock",
+                "exec",
+                "subscription",
+                "sh",
+                "-c",
+                "printf ok",
+            ),
+        )
+
     def test_sensitive_failure_hides_command_and_output(self) -> None:
         completed = subprocess.CompletedProcess(
             ["tool", "super-secret-token"], 1, "", "leaked detail"

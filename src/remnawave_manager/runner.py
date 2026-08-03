@@ -198,14 +198,41 @@ def _local_docker_command(
     executable = command[0].replace("\\", "/").rsplit("/", 1)[-1]
     if executable != "docker":
         return command
-    if any(
-        value in {"--host", "--context"}
-        or value.startswith(("-H", "-c", "--host=", "--context="))
-        for value in command[1:]
-    ):
-        raise ValidationError(
-            "Переопределение Docker host/context внутри команды запрещено."
-        )
+    global_flags = {"--debug", "-D", "--tls", "--tlsverify", "--version", "-v"}
+    global_value_options = {
+        "--config",
+        "--log-level",
+        "-l",
+        "--tlscacert",
+        "--tlscert",
+        "--tlskey",
+    }
+    index = 1
+    while index < len(command) and command[index].startswith("-"):
+        value = command[index]
+        if (
+            value in {"--host", "-H", "--context", "-c"}
+            or value.startswith(("-H=", "-c=", "--host=", "--context="))
+            or (value.startswith("-H") and len(value) > 2)
+            or (value.startswith("-c") and len(value) > 2)
+        ):
+            raise ValidationError(
+                "Переопределение Docker host/context внутри команды запрещено."
+            )
+        if value in global_flags:
+            index += 1
+            continue
+        if value in global_value_options:
+            if index + 1 >= len(command):
+                raise ValidationError(
+                    f"Глобальная опция Docker {value} требует значение."
+                )
+            index += 2
+            continue
+        if any(value.startswith(option + "=") for option in global_value_options):
+            index += 1
+            continue
+        raise ValidationError(f"Неподдерживаемая глобальная опция Docker: {value}")
     if len(command) >= 2 and command[1] == "compose":
         _validate_compose_inputs(command, cwd=cwd)
     return (command[0], "--host=unix:///run/docker.sock", *command[1:])
