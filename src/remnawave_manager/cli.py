@@ -58,6 +58,7 @@ from .lifecycle import (
     validate_log_since,
 )
 from .maintenance import archive_stack
+from .manager_update import update_manager
 from .models import Inventory
 from .nginx import reload_nginx, test_nginx
 from .paths import RuntimePaths
@@ -306,7 +307,7 @@ def build_parser() -> RussianArgumentParser:
     parser.add_argument(
         "--json",
         action="store_true",
-        help="Вывести результат в JSON; недоступно для menu, service logs и service panel-cli.",
+        help="Вывести результат в JSON; недоступно для menu, manager update, service logs и service panel-cli.",
     )
     parser.add_argument(
         "--version",
@@ -318,6 +319,18 @@ def build_parser() -> RussianArgumentParser:
 
     menu = commands.add_parser("menu", help="Открыть интерактивное меню.")
     menu.set_defaults(handler="menu")
+
+    manager = commands.add_parser(
+        "manager", help="Обновить сам Remnawave Manager."
+    )
+    manager_commands = manager.add_subparsers(
+        dest="manager_action", required=True, metavar="ДЕЙСТВИЕ"
+    )
+    manager_update = manager_commands.add_parser(
+        "update", help="Загрузить и атомарно установить версию из main."
+    )
+    _add_yes(manager_update)
+    manager_update.set_defaults(handler="manager-update")
 
     adoption = commands.add_parser(
         "adopt", help="Обнаружить установку и принять её под управление."
@@ -989,6 +1002,23 @@ def _warp_license(context: CliContext, *, prompt: bool) -> str | None:
 
 def dispatch(args: argparse.Namespace, context: CliContext) -> int:
     handler = args.handler
+    if handler == "manager-update":
+        _confirm(
+            context,
+            "Remnawave Manager будет загружен из dorillo/remnawave-manager (main) "
+            "и атомарно переустановлен.",
+            assume_yes=args.yes,
+        )
+        installed_version = update_manager(context.runner)
+        if context.json_output:
+            context.emit({"status": "updated", "version": installed_version})
+        else:
+            context.write(f"Менеджер обновлён: {installed_version}")
+            context.write(
+                "Текущий процесс менеджера завершится; "
+                "следующий запуск использует новую версию."
+            )
+        return 0
     if handler == "adopt":
         inventory = adopt(
             context.runner,
@@ -1840,13 +1870,19 @@ def _validate_json_mode(args: argparse.Namespace) -> None:
     handler = getattr(args, "handler", None)
     if handler in {None, "menu"}:
         raise ValidationError("Интерактивное меню недоступно в режиме --json.")
-    if handler in {"service-logs", "service-panel-cli"}:
+    if handler in {"manager-update", "service-logs", "service-panel-cli"}:
         raise ValidationError(
-            "Режим --json недоступен для потоковых команд service logs и service panel-cli."
+            "Режим --json недоступен для manager update, service logs и service panel-cli."
         )
 
 
 def execute(args: argparse.Namespace, context: CliContext) -> int:
+    if args.handler == "manager-update":
+        # install.sh owns the same lock and must acquire it in its child process.
+        require_root()
+        require_ubuntu_2404()
+        assert_no_active_certbot_renewal()
+        return dispatch(args, context)
     if _is_mutating(args):
         require_root()
         require_ubuntu_2404()
@@ -2371,6 +2407,8 @@ def _interactive_arguments(context: CliContext, section: int) -> list[str] | Non
         return ["system", "status" if action == 1 else "apply"]
     if section == 16:
         return ["maintenance", "archive-stack"]
+    if section == 17:
+        return ["manager", "update"]
     return None
 
 
@@ -2392,6 +2430,7 @@ def interactive_menu(parser: RussianArgumentParser, context: CliContext) -> int:
         "Показать inventory",
         "BBR и автоматические security updates",
         "Архивировать стек перед удалением или переустановкой",
+        "Обновить Remnawave Manager",
     )
     while True:
         selected = _choose(context, "Главное меню:", sections, zero_label="Выход")
@@ -2410,6 +2449,8 @@ def interactive_menu(parser: RussianArgumentParser, context: CliContext) -> int:
             return_code = execute(args, context)
             if return_code != 0:
                 context.error(f"Операция завершилась с кодом {return_code}.")
+            if args.handler == "manager-update":
+                return return_code
         except ManagerError as error:
             pause_after_result = True
             context.error(f"Ошибка: {sanitize_external_text(str(error))}")

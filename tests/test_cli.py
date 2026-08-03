@@ -153,6 +153,10 @@ class CliParserTests(unittest.TestCase):
         self.assertEqual(maintenance.handler, "maintenance-archive-stack")
         self.assertTrue(maintenance.yes)
 
+        manager = build_parser().parse_args(["manager", "update", "--yes"])
+        self.assertEqual(manager.handler, "manager-update")
+        self.assertTrue(manager.yes)
+
     def test_backup_schedule_and_emergency_access_parsers(self) -> None:
         schedule = build_parser().parse_args(
             [
@@ -606,6 +610,37 @@ class CliDispatchTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("Главное меню", self.stdout.getvalue())
         self.assertIn("Работа завершена", self.stdout.getvalue())
+
+    def test_manager_update_uses_installer_lock_instead_of_outer_cli_lock(self) -> None:
+        with (
+            mock.patch(
+                "remnawave_manager.cli.update_manager", return_value="rwm 0.1.3"
+            ) as update,
+            mock.patch(
+                "remnawave_manager.cli.assert_no_active_certbot_renewal"
+            ) as certbot_guard,
+            mock.patch("remnawave_manager.cli.exclusive_lock") as lock,
+        ):
+            code = self.run_main(["manager", "update", "--yes"])
+
+        self.assertEqual(code, 0, self.stderr.getvalue())
+        update.assert_called_once()
+        certbot_guard.assert_called_once_with()
+        lock.assert_not_called()
+        self.assertIn("rwm 0.1.3", self.stdout.getvalue())
+
+    def test_interactive_manager_update_exits_old_menu_process(self) -> None:
+        with (
+            mock.patch(
+                "remnawave_manager.cli.update_manager", return_value="rwm 0.1.3"
+            ) as update,
+            mock.patch("remnawave_manager.cli.assert_no_active_certbot_renewal"),
+        ):
+            code = self.run_main([], answers=["17", "ДА"])
+
+        self.assertEqual(code, 0, self.stderr.getvalue())
+        update.assert_called_once()
+        self.assertIn("следующий запуск использует новую версию", self.stdout.getvalue())
 
     def test_interactive_menu_redraws_only_on_a_real_terminal(self) -> None:
         class TerminalBuffer(io.StringIO):
@@ -1122,6 +1157,7 @@ class CliDispatchTests(unittest.TestCase):
         for command in (
             ["--json", "service", "logs", "node"],
             ["--json", "service", "panel-cli"],
+            ["--json", "manager", "update", "--yes"],
             ["--json", "menu"],
         ):
             with self.subTest(command=command):
