@@ -1178,15 +1178,35 @@ def install_renewal_hooks(
         pre.unlink(missing_ok=True)
         post.unlink(missing_ok=True)
         return
-    hook_prelude = (
+    pre_hook_prelude = (
         "#!/bin/sh\n"
         f"{_HOOK_MARKER}\n"
         f"{hook_lock_prelude}"
         f'marker="{_CERTBOT_MARKER_ROOT}/{_CERTBOT_MARKER_PREFIX}${{PPID}}"\n'
     )
+    post_hook_prelude = (
+        "#!/bin/sh\n"
+        f"{_HOOK_MARKER}\n"
+        f"{hook_lock_prelude}"
+        f'marker_prefix="{_CERTBOT_MARKER_ROOT}/{_CERTBOT_MARKER_PREFIX}"\n'
+        'set -- "${marker_prefix}"*\n'
+        'if [ "$1" = "${marker_prefix}*" ]; then\n'
+        '    marker=""\n'
+        'else\n'
+        '    [ "$#" -eq 1 ] || exit 1\n'
+        '    marker="$1"\n'
+        '    marker_suffix="${marker#"$marker_prefix"}"\n'
+        '    case "$marker_suffix" in\n'
+        '        ""|*[!0-9]*|0*) exit 1 ;;\n'
+        '    esac\n'
+        '    [ -f "$marker" ] && [ ! -L "$marker" ] || exit 1\n'
+        '    marker_metadata="$(/usr/bin/stat -c \'%u:%a:%h\' -- "$marker")"\n'
+        '    [ "$marker_metadata" = "0:600:1" ] || exit 1\n'
+        'fi\n'
+    )
     if system_nginx:
         pre_script = (
-            hook_prelude
+            pre_hook_prelude
             + "printf '%s\\n' inactive > \"$marker\"\n"
             + "if /usr/bin/systemctl is-active --quiet nginx; then\n"
             + "    printf '%s\\n' restart > \"$marker\"\n"
@@ -1194,8 +1214,8 @@ def install_renewal_hooks(
             + "fi\n"
         )
         post_script = (
-            hook_prelude
-            + 'if [ -f "$marker" ]; then\n'
+            post_hook_prelude
+            + 'if [ -n "$marker" ]; then\n'
             + '    marker_state="$(/usr/bin/cat -- "$marker")"\n'
             + '    case "$marker_state" in\n'
             + "        restart) /usr/bin/systemctl start nginx >/dev/null ;;\n"
@@ -1207,7 +1227,7 @@ def install_renewal_hooks(
         )
     else:
         pre_script = (
-            hook_prelude
+            pre_hook_prelude
             + "printf '%s\\n' inactive > \"$marker\"\n"
             + f"running=\"$({docker} inspect -f '{{{{.State.Running}}}}' {nginx_container})\"\n"
             + 'case "$running" in\n'
@@ -1220,8 +1240,8 @@ def install_renewal_hooks(
             + "esac\n"
         )
         post_script = (
-            hook_prelude
-            + 'if [ -f "$marker" ]; then\n'
+            post_hook_prelude
+            + 'if [ -n "$marker" ]; then\n'
             + '    marker_state="$(/usr/bin/cat -- "$marker")"\n'
             + '    case "$marker_state" in\n'
             + f"        restart) {docker} start {nginx_container} >/dev/null ;;\n"

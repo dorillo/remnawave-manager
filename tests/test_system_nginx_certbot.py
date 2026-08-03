@@ -112,11 +112,19 @@ class SystemNginxCertbotTests(unittest.TestCase):
             self.assertLess(deploy.index("nginx -t"), deploy.index("reload nginx"))
             self.assertNotIn("docker", deploy + pre + post)
             marker = 'marker="/run/remnawave-manager-certbot-nginx-${PPID}"'
+            marker_search = (
+                'marker_prefix="/run/remnawave-manager-certbot-nginx-"'
+            )
             self._assert_shared_lock(deploy, before="nginx -t")
             self._assert_shared_lock(pre, before=marker)
-            self._assert_shared_lock(post, before=marker)
+            self._assert_shared_lock(post, before=marker_search)
             self.assertIn(marker, pre)
-            self.assertIn(marker, post)
+            self.assertNotIn("${PPID}", post)
+            self.assertIn(marker_search, post)
+            self.assertIn('set -- "${marker_prefix}"*', post)
+            self.assertIn('[ "$#" -eq 1 ] || exit 1', post)
+            self.assertIn('[ -f "$marker" ] && [ ! -L "$marker" ]', post)
+            self.assertIn('"0:600:1"', post)
             self.assertLess(
                 pre.index("printf '%s\\n' inactive"), pre.index("stop nginx")
             )
@@ -124,7 +132,7 @@ class SystemNginxCertbotTests(unittest.TestCase):
                 pre.index("printf '%s\\n' restart"), pre.index("stop nginx")
             )
             self.assertNotIn('rm -f "$marker"', pre)
-            self.assertIn('if [ -f "$marker" ]; then', post)
+            self.assertIn('if [ -n "$marker" ]; then', post)
             self.assertIn('marker_state="$(/usr/bin/cat -- "$marker")"', post)
             self.assertIn('rm -f "$marker"', post)
             self.assertLess(
@@ -261,14 +269,27 @@ class SystemNginxCertbotTests(unittest.TestCase):
             self.assertNotIn("|| true", scripts)
             self.assertNotIn("systemctl is-active --quiet nginx", scripts)
             marker = 'marker="/run/remnawave-manager-certbot-nginx-${PPID}"'
+            marker_search = (
+                'marker_prefix="/run/remnawave-manager-certbot-nginx-"'
+            )
             for phase, action in (
                 ("deploy", "nginx -t"),
                 ("pre", marker),
-                ("post", marker),
+                ("post", marker_search),
             ):
                 self._assert_shared_lock(phase_scripts[phase], before=action)
             self.assertIn(marker, phase_scripts["pre"])
-            self.assertIn(marker, phase_scripts["post"])
+            self.assertNotIn("${PPID}", phase_scripts["post"])
+            self.assertIn(marker_search, phase_scripts["post"])
+            self.assertIn('set -- "${marker_prefix}"*', phase_scripts["post"])
+            self.assertIn(
+                '[ "$#" -eq 1 ] || exit 1', phase_scripts["post"]
+            )
+            self.assertIn(
+                '[ -f "$marker" ] && [ ! -L "$marker" ]',
+                phase_scripts["post"],
+            )
+            self.assertIn('"0:600:1"', phase_scripts["post"])
             self.assertLess(
                 phase_scripts["pre"].index("printf '%s\\n' inactive"),
                 phase_scripts["pre"].index("stop remnawave-nginx"),
@@ -278,7 +299,7 @@ class SystemNginxCertbotTests(unittest.TestCase):
                 phase_scripts["pre"].index("stop remnawave-nginx"),
             )
             self.assertNotIn('rm -f "$marker"', phase_scripts["pre"])
-            self.assertIn('if [ -f "$marker" ]; then', phase_scripts["post"])
+            self.assertIn('if [ -n "$marker" ]; then', phase_scripts["post"])
             self.assertIn('rm -f "$marker"', phase_scripts["post"])
 
     def test_active_certbot_marker_blocks_manager_mutation(self) -> None:
