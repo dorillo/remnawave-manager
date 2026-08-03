@@ -22,6 +22,7 @@ from remnawave_manager.backup import (
     _restore_prepared_originals,
     _run_best_effort,
     create_backup,
+    delete_backups,
     list_backups,
     restore_backup,
     verify_backup,
@@ -326,6 +327,108 @@ class BackupCreationTests(unittest.TestCase):
 
 
 class BackupSecurityTests(unittest.TestCase):
+    def test_delete_removes_only_selected_backups(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            store = Store(inventory(root))
+            store.initialize()
+            first = store.paths.backups / "20260803-node-first.tar.gz"
+            second = store.paths.backups / "20260803-node-second.tar.gz"
+            third = store.paths.backups / "20260803-node-third.tar.gz"
+            for path in (first, second, third):
+                path.write_bytes(path.name.encode("ascii"))
+
+            removed = delete_backups(store, [first, third])  # type: ignore[arg-type]
+
+            self.assertEqual(removed, [first, third])
+            self.assertFalse(first.exists())
+            self.assertTrue(second.is_file())
+            self.assertFalse(third.exists())
+
+    def test_delete_accepts_backup_name_and_rejects_outside_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            store = Store(inventory(root))
+            store.initialize()
+            archive = store.paths.backups / "20260803-node-backup.tar.gz"
+            archive.write_bytes(b"backup")
+
+            with self.assertRaisesRegex(ValidationError, "только из каталога"):
+                delete_backups(store, [root / "outside.tar.gz"])  # type: ignore[arg-type]
+
+            self.assertEqual(
+                delete_backups(store, [Path(archive.name)]),  # type: ignore[arg-type]
+                [archive],
+            )
+
+    def test_delete_rejects_hardlinked_and_duplicate_backups(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            store = Store(inventory(root))
+            store.initialize()
+            outside = root / "outside.tar.gz"
+            outside.write_bytes(b"must survive")
+            linked = store.paths.backups / "20260803-node-linked.tar.gz"
+            os.link(outside, linked)
+
+            with self.assertRaisesRegex(ValidationError, "single-link"):
+                delete_backups(store, [linked])  # type: ignore[arg-type]
+            with self.assertRaisesRegex(ValidationError, "повторно"):
+                delete_backups(store, [linked, Path(linked.name)])  # type: ignore[arg-type]
+
+            self.assertEqual(outside.read_bytes(), b"must survive")
+            self.assertTrue(linked.exists())
+
+    def test_delete_is_blocked_by_active_transaction(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            store = Store(inventory(root))
+            store.initialize()
+            archive = store.paths.backups / "20260803-node-backup.tar.gz"
+            archive.write_bytes(b"backup")
+            (store.paths.state / "active-transaction.json").write_text(
+                "{}", encoding="utf-8"
+            )
+
+            with self.assertRaisesRegex(ValidationError, "незавершённая транзакция"):
+                delete_backups(store, [archive])  # type: ignore[arg-type]
+
+            self.assertTrue(archive.is_file())
+
+    def test_delete_quarantines_path_replaced_during_delete(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            store = Store(inventory(root))
+            store.initialize()
+            archive = store.paths.backups / "20260803-node-backup.tar.gz"
+            archive.write_bytes(b"original")
+            replacement = root / "replacement.tar.gz"
+            replacement.write_bytes(b"replacement must not be deleted")
+            real_rename = os.rename
+
+            def replace_before_rename(
+                source: str | os.PathLike[str],
+                destination: str | os.PathLike[str],
+                **kwargs: object,
+            ) -> None:
+                os.replace(replacement, archive)
+                real_rename(source, destination, **kwargs)  # type: ignore[arg-type]
+
+            with (
+                mock.patch(
+                    "remnawave_manager.backup.os.rename",
+                    side_effect=replace_before_rename,
+                ),
+                self.assertRaisesRegex(TransactionError, "подменён"),
+            ):
+                delete_backups(store, [archive])  # type: ignore[arg-type]
+
+            quarantined = list(store.paths.backups.glob(".delete-*.tmp"))
+            self.assertEqual(len(quarantined), 1)
+            self.assertEqual(
+                quarantined[0].read_bytes(), b"replacement must not be deleted"
+            )
+
     def test_verify_rejects_symlink_archive(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

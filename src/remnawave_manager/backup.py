@@ -27,6 +27,7 @@ from .health import (
     wait_container,
     wait_for_paths,
 )
+from .journal import TransactionJournal
 from .models import Inventory
 from .nginx import (
     activate_nginx_config,
@@ -801,6 +802,64 @@ def list_backups(store: StateStore) -> list[Path]:
     return [entry.path for entry in _regular_backup_entries(store.paths.backups, missing_ok=True)]
 
 
+def delete_backups(store: StateStore, paths: Iterable[Path]) -> list[Path]:
+    requested = tuple(Path(path) for path in paths)
+    if not requested:
+        raise ValidationError("Укажите хотя бы один backup для удаления.")
+
+    TransactionJournal.ensure_available(store)
+    directory = store.paths.backups
+    names: list[str] = []
+    seen: set[str] = set()
+    for path in requested:
+        if path.is_absolute():
+            if path.parent != directory:
+                raise ValidationError(
+                    f"Разрешено удалять backup только из каталога {directory}: {path}"
+                )
+        elif path.parent != Path(".") or not path.name:
+            raise ValidationError(
+                f"Укажите имя backup или путь непосредственно из каталога {directory}: {path}"
+            )
+        name = path.name
+        if not name.endswith(".tar.gz"):
+            raise ValidationError(f"Некорректное имя backup: {path}")
+        if name in seen:
+            raise ValidationError(f"Backup выбран повторно: {directory / name}")
+        seen.add(name)
+        names.append(name)
+
+    with _open_backup_directory(directory, missing_ok=False) as (descriptor, _exists):
+        entries = {
+            entry.path.name: entry
+            for entry in _scan_regular_backup_entries(directory, descriptor, role=None)
+        }
+        selected: list[_ArchiveEntry] = []
+        for name in names:
+            entry = entries.get(name)
+            if entry is None:
+                raise ValidationError(
+                    f"Backup не найден или не является обычным single-link архивом: "
+                    f"{directory / name}"
+                )
+            selected.append(entry)
+
+        removed: list[Path] = []
+        for entry in selected:
+            _delete_archive_entry(
+                directory,
+                descriptor,
+                entry,
+                operation="ручным удалением",
+                quarantine_prefix="delete",
+                missing_ok=False,
+            )
+            removed.append(entry.path)
+        if removed and descriptor is not None:
+            os.fsync(descriptor)
+        return removed
+
+
 @contextmanager
 def _open_backup_directory(
     directory: Path,
@@ -902,6 +961,94 @@ def _regular_backup_entries(
         return _scan_regular_backup_entries(directory, descriptor, role=role)
 
 
+def _delete_archive_entry(
+    directory: Path,
+    descriptor: int | None,
+    entry: _ArchiveEntry,
+    *,
+    operation: str,
+    quarantine_prefix: str,
+    missing_ok: bool,
+) -> bool:
+    try:
+        current = (
+            os.stat(entry.path.name, dir_fd=descriptor, follow_symlinks=False)
+            if descriptor is not None
+            else entry.path.lstat()
+        )
+    except FileNotFoundError:
+        if missing_ok:
+            return False
+        raise TransactionError(
+            f"Backup исчез перед {operation}; удаление остановлено: {entry.path}"
+        ) from None
+    except OSError as error:
+        raise TransactionError(
+            f"Не удалось повторно проверить backup перед {operation}: "
+            f"{entry.path}: {error}"
+        ) from error
+    if (
+        not stat.S_ISREG(current.st_mode)
+        or current.st_nlink != 1
+        or (current.st_dev, current.st_ino) != (entry.device, entry.inode)
+        or current.st_size != entry.size
+        or current.st_mtime_ns != entry.mtime_ns
+        or current.st_ctime_ns != entry.ctime_ns
+    ):
+        raise TransactionError(
+            f"Backup изменился перед {operation}; удаление отменено: {entry.path}"
+        )
+
+    quarantine_name = f".{quarantine_prefix}-{uuid.uuid4().hex}.tmp"
+    quarantine_path = directory / quarantine_name
+    try:
+        if descriptor is None:
+            os.rename(entry.path, quarantine_path)
+        else:
+            os.rename(
+                entry.path.name,
+                quarantine_name,
+                src_dir_fd=descriptor,
+                dst_dir_fd=descriptor,
+            )
+    except OSError as error:
+        raise TransactionError(
+            f"Не удалось изолировать backup перед удалением {entry.path}: {error}"
+        ) from error
+    try:
+        quarantined = (
+            os.stat(quarantine_name, dir_fd=descriptor, follow_symlinks=False)
+            if descriptor is not None
+            else quarantine_path.lstat()
+        )
+    except OSError as error:
+        raise TransactionError(
+            f"Не удалось проверить изолированный backup {quarantine_path}; "
+            "автоматическое удаление отменено."
+        ) from error
+    if (
+        not stat.S_ISREG(quarantined.st_mode)
+        or quarantined.st_nlink != 1
+        or (quarantined.st_dev, quarantined.st_ino) != (entry.device, entry.inode)
+        or quarantined.st_size != entry.size
+        or quarantined.st_mtime_ns != entry.mtime_ns
+    ):
+        raise TransactionError(
+            f"Backup был подменён во время {operation}; подозрительный файл сохранён: "
+            f"{quarantine_path}"
+        )
+    try:
+        if descriptor is None:
+            quarantine_path.unlink()
+        else:
+            os.unlink(quarantine_name, dir_fd=descriptor)
+    except OSError as error:
+        raise TransactionError(
+            f"Не удалось удалить изолированный backup {quarantine_path}: {error}"
+        ) from error
+    return True
+
+
 def _apply_retention(directory: Path, role: str, retention: int | None) -> None:
     if retention is None:
         return
@@ -911,77 +1058,17 @@ def _apply_retention(directory: Path, role: str, retention: int | None) -> None:
         archives = _scan_regular_backup_entries(directory, descriptor, role=role)
         removed = False
         for entry in archives[retention:]:
-            try:
-                current = (
-                    os.stat(entry.path.name, dir_fd=descriptor, follow_symlinks=False)
-                    if descriptor is not None
-                    else entry.path.lstat()
+            removed = (
+                _delete_archive_entry(
+                    directory,
+                    descriptor,
+                    entry,
+                    operation="retention",
+                    quarantine_prefix="retention",
+                    missing_ok=True,
                 )
-            except FileNotFoundError:
-                continue
-            except OSError as error:
-                raise TransactionError(
-                    f"Не удалось повторно проверить backup перед retention: {entry.path}: {error}"
-                ) from error
-            if (
-                not stat.S_ISREG(current.st_mode)
-                or current.st_nlink != 1
-                or (current.st_dev, current.st_ino) != (entry.device, entry.inode)
-                or current.st_size != entry.size
-                or current.st_mtime_ns != entry.mtime_ns
-                or current.st_ctime_ns != entry.ctime_ns
-            ):
-                raise TransactionError(
-                    f"Backup изменился перед retention; удаление отменено: {entry.path}"
-                )
-            quarantine_name = f".retention-{uuid.uuid4().hex}.tmp"
-            quarantine_path = directory / quarantine_name
-            try:
-                if descriptor is None:
-                    os.rename(entry.path, quarantine_path)
-                else:
-                    os.rename(
-                        entry.path.name,
-                        quarantine_name,
-                        src_dir_fd=descriptor,
-                        dst_dir_fd=descriptor,
-                    )
-            except OSError as error:
-                raise TransactionError(
-                    f"Не удалось изолировать старый backup перед удалением {entry.path}: {error}"
-                ) from error
-            try:
-                quarantined = (
-                    os.stat(quarantine_name, dir_fd=descriptor, follow_symlinks=False)
-                    if descriptor is not None
-                    else quarantine_path.lstat()
-                )
-            except OSError as error:
-                raise TransactionError(
-                    f"Не удалось проверить изолированный backup {quarantine_path}; "
-                    "автоматическое удаление отменено."
-                ) from error
-            if (
-                not stat.S_ISREG(quarantined.st_mode)
-                or quarantined.st_nlink != 1
-                or (quarantined.st_dev, quarantined.st_ino) != (entry.device, entry.inode)
-                or quarantined.st_size != entry.size
-                or quarantined.st_mtime_ns != entry.mtime_ns
-            ):
-                raise TransactionError(
-                    f"Backup был подменён во время retention; подозрительный файл сохранён: "
-                    f"{quarantine_path}"
-                )
-            try:
-                if descriptor is None:
-                    quarantine_path.unlink()
-                else:
-                    os.unlink(quarantine_name, dir_fd=descriptor)
-            except OSError as error:
-                raise TransactionError(
-                    f"Не удалось удалить изолированный старый backup {quarantine_path}: {error}"
-                ) from error
-            removed = True
+                or removed
+            )
         if removed and descriptor is not None:
             os.fsync(descriptor)
 

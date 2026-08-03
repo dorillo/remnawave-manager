@@ -181,6 +181,13 @@ class CliParserTests(unittest.TestCase):
         self.assertEqual(emergency.handler, "security-emergency-open")
         self.assertEqual(emergency.minutes, 45)
 
+        delete = build_parser().parse_args(
+            ["backup", "delete", "first.tar.gz", "second.tar.gz", "--yes"]
+        )
+        self.assertEqual(delete.handler, "backup-delete")
+        self.assertEqual(delete.paths, [Path("first.tar.gz"), Path("second.tar.gz")])
+        self.assertTrue(delete.yes)
+
 
 class CliDispatchTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -636,7 +643,7 @@ class CliDispatchTests(unittest.TestCase):
             ) as update,
             mock.patch("remnawave_manager.cli.assert_no_active_certbot_renewal"),
         ):
-            code = self.run_main([], answers=["17", "ДА"])
+            code = self.run_main([], answers=["17", "y"])
 
         self.assertEqual(code, 0, self.stderr.getvalue())
         update.assert_called_once()
@@ -708,7 +715,7 @@ class CliDispatchTests(unittest.TestCase):
                 "remnawave_manager.cli.configure_firewall", return_value=(22,)
             ) as configure,
         ):
-            code = self.run_main([], answers=["12", "2", "1", "ДА", "0"])
+            code = self.run_main([], answers=["12", "2", "1", "y", "0"])
 
         self.assertEqual(code, 0, self.stderr.getvalue())
         configure.assert_called_once_with(
@@ -730,7 +737,7 @@ class CliDispatchTests(unittest.TestCase):
             ) as configure,
         ):
             code = self.run_main(
-                [], answers=["12", "2", "1", "192.0.2.10", "ДА", "0"]
+                [], answers=["12", "2", "1", "192.0.2.10", "y", "0"]
             )
 
         self.assertEqual(code, 0, self.stderr.getvalue())
@@ -916,6 +923,78 @@ class CliDispatchTests(unittest.TestCase):
         self.assertEqual(code, 0, self.stderr.getvalue())
         require_root.assert_not_called()
         self.assertIn("Расписание backup: включено", self.stdout.getvalue())
+
+    def test_backup_delete_requires_confirmation_and_delegates_paths(self) -> None:
+        first = Path("/var/backups/remnawave-manager/first.tar.gz")
+        second = Path("/var/backups/remnawave-manager/second.tar.gz")
+        with mock.patch("remnawave_manager.cli.delete_backups") as delete:
+            rejected = self.run_main(
+                ["backup", "delete", str(first), str(second)], answers=["ДА"]
+            )
+
+        self.assertEqual(rejected, 2)
+        delete.assert_not_called()
+        self.assertIn("отменена", self.stderr.getvalue())
+
+        self.stderr = io.StringIO()
+        with mock.patch(
+            "remnawave_manager.cli.delete_backups", return_value=[first, second]
+        ) as delete:
+            code = self.run_main(
+                ["backup", "delete", str(first), str(second)],
+                answers=["y"],
+            )
+
+        self.assertEqual(code, 0, self.stderr.getvalue())
+        delete.assert_called_once_with(mock.ANY, [first, second])
+        self.assertIn(f"Backup удалён: {first}", self.stdout.getvalue())
+        self.assertIn(f"Backup удалён: {second}", self.stdout.getvalue())
+
+    def test_json_backup_delete_emits_selected_paths(self) -> None:
+        first = Path("/var/backups/remnawave-manager/first.tar.gz")
+        second = Path("/var/backups/remnawave-manager/second.tar.gz")
+        with mock.patch(
+            "remnawave_manager.cli.delete_backups", return_value=[first, second]
+        ):
+            code = self.run_main(
+                [
+                    "--json",
+                    "backup",
+                    "delete",
+                    str(first),
+                    str(second),
+                    "--yes",
+                ]
+            )
+
+        self.assertEqual(code, 0, self.stderr.getvalue())
+        self.assertEqual(
+            json.loads(self.stdout.getvalue()),
+            {"status": "deleted", "backups": [str(first), str(second)]},
+        )
+
+    def test_interactive_backup_delete_selects_multiple_numbers(self) -> None:
+        backups = [
+            Path("/var/backups/remnawave-manager/newest.tar.gz"),
+            Path("/var/backups/remnawave-manager/middle.tar.gz"),
+            Path("/var/backups/remnawave-manager/oldest.tar.gz"),
+        ]
+        with (
+            mock.patch("remnawave_manager.cli.list_backups", return_value=backups),
+            mock.patch(
+                "remnawave_manager.cli.delete_backups",
+                return_value=[backups[0], backups[2]],
+            ) as delete,
+        ):
+            code = self.run_main(
+                [],
+                answers=["4", "3", "1, 1", "1, 3", "y", "0"],
+            )
+
+        self.assertEqual(code, 0, self.stderr.getvalue())
+        delete.assert_called_once_with(mock.ANY, [backups[0], backups[2]])
+        self.assertIn(f"1. {backups[0]}", self.stdout.getvalue())
+        self.assertIn("Номера backup не должны повторяться", self.stderr.getvalue())
 
     def test_success_output_has_terminal_control_barrier(self) -> None:
         status = BackupSchedule(

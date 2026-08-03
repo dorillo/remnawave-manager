@@ -24,7 +24,13 @@ from .api import (
     validate_reality_inputs,
     validate_warp_routing_inputs,
 )
-from .backup import create_backup, list_backups, restore_backup, verify_backup
+from .backup import (
+    create_backup,
+    delete_backups,
+    list_backups,
+    restore_backup,
+    verify_backup,
+)
 from .backup_schedule import (
     backup_schedule_status,
     install_backup_schedule,
@@ -437,6 +443,12 @@ def build_parser() -> RussianArgumentParser:
     backup_create.set_defaults(handler="backup-create")
     backup_list = backup_commands.add_parser("list", help="Показать локальные backup.")
     backup_list.set_defaults(handler="backup-list")
+    backup_delete = backup_commands.add_parser(
+        "delete", help="Безвозвратно удалить выбранные локальные backup."
+    )
+    backup_delete.add_argument("paths", nargs="+", type=Path, metavar="BACKUP")
+    _add_yes(backup_delete)
+    backup_delete.set_defaults(handler="backup-delete")
     backup_verify = backup_commands.add_parser(
         "verify", help="Проверить целостность backup."
     )
@@ -943,9 +955,7 @@ def _prompt_twice(context: CliContext, label: str) -> str:
     return _validated_secret(first, variable="Секретное значение", required=False)
 
 
-def _confirm(
-    context: CliContext, message: str, *, assume_yes: bool, word: str = "ДА"
-) -> None:
+def _confirm(context: CliContext, message: str, *, assume_yes: bool) -> None:
     if assume_yes:
         return
     if context.json_output:
@@ -953,10 +963,8 @@ def _confirm(
             "В режиме --json для подтверждаемой операции обязательно укажите --yes."
         )
     safe_message = " ".join(_terminal_safe_text(message).split())
-    answer = context.input_fn(
-        f"{safe_message}\nДля продолжения введите {word}: "
-    ).strip()
-    if answer.casefold() != word.casefold():
+    answer = context.input_fn(f"{safe_message}\nПродолжить? (y/n): ").strip()
+    if answer.casefold() not in {"y", "yes"}:
         raise ValidationError("Операция отменена пользователем.")
 
 
@@ -1163,6 +1171,20 @@ def dispatch(args: argparse.Namespace, context: CliContext) -> int:
         else:
             context.write("Локальные backup не найдены.")
         return 0
+    if handler == "backup-delete":
+        rendered = ", ".join(str(path) for path in args.paths)
+        _confirm(
+            context,
+            f"Backup будут безвозвратно удалены: {rendered}",
+            assume_yes=args.yes,
+        )
+        removed = delete_backups(context.store, args.paths)
+        if context.json_output:
+            context.emit({"status": "deleted", "backups": removed})
+        else:
+            for path in removed:
+                context.write(f"Backup удалён: {path}")
+        return 0
     if handler == "backup-verify":
         manifest = verify_backup(args.path)
         if context.json_output:
@@ -1179,7 +1201,6 @@ def dispatch(args: argparse.Namespace, context: CliContext) -> int:
             context,
             f"Текущая конфигурация будет заменена содержимым {args.path}.",
             assume_yes=args.yes,
-            word="ВОССТАНОВИТЬ",
         )
         restore_backup(
             context.runner,
@@ -1444,7 +1465,6 @@ def dispatch(args: argparse.Namespace, context: CliContext) -> int:
             context,
             f"Управляемый WARP будет удалён{detail}.",
             assume_yes=args.yes,
-            word="УДАЛИТЬ",
         )
         uninstall_warp(
             context.runner,
@@ -1943,11 +1963,10 @@ def _ask(
 
 
 def _yes_no(context: CliContext, prompt: str, *, default: bool = False) -> bool:
-    suffix = " [Д/н]" if default else " [д/Н]"
-    value = context.input_fn(prompt + suffix + ": ").strip().casefold()
+    value = context.input_fn(prompt + " (y/n): ").strip().casefold()
     if not value:
         return default
-    return value in {"д", "да", "y", "yes"}
+    return value in {"y", "yes"}
 
 
 def _ask_integer(
@@ -1968,6 +1987,41 @@ def _ask_integer(
         if minimum <= value <= maximum:
             return value
         context.error(f"Допустимое значение: от {minimum} до {maximum}.")
+
+
+def _ask_backup_selection(context: CliContext) -> list[Path]:
+    backups = list_backups(context.store)
+    if not backups:
+        context.write("Локальные backup не найдены.")
+        return []
+    context.render_menu(
+        "Удаление backup:",
+        tuple(str(path) for path in backups),
+        allow_back=True,
+        zero_label="Назад",
+    )
+    while True:
+        raw = context.input_fn(
+            "Введите один или несколько номеров через пробел или запятую: "
+        ).strip()
+        if raw == "0":
+            return []
+        tokens = raw.replace(",", " ").split()
+        if not tokens:
+            context.error("Укажите хотя бы один номер backup.")
+            continue
+        try:
+            numbers = [int(token) for token in tokens]
+        except ValueError:
+            context.error("Введите только номера через пробел или запятую.")
+            continue
+        if len(numbers) != len(set(numbers)):
+            context.error("Номера backup не должны повторяться.")
+            continue
+        if any(number < 1 or number > len(backups) for number in numbers):
+            context.error(f"Допустимые номера backup: от 1 до {len(backups)}.")
+            continue
+        return [backups[number - 1] for number in numbers]
 
 
 def _interactive_certificate(context: CliContext) -> list[str]:
@@ -2072,6 +2126,7 @@ def _interactive_arguments(context: CliContext, section: int) -> list[str] | Non
             (
                 "Создать",
                 "Показать список",
+                "Удалить выбранные backup",
                 "Проверить",
                 "Восстановить",
                 "Статус расписания",
@@ -2090,9 +2145,14 @@ def _interactive_arguments(context: CliContext, section: int) -> list[str] | Non
             ]
         if action == 2:
             return ["backup", "list"]
-        if action == 5:
-            return ["backup", "schedule-status"]
+        if action == 3:
+            selected = _ask_backup_selection(context)
+            if not selected:
+                return None
+            return ["backup", "delete", *(str(path) for path in selected)]
         if action == 6:
+            return ["backup", "schedule-status"]
+        if action == 7:
             frequency = _choose(
                 context,
                 "Периодичность:",
@@ -2117,10 +2177,10 @@ def _interactive_arguments(context: CliContext, section: int) -> list[str] | Non
                     )
                 ),
             ]
-        if action == 7:
+        if action == 8:
             return ["backup", "schedule-disable"]
         path = _ask(context, "Путь к backup")
-        if action == 3:
+        if action == 4:
             return ["backup", "verify", path]
         result = ["backup", "restore", path]
         if _yes_no(context, "Не восстанавливать базу данных", default=False):

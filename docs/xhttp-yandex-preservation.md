@@ -138,7 +138,7 @@ sudo rwm backup verify /var/backups/remnawave-manager/ИМЯ_BACKUP.tar.gz
 sudo rwm backup restore /var/backups/remnawave-manager/ИМЯ_BACKUP.tar.gz --without-database
 ```
 
-Восстановление требует явного ввода `ВОССТАНОВИТЬ`; для автоматизации доступен `--yes`:
+Восстановление требует подтверждения вводом `y`; для автоматизации доступен `--yes`:
 
 ```console
 sudo rwm backup restore \
