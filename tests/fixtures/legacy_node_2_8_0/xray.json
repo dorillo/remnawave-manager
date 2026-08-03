@@ -1,0 +1,44 @@
+{
+  "inbounds": [
+    {
+      "tag": "reality-tcp",
+      "protocol": "vless",
+      "streamSettings": {
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+          "minClientVer": "26.3.27",
+          "serverNames": ["node.example.test"]
+        }
+      }
+    },
+    {
+      "tag": "yandex-xhttp",
+      "protocol": "vless",
+      "streamSettings": {
+        "network": "xhttp",
+        "security": "tls",
+        "tlsSettings": {
+          "certificates": [
+            {
+              "certificateFile": "/var/lib/remnawave/configs/xray/ssl/fullchain.pem",
+              "keyFile": "/var/lib/remnawave/configs/xray/ssl/privkey.pem"
+            }
+          ]
+        },
+        "xhttpSettings": {
+          "path": "/cdn-assets/opaque-path/",
+          "mode": "packet-up"
+        },
+        "sockopt": {
+          "acceptProxyProtocol": true
+        }
+      }
+    }
+  ],
+  "routing": {
+    "rules": [
+      {"type": "field", "outboundTag": "warp", "domain": ["geosite:google"]}
+    ]
+  }
+}

@@ -1,0 +1,118 @@
+{
+  "schema_version": 1,
+  "verified_at": "2026-08-03",
+  "supported_os": {
+    "id": "ubuntu",
+    "version": "24.04"
+  },
+  "components": {
+    "panel": {
+      "version": "3.2.0",
+      "upgrade_from": ["2.8.1", "3.0.0", "3.1.0", "3.2.0"],
+      "known_digests": {
+        "2.8.1": "sha256:361f9bb0b183d4fcefea2f1f7163db490e2aa1ec3b4bdde016a9ab9229ce956b",
+        "3.0.0": "sha256:ac871579de421c0a36b5903bc789214c4b24d68f100d4fb3cdb4689a97821356",
+        "3.1.0": "sha256:a9b5bf76a136d552f72e953baee549b2f3dc6bd30c2ff2936f64cb72db9a2587",
+        "3.2.0": "sha256:72af06c106111db7cd11f67da63cee591a4a1c60fc1d1ad57384c498c1e9fa40"
+      },
+      "registries": {
+        "docker-hub": {
+          "image": "remnawave/backend:3.2.0",
+          "digest": "sha256:72af06c106111db7cd11f67da63cee591a4a1c60fc1d1ad57384c498c1e9fa40"
+        },
+        "ghcr": {
+          "image": "ghcr.io/remnawave/backend:3.2.0",
+          "digest": "sha256:72af06c106111db7cd11f67da63cee591a4a1c60fc1d1ad57384c498c1e9fa40"
+        }
+      }
+    },
+    "subscription": {
+      "version": "8.0.0",
+      "upgrade_from": ["7.2.6", "8.0.0"],
+      "known_digests": {
+        "7.2.6": "sha256:da5ee26ec70ecd81e57303993e8bfb74c8e52f2fa74644b84aad53324cde2e8c",
+        "8.0.0": "sha256:04e8d479afb3598024e4018e9e15cd7fe879938250090a690ba39f1ee91b79ac"
+      },
+      "registries": {
+        "docker-hub": {
+          "image": "remnawave/subscription-page:8.0.0",
+          "digest": "sha256:04e8d479afb3598024e4018e9e15cd7fe879938250090a690ba39f1ee91b79ac"
+        }
+      }
+    },
+    "database": {
+      "version": "18.4",
+      "upgrade_from": ["18.3", "18.4"],
+      "known_digests": {
+        "18.3": "sha256:7e32e9833a6fb1c92c32552794cb6ed569d51b445a54907d35fc112ef39684db",
+        "18.4": "sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a"
+      },
+      "registries": {
+        "docker-hub": {
+          "image": "postgres:18.4",
+          "digest": "sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a"
+        }
+      }
+    },
+    "node": {
+      "version": "3.0.0",
+      "upgrade_from": ["2.8.0", "3.0.0"],
+      "known_digests": {
+        "2.8.0": "sha256:03f14935751b4ab565181e2b1766ccd1a9ac349d6839acd3ee49014e543fa232",
+        "3.0.0": "sha256:cac67deaa34cb16cb18439355fc185d60d4e3fc7eacca3838ae45af37f8c1c0a"
+      },
+      "registries": {
+        "docker-hub": {
+          "image": "remnawave/node:3.0.0",
+          "digest": "sha256:cac67deaa34cb16cb18439355fc185d60d4e3fc7eacca3838ae45af37f8c1c0a"
+        },
+        "ghcr": {
+          "image": "ghcr.io/remnawave/node:3.0.0",
+          "digest": "sha256:cac67deaa34cb16cb18439355fc185d60d4e3fc7eacca3838ae45af37f8c1c0a"
+        }
+      }
+    }
+  },
+  "tools": {
+    "wgcf": {
+      "version": "2.2.32",
+      "tag_commit": "7947653aaa4b7a793a28603548c5f86449efc615",
+      "base_url": "https://github.com/ViRb3/wgcf/releases/download/v2.2.32",
+      "architectures": {
+        "x86_64": {
+          "asset": "wgcf_2.2.32_linux_amd64",
+          "sha256": "2ff97f2201972ce582a424455d50a3719a380eef0cd1f3144f7779348e122a2c"
+        },
+        "aarch64": {
+          "asset": "wgcf_2.2.32_linux_arm64",
+          "sha256": "21fe21d9f61db9b381d71200f6f59c7949e0bb455446edcb33dda6ad6a8fcf8f"
+        }
+      }
+    },
+    "certbot_dns_gcore": {
+      "version": "0.1.8",
+      "wheel": "certbot_dns_gcore-0.1.8-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/5e/89/a0b459ee378254fcba11831623e26e6c73f5eb88c65e6204a924bc55b8e6/certbot_dns_gcore-0.1.8-py3-none-any.whl",
+      "sha256": "2302e05aee307732f94319081e74a4f17ee2765383a2ecae3ff15fdea8e579f0",
+      "license": "Apache-2.0"
+    }
+  },
+  "migration": {
+    "panel_2_to_3": {
+      "rename_preserving_value": {
+        "JWT_AUTH_SECRET": "APP_SECRET"
+      },
+      "remove": [
+        "JWT_API_TOKENS_SECRET",
+        "SWAGGER_PATH",
+        "SCALAR_PATH",
+        "IS_DOCS_ENABLED"
+      ],
+      "database_rollback_required": true
+    },
+    "node_2_to_3": {
+      "reality_default_min_client_version": "26.3.27",
+      "requires_xray_config_preflight": true
+    }
+  }
+}

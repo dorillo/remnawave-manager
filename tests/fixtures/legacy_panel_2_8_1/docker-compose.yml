@@ -1,0 +1,53 @@
+x-common: &common
+  restart: always
+  logging:
+    driver: json-file
+
+services:
+  remnawave-db:
+    <<: *common
+    image: postgres:18.3 # keep the verified legacy minor release
+    container_name: remnawave-db
+    env_file: .env
+    volumes:
+      - remnawave-db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+
+  remnawave:
+    <<: *common
+    image: remnawave/backend:2 # mutable tag resolved to 2.8.1 by digest
+    container_name: remnawave
+    env_file: .env
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      remnawave-db:
+        condition: service_healthy
+
+  remnawave-redis:
+    <<: *common
+    image: valkey/valkey:9.0.3-alpine
+    container_name: remnawave-redis
+
+  remnawave-subscription-page:
+    <<: *common
+    image: remnawave/subscription-page:latest # resolved to 7.2.6 by digest
+    container_name: remnawave-subscription-page
+    environment:
+      REMNAWAVE_PANEL_URL: http://remnawave:3000
+      REMNAWAVE_API_TOKEN: legacy-token-kept-verbatim
+    ports:
+      - "127.0.0.1:3010:3010"
+
+  remnawave-nginx:
+    <<: *common
+    image: nginx:1.28
+    container_name: remnawave-nginx
+    network_mode: host
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+
+volumes:
+  remnawave-db-data:
+    name: remnawave-db-data

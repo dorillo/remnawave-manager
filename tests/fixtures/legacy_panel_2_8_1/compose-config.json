@@ -1,0 +1,37 @@
+{
+  "services": {
+    "remnawave-db": {
+      "image": "postgres:18.3",
+      "container_name": "remnawave-db",
+      "volumes": [
+        {"type": "volume", "source": "remnawave-db-data", "target": "/var/lib/postgresql"}
+      ]
+    },
+    "remnawave": {
+      "image": "remnawave/backend:2",
+      "container_name": "remnawave",
+      "volumes": []
+    },
+    "remnawave-redis": {
+      "image": "valkey/valkey:9.0.3-alpine",
+      "container_name": "remnawave-redis",
+      "volumes": []
+    },
+    "remnawave-subscription-page": {
+      "image": "remnawave/subscription-page:latest",
+      "container_name": "remnawave-subscription-page",
+      "volumes": []
+    },
+    "remnawave-nginx": {
+      "image": "nginx:1.28",
+      "container_name": "remnawave-nginx",
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "__ROOT__/nginx.conf",
+          "target": "/etc/nginx/conf.d/default.conf"
+        }
+      ]
+    }
+  }
+}

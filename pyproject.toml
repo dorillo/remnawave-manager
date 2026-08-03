@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "remnawave-manager"
+version = "0.1.1"
+description = "Безопасное управление Remnawave Panel, Subscription Page и Node"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "Remnawave Manager contributors" }]
+dependencies = []
+
+[project.scripts]
+rwm = "remnawave_manager.cli:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+include-package-data = true
+license-files = ["LICENSE", "NOTICE"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+remnawave_manager = [
+    "data/*.json",
+    "data/licenses/*.txt",
+    "data/disguises/*.json",
+    "data/disguises/*.md",
+    "data/disguises/*/*.html",
+    "data/disguises/*/*.css",
+    "data/disguises/*/*.js",
+    "data/disguises/*/*.jpg",
+    "data/disguises/*/*.svg",
+]
+
+[tool.setuptools.data-files]
+"share/doc/remnawave-manager" = ["docs/*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-ra"

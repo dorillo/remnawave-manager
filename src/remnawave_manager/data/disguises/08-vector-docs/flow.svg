@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 240" role="img" aria-labelledby="title desc">
+  <title id="title">Схема Vector API</title><desc id="desc">Приложение отправляет запрос через API к коллекциям и получает события через вебхуки.</desc>
+  <rect width="760" height="240" fill="#fafbfc"/>
+  <g font-family="Arial" text-anchor="middle">
+    <rect x="42" y="74" width="146" height="92" rx="8" fill="#fff" stroke="#d9dde4"/><rect x="307" y="56" width="146" height="128" rx="8" fill="#5357c9"/><rect x="572" y="38" width="146" height="72" rx="8" fill="#fff" stroke="#d9dde4"/><rect x="572" y="130" width="146" height="72" rx="8" fill="#fff" stroke="#d9dde4"/>
+    <circle cx="115" cy="102" r="13" fill="#eef0ff"/><path d="M108 102h14M115 95v14" stroke="#5357c9" stroke-width="2"/><text x="115" y="137" font-size="14" fill="#20242b" font-weight="700">Ваше приложение</text>
+    <text x="380" y="108" font-size="22" fill="#fff" font-weight="700">Vector API</text><text x="380" y="132" font-size="10" fill="#d9dcff">Аутентификация · лимиты · журнал</text>
+    <text x="645" y="72" font-size="14" fill="#20242b" font-weight="700">Коллекции</text><text x="645" y="91" font-size="9" fill="#707884">Документы и метаданные</text>
+    <text x="645" y="164" font-size="14" fill="#20242b" font-weight="700">События</text><text x="645" y="183" font-size="9" fill="#707884">Вебхуки и очередь</text>
+    <path d="M188 120h101" stroke="#9ba2ad" stroke-width="2"/><path d="m285 115 8 5-8 5" fill="none" stroke="#9ba2ad" stroke-width="2"/><text x="238" y="108" font-size="9" fill="#707884">HTTPS / JSON</text>
+    <path d="M453 92h101" stroke="#9ba2ad" stroke-width="2"/><path d="m550 87 8 5-8 5" fill="none" stroke="#9ba2ad" stroke-width="2"/><path d="M453 148h101" stroke="#9ba2ad" stroke-width="2"/><path d="m550 143 8 5-8 5" fill="none" stroke="#9ba2ad" stroke-width="2"/>
+  </g>
+</svg>

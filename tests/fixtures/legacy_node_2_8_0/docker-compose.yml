@@ -1,0 +1,27 @@
+x-common: &common
+  restart: always
+  logging:
+    driver: json-file
+
+services:
+  remnawave-nginx:
+    <<: *common
+    image: nginx:1.28
+    container_name: remnawave-nginx
+    network_mode: host
+    volumes:
+      - ./nginx:/etc/nginx:ro
+      - ./site:/var/www/html:ro
+      - /dev/shm:/dev/shm:rw
+
+  remnanode:
+    <<: *common
+    image: remnawave/node:latest # mutable legacy tag; running digest proves 2.8.0
+    container_name: remnanode
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+    env_file: .env
+    volumes:
+      - /dev/shm:/dev/shm:rw
+      - ./certs:/var/lib/remnawave/configs/xray/ssl:ro

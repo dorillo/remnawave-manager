@@ -1,0 +1,21 @@
+{
+  "services": {
+    "remnawave-nginx": {
+      "image": "nginx:1.28",
+      "container_name": "remnawave-nginx",
+      "volumes": [
+        {"type": "bind", "source": "__ROOT__/nginx", "target": "/etc/nginx"},
+        {"type": "bind", "source": "__ROOT__/site", "target": "/var/www/html"},
+        {"type": "bind", "source": "/dev/shm", "target": "/dev/shm"}
+      ]
+    },
+    "remnanode": {
+      "image": "remnawave/node:latest",
+      "container_name": "remnanode",
+      "volumes": [
+        {"type": "bind", "source": "/dev/shm", "target": "/dev/shm"},
+        {"type": "bind", "source": "__ROOT__/certs", "target": "/var/lib/remnawave/configs/xray/ssl", "read_only": true}
+      ]
+    }
+  }
+}

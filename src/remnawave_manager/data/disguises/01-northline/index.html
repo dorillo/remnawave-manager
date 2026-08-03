@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'self'">
+  <title>Линия — люди и места рядом</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#feed" aria-label="Линия, на главную"><span>л</span>линия</a>
+    <label class="search"><span aria-hidden="true">⌕</span><input id="global-search" type="search" placeholder="Найти людей, места или записи" aria-label="Поиск"></label>
+    <nav aria-label="Быстрые действия">
+      <button class="icon-button" data-info="Открытые районы" aria-label="Карта доступных районов"><span aria-hidden="true">⌖</span></button>
+      <button class="profile-button guest-login" data-auth><span>Войти</span></button>
+    </nav>
+  </header>
+
+  <div class="shell">
+    <aside class="left-nav" aria-label="Разделы">
+      <nav>
+        <a class="active" href="#feed"><span>⌂</span>Новости</a>
+        <a href="#login" data-auth><span>□</span>Сообщения</a>
+        <a href="#login" data-auth><span>○</span>Друзья</a>
+        <a href="#groups"><span>◇</span>Сообщества</a>
+        <a href="#photos"><span>▧</span>Фотографии</a>
+        <a href="#login" data-auth><span>☆</span>Сохранённое</a>
+      </nav>
+      <div class="mini-profile guest-card">
+        <span class="guest-mark">л</span>
+        <div><strong>Гостевой режим</strong><small>Публичная лента доступна без входа</small></div>
+      </div>
+      <p class="legal">О проекте · Помощь · Правила<br>© 2026 Линия</p>
+    </aside>
+
+    <main id="feed">
+      <section class="stories" aria-label="Истории">
+        <button class="story add-story" data-modal="login"><span>+</span><strong>Добавить</strong></button>
+        <button class="story" data-story="Нина"><span class="avatar avatar-nina">Н</span><strong>Нина</strong></button>
+        <button class="story" data-story="Лев"><span class="avatar avatar-lev">Л</span><strong>Лев</strong></button>
+        <button class="story" data-story="Городские сады"><span class="avatar avatar-garden">С</span><strong>Сады</strong></button>
+        <button class="story" data-story="Маша"><span class="avatar avatar-masha">М</span><strong>Маша</strong></button>
+        <button class="story" data-story="ВелоПитер"><span class="avatar avatar-bike">В</span><strong>Вело</strong></button>
+      </section>
+
+      <section class="composer card guest-composer">
+        <span class="guest-mark">＋</span>
+        <button data-auth>Войдите, чтобы поделиться новостью района</button>
+        <button class="round" data-auth aria-label="Добавить фотографию">▧</button>
+      </section>
+
+      <div class="feed-tabs" role="tablist" aria-label="Фильтр ленты">
+        <button class="active" data-feed="all" role="tab">Популярное</button>
+        <button data-feed="local" role="tab">Рядом</button>
+        <button data-feed="groups" role="tab">Сообщества</button>
+      </div>
+
+      <section class="posts" aria-live="polite">
+        <article class="post card" data-kind="local" data-search="набережная мост прогулка нина орлова">
+          <header><span class="avatar avatar-nina">Н</span><div><strong>Нина Орлова</strong><small>сегодня в 09:42 · Петроградская</small></div><button data-post-menu aria-label="Меню записи">•••</button></header>
+          <p>Утром прошла по новой части набережной Карповки. Уже открыли спуск к воде и поставили длинные столы — хорошее место, чтобы поработать вне дома.</p>
+          <figure class="post-photo"><img src="hero.jpg" alt="Современное общественное пространство у воды"><figcaption><span>Карповка</span><strong>Новая городская гостиная</strong></figcaption></figure>
+          <footer><button class="like" data-auth><span>♡</span><b>128</b></button><button data-auth>◇ 16 комментариев</button><button class="save" data-auth aria-label="Сохранить запись">☆</button></footer>
+        </article>
+
+        <article class="post card" data-kind="groups" data-search="сад растения обмен семена городской клуб">
+          <header><span class="avatar avatar-garden">С</span><div><strong>Городские сады</strong><small>вчера в 18:10 · открытое сообщество</small></div><button data-post-menu aria-label="Меню записи">•••</button></header>
+          <div class="group-note"><span>Встреча сообщества</span><h2>Обмен растениями во дворе</h2><p>17 августа, 12:00 · Сквер Лизы Чайкиной</p></div>
+          <p>Приносите черенки, семена и небольшие горшки. Подпишите сорт и условия ухода — так новым хозяевам будет проще.</p>
+          <footer><button class="like" data-auth><span>♡</span><b>74</b></button><button data-auth>◇ 9 комментариев</button><button class="join" data-auth>Участвовать</button></footer>
+        </article>
+
+        <article class="post card" data-kind="local" data-search="велосипед маршрут парк лев тихонов">
+          <header><span class="avatar avatar-lev">Л</span><div><strong>Лев Тихонов</strong><small>2 августа в 21:06</small></div><button data-post-menu aria-label="Меню записи">•••</button></header>
+          <p>Собрал спокойный вечерний круг: Ботанический сад → Каменный остров → Елагин. Получилось 18 км почти без машин. Трек оставил в комментариях.</p>
+          <div class="route"><div class="route-line"><i></i><i></i><i></i></div><div><strong>Вечерний зелёный круг</strong><span>18,4 км · 1 ч 24 мин · набор 42 м</span></div></div>
+          <footer><button class="like" data-auth><span>♡</span><b>52</b></button><button data-auth>◇ 11 комментариев</button><button class="save" data-auth aria-label="Сохранить маршрут">☆</button></footer>
+        </article>
+        <article class="post card" data-kind="groups" data-search="книги обмен библиотека двор соседи чтение">
+          <header><span class="avatar avatar-books">К</span><div><strong>Книжный круг Петроградки</strong><small>2 августа в 17:35 · открытое сообщество</small></div><button data-post-menu aria-label="Меню записи">•••</button></header>
+          <p>Собрали открытую полку для обмена книгами в арке на Большой Пушкарской. Внутри уже есть современная проза, детские книги и несколько альбомов по архитектуре.</p>
+          <div class="notice-board"><div><span>ОТКРЫТАЯ ПОЛКА</span><strong>Возьмите книгу.<br>Принесите другую.</strong></div><ul><li>ежедневно с 08:00 до 22:00</li><li>книги принимаются без записи</li><li>рядом есть стол для чтения</li></ul></div>
+          <footer><button class="like" data-auth><span>♡</span><b>96</b></button><button data-auth>◇ 23 комментария</button><button class="join" data-auth>Вступить</button></footer>
+        </article>
+        <article class="post card" data-kind="local" data-search="мастерская ремонт вещи одежда техника район">
+          <header><span class="avatar avatar-workshop">М</span><div><strong>Районная мастерская</strong><small>1 августа в 12:20 · Чкаловский проспект</small></div><button data-post-menu aria-label="Меню записи">•••</button></header>
+          <p>В субботу мастера бесплатно помогают с мелким ремонтом одежды, настольных ламп и бытовой техники. Запчасти лучше принести с собой, инструменты будут на месте.</p>
+          <div class="service-list"><span><b>10:00</b>одежда и текстиль</span><span><b>12:30</b>электроника</span><span><b>15:00</b>велосипеды</span></div>
+          <footer><button class="like" data-auth><span>♡</span><b>61</b></button><button data-auth>◇ 8 комментариев</button><button class="save" data-auth aria-label="Сохранить расписание">☆</button></footer>
+        </article>
+        <article class="post card" data-kind="local" data-search="архитектура прогулка модерн история экскурсия город">
+          <header><span class="avatar avatar-guide">А</span><div><strong>Архитектура рядом</strong><small>31 июля в 19:05 · авторская заметка</small></div><button data-post-menu aria-label="Меню записи">•••</button></header>
+          <p>Подготовили самостоятельный маршрут по шести доходным домам северного модерна. У каждой точки есть короткая справка о фасаде, архитекторе и перестройках двора.</p>
+          <div class="route route-architecture"><div class="route-line"><i></i><i></i><i></i></div><div><strong>От Каменноостровского до Карповки</strong><span>6 остановок · 3,2 км · около 55 минут</span></div></div>
+          <footer><button class="like" data-auth><span>♡</span><b>143</b></button><button data-auth>◇ 31 комментарий</button><button class="save" data-auth aria-label="Сохранить прогулку">☆</button></footer>
+        </article>
+        <p class="empty" hidden>В ленте нет записей по этому запросу.</p>
+      </section>
+    </main>
+
+    <aside class="right-rail">
+      <section class="card date-card"><div><small>понедельник</small><strong>3 августа</strong></div><span>+23°</span></section>
+      <section class="card events">
+        <header><h2>События рядом</h2><button data-info="Календарь района">Все</button></header>
+        <a href="#event" data-event><time><b>05</b>авг</time><div><strong>Кинопоказ во дворе</strong><span>Набережная Карповки, 5</span></div></a>
+        <a href="#event" data-event><time><b>08</b>авг</time><div><strong>Маркет локальных издательств</strong><span>Дом культуры «Линия»</span></div></a>
+        <a href="#event" data-event><time><b>12</b>авг</time><div><strong>Открытая тренировка</strong><span>Приморский парк</span></div></a>
+      </section>
+      <section class="card people">
+        <header><h2>Авторы рядом</h2></header>
+        <div><span class="avatar avatar-masha">М</span><p><strong>Маша Корнеева</strong><small>городская фотография</small></p><button class="follow" data-auth aria-label="Подписаться на Машу">+</button></div>
+        <div><span class="avatar avatar-bike">В</span><p><strong>Виктор Горин</strong><small>веломаршруты</small></p><button class="follow" data-auth aria-label="Подписаться на Виктора">+</button></div>
+        <div><span class="avatar avatar-guide">А</span><p><strong>Алёна Миронова</strong><small>история архитектуры</small></p><button class="follow" data-auth aria-label="Подписаться на Алёну">+</button></div>
+        <div><span class="avatar avatar-books">К</span><p><strong>Книжный круг</strong><small>обмен книгами и встречи</small></p><button class="follow" data-auth aria-label="Подписаться на Книжный круг">+</button></div>
+      </section>
+    </aside>
+  </div>
+
+  <div class="modal" id="modal" hidden>
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <button class="close" aria-label="Закрыть">×</button>
+      <span class="dialog-mark">л</span><h2 id="modal-title">Вход в Линию</h2>
+      <p id="modal-text">Введите данные профиля или запросите приглашение для своего района.</p>
+      <form id="auth-form"><label>Электронная почта<input type="email" placeholder="name@example.ru" required></label><label>Пароль<input type="password" placeholder="Не менее 8 символов" minlength="8" required></label><button type="submit">Продолжить</button><button class="secondary" type="button" id="register">Создать профиль</button></form>
+      <div class="auth-result" hidden><span>Проверка доступа</span><strong>Нужен код приглашения района</strong><p>Этот адрес пока не связан с участником закрытого теста. Приглашения выдаются районными модераторами по мере запуска.</p><button id="request-invite">Запросить приглашение</button></div>
+      <small>Линия не передаёт адрес рекламным сервисам.</small>
+    </div>
+  </div>
+</body>
+</html>
