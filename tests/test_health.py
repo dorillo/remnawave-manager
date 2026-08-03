@@ -187,55 +187,44 @@ class SubscriptionScopeTests(unittest.TestCase):
 
     @staticmethod
     def runner(statuses: list[int]) -> mock.Mock:
-        token = "header.payload.signature"
         runner = mock.Mock()
         runner.run.side_effect = [
-            Result(("docker", "exec"), 0, token + "\n", ""),
-            *[Result(("curl",), 0, str(status), "") for status in statuses],
+            Result(("docker", "exec"), 0, str(status), "")
+            for status in statuses
         ]
         return runner
 
-    def test_accepts_all_required_read_only_scopes_without_exposing_token(self) -> None:
+    def test_probes_from_subscription_runtime_without_exporting_token(self) -> None:
         runner = self.runner([200, 404, 200, 404, 404, 400])
-        with mock.patch(
-            "remnawave_manager.health._container_http_url",
-            return_value="http://127.0.0.1:3000",
-        ) as endpoint:
-            check_subscription_api_scopes(runner, self.panel, self.subscription)
+        check_subscription_api_scopes(runner, self.panel, self.subscription)
 
-        self.assertEqual(runner.run.call_count, 7)
-        endpoint.assert_called_once_with(
-            runner,
-            self.panel,
-            default_port=3000,
-            path="",
-            container_loopback=True,
-        )
-        for call in runner.run.call_args_list[1:]:
+        self.assertEqual(runner.run.call_count, 6)
+        for call in runner.run.call_args_list:
             command = call.args[0]
             self.assertEqual(
                 command[:5],
-                ["docker", "exec", "-i", "remnawave", "curl"],
+                [
+                    "docker",
+                    "exec",
+                    "remnawave-subscription-page",
+                    "sh",
+                    "-c",
+                ],
             )
             self.assertNotIn("header.payload.signature", command)
             self.assertNotIn("--request", command)
-            self.assertEqual(
-                call.kwargs["input_text"],
-                'header = "Authorization: Bearer header.payload.signature"\n',
-            )
+            self.assertNotIn("input_text", call.kwargs)
+            self.assertIn("${REMNAWAVE_API_TOKEN}", command[5])
+            self.assertIn("${REMNAWAVE_PANEL_URL%/}", command[5])
+            self.assertEqual(command[-2], "rwm-scope-probe")
+            self.assertTrue(command[-1].startswith("/api/"))
             self.assertTrue(call.kwargs["sensitive"])
 
     def test_reports_each_missing_scope(self) -> None:
         runner = self.runner([200, 403, 200, 403, 404, 400])
-        with (
-            mock.patch(
-                "remnawave_manager.health._container_http_url",
-                return_value="http://127.0.0.1:3000",
-            ),
-            self.assertRaisesRegex(
-                TransactionError,
-                "users:by-username.*subscription-page-configs:get",
-            ),
+        with self.assertRaisesRegex(
+            TransactionError,
+            "users:by-username.*subscription-page-configs:get",
         ):
             check_subscription_api_scopes(runner, self.panel, self.subscription)
 

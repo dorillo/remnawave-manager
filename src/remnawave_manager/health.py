@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
 import stat
 import time
 from pathlib import Path
@@ -292,35 +291,8 @@ def check_subscription_api_scopes(
 ) -> None:
     """Verify every read-only Panel scope required by Subscription Page v8."""
 
+    del panel  # The probe must use the same route as Subscription Page itself.
     subscription_container = subscription.container or subscription.service
-    token_result = runner.run(
-        [
-            "docker",
-            "exec",
-            subscription_container,
-            "printenv",
-            "REMNAWAVE_API_TOKEN",
-        ],
-        check=False,
-        sensitive=True,
-        timeout=30,
-    )
-    token = token_result.stdout.strip()
-    if token_result.returncode != 0 or not re.fullmatch(
-        r"[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+){2}", token
-    ):
-        raise TransactionError(
-            "Не удалось безопасно прочитать JWT-токен Subscription Page для проверки scopes."
-        )
-
-    origin = _container_http_url(
-        runner,
-        panel,
-        default_port=3000,
-        path="",
-        container_loopback=True,
-    )
-    panel_container = panel.container or panel.service
     missing: list[str] = []
     probes = (
         ("system:metadata", "/api/system/metadata", {200}),
@@ -350,30 +322,30 @@ def check_subscription_api_scopes(
             {200, 400, 404},
         ),
     )
-    curl_config = f'header = "Authorization: Bearer {token}"\n'
+    probe_script = """\
+set -eu
+test -n "${REMNAWAVE_API_TOKEN:-}" || exit 65
+base=${REMNAWAVE_PANEL_URL%/}
+case "$base" in
+    http://*|https://*) ;;
+    *) exit 64 ;;
+esac
+exec curl --silent --show-error --output /dev/null --write-out '%{http_code}' \\
+    --max-time 15 --noproxy '*' --proto '=http,https' \\
+    --header "Authorization: Bearer ${REMNAWAVE_API_TOKEN}" "${base}$1"
+"""
     for scope, path, accepted_statuses in probes:
         result = runner.run(
             [
                 "docker",
                 "exec",
-                "-i",
-                panel_container,
-                "curl",
-                "--silent",
-                "--show-error",
-                "--output",
-                "/dev/null",
-                "--write-out",
-                "%{http_code}",
-                "--max-time",
-                "15",
-                "--noproxy",
-                "*",
-                "--config",
-                "-",
-                origin + path,
+                subscription_container,
+                "sh",
+                "-c",
+                probe_script,
+                "rwm-scope-probe",
+                path,
             ],
-            input_text=curl_config,
             check=False,
             sensitive=True,
             timeout=30,
