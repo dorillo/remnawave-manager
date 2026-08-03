@@ -197,6 +197,11 @@ class InstallScriptTests(unittest.TestCase):
             INSTALL_SCRIPT,
         )
         self.assertIn("flock --nonblock 9", INSTALL_SCRIPT)
+        release_install_lock = INSTALL_SCRIPT.index("exec 9>&-")
+        system_apply = INSTALL_SCRIPT.index(
+            'if ! "${ENTRYPOINT}" system apply --yes; then'
+        )
+        self.assertLess(release_install_lock, system_apply)
         self.assertIn(
             'readonly MANAGER_LOCK_DIR="/run/remnawave-manager"',
             INSTALL_SCRIPT,

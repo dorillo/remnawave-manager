@@ -727,6 +727,9 @@ if [[ -n "${old_previous_target}" && "${old_previous_target}" != "${rollback_tar
 fi
 trap - EXIT HUP INT TERM
 
+# The installed CLI acquires the same lock for every mutating operation.
+# Release the installer lock before delegating the final system setup to it.
+exec 9>&-
 if ! "${ENTRYPOINT}" system apply --yes; then
     printf '%s\n' \
         'Remnawave Manager установлен, но BBR/fq или unattended-upgrades не удалось применить. Выполните позднее: sudo rwm system apply' \
