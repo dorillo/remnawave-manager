@@ -106,6 +106,16 @@ class SubscriptionHealthTests(unittest.TestCase):
         ):
             check_subscription_http(runner, self.component, timeout=0)  # type: ignore[arg-type]
 
+    def test_legacy_726_accepts_expected_root_not_found_response(self) -> None:
+        runner = SequenceRunner([0], ["404"])
+        with mock.patch(
+            "remnawave_manager.health._container_http_url",
+            return_value="http://127.0.0.1:13010/",
+        ):
+            check_subscription_http(
+                runner, self.component, timeout=0, legacy=True  # type: ignore[arg-type]
+            )
+
 
 class SubscriptionScopeTests(unittest.TestCase):
     panel = Component("panel", "remnawave", "remnawave")

@@ -46,6 +46,57 @@ def _store(root: Path) -> StateStore:
 
 
 class DiagnoseTests(unittest.TestCase):
+    def test_diagnostics_use_legacy_subscription_health_for_726(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            compose = root / "docker-compose.yml"
+            compose.write_text("services: {}\n", encoding="utf-8")
+            store = StateStore(RuntimePaths(root / "runtime"))
+            subscription = Component(
+                "subscription", "subscription-service", "subscription-container"
+            )
+            store.save_inventory(
+                Inventory(
+                    schema_version=1,
+                    role="panel",
+                    install_dir=str(root),
+                    compose_file=str(compose),
+                    env_file=None,
+                    webserver="nginx",
+                    components={
+                        "panel": Component("panel", "panel-service"),
+                        "subscription": subscription,
+                        "database": Component("database", "database-service"),
+                    },
+                )
+            )
+            runner = mock.Mock(spec=Runner)
+            runner.run.return_value = Result(("command",), 0, "", "")
+
+            with (
+                mock.patch(
+                    "remnawave_manager.diagnose.detect_component_version",
+                    return_value="7.2.6",
+                ),
+                mock.patch("remnawave_manager.diagnose.check_panel_http"),
+                mock.patch(
+                    "remnawave_manager.diagnose.check_subscription_http"
+                ) as subscription_health,
+                mock.patch("remnawave_manager.diagnose.test_nginx"),
+                mock.patch(
+                    "remnawave_manager.diagnose.inspect_compose",
+                    return_value={"services": {}},
+                ),
+                mock.patch(
+                    "remnawave_manager.diagnose._database_size_bytes", return_value=1
+                ),
+            ):
+                run_diagnostics(runner, store)
+
+            subscription_health.assert_called_once_with(
+                runner, subscription, legacy=True
+            )
+
     def test_reality_recovery_is_reported_without_exposing_secret(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             store = _store(Path(temporary))

@@ -11,6 +11,7 @@ from typing import Literal
 
 from .api import REALITY_RECOVERY_NAME
 from .backup import _postgres_identity
+from .compat import detect_component_version
 from .compose import compose_command, inspect_compose
 from .errors import TransactionError, ValidationError
 from .health import (
@@ -613,9 +614,14 @@ def run_diagnostics(runner: Runner, store: StateStore) -> list[Check]:
         if inventory.role == "panel":
             check_panel_http(runner, inventory.components["panel"])
             if "subscription" in inventory.components:
+                subscription = inventory.components["subscription"]
+                subscription_version = detect_component_version(
+                    runner, "subscription", subscription
+                )
                 check_subscription_http(
                     runner,
-                    inventory.components["subscription"],
+                    subscription,
+                    legacy=subscription_version == "7.2.6",
                 )
         else:
             check_node_runtime(runner, inventory)

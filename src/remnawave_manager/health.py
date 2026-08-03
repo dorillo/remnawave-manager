@@ -214,35 +214,49 @@ def check_subscription_http(
     component: Component,
     *,
     timeout: int = 90,
+    legacy: bool = False,
 ) -> None:
     url = _container_http_url(
         runner,
         component,
         default_port=3010,
-        path="/internal/health",
+        path="/" if legacy else "/internal/health",
     )
     deadline = time.monotonic() + timeout
     while True:
-        result = runner.run(
-            [
+        command = [
                 "curl",
                 "--silent",
                 "--show-error",
-                "--fail",
                 "--max-time",
                 "15",
                 "--noproxy",
                 "*",
                 "--output",
                 "/dev/null",
-                url,
-            ],
+            ]
+        if legacy:
+            command += ["--write-out", "%{http_code}"]
+        else:
+            command.append("--fail")
+        command.append(url)
+        result = runner.run(
+            command,
             check=False,
             timeout=30,
         )
-        if result.returncode == 0:
+        ready = (
+            result.returncode == 0 and result.stdout.strip() == "404"
+            if legacy
+            else result.returncode == 0
+        )
+        if ready:
             return
         if time.monotonic() >= deadline:
+            if legacy:
+                raise TransactionError(
+                    "Subscription Page 7.2.6 не отвечает ожидаемым HTTP 404 на локальный /."
+                )
             raise TransactionError(
                 "Subscription Page не отвечает на локальный /internal/health."
             )

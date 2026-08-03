@@ -152,6 +152,8 @@ def _reconcile_running_services(
     runner: Runner,
     inventory: Inventory,
     expected: set[str],
+    *,
+    legacy_subscription: bool = False,
 ) -> None:
     """Return managed services to the state captured before an update."""
 
@@ -214,7 +216,9 @@ def _reconcile_running_services(
         if name == "panel":
             check_panel_http(runner, component)
         elif name == "subscription":
-            check_subscription_http(runner, component)
+            check_subscription_http(
+                runner, component, legacy=legacy_subscription
+            )
         elif name == "node":
             wait_node_runtime(runner, inventory)
             wait_for_paths(inventory.xhttp_sockets)
@@ -262,7 +266,7 @@ def update_panel_stack(
         inventory.components["panel"],
         accept_unknown=accept_unknown_source,
     )
-    require_supported_source(
+    subscription_source_version = require_supported_source(
         runner,
         "subscription",
         inventory.components["subscription"],
@@ -426,7 +430,12 @@ def update_panel_stack(
         check_subscription_api_scopes(runner, panel, subscription)
         test_nginx(runner, inventory)
         journal.phase("restoring-service-state")
-        _reconcile_running_services(runner, inventory, running_before)
+        _reconcile_running_services(
+            runner,
+            inventory,
+            running_before,
+            legacy_subscription=subscription_source_version == "7.2.6",
+        )
         journal.phase("committed")
         adopt(
             runner,
@@ -470,7 +479,12 @@ def update_panel_stack(
 
         if service_state_touched:
             try:
-                _reconcile_running_services(runner, inventory, running_before)
+                _reconcile_running_services(
+                    runner,
+                    inventory,
+                    running_before,
+                    legacy_subscription=subscription_source_version == "7.2.6",
+                )
             except BaseException as rollback_error:  # noqa: BLE001 - report all compensation failures
                 rollback_errors.append(f"возврат состояния сервисов: {rollback_error}")
 

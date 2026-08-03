@@ -8,7 +8,12 @@ from pathlib import Path
 from .compose import compose_command
 from .errors import ManagerError, TransactionError, ValidationError
 from .models import Inventory
-from .runner import Runner, atomic_write_text, read_stable_regular_file
+from .runner import (
+    Runner,
+    atomic_write_text,
+    read_stable_regular_file,
+    sanitize_external_text,
+)
 
 GZIP_BLOCK = """# BEGIN REMNAWAVE-MANAGER GZIP
 gzip on;
@@ -22,6 +27,11 @@ gzip_types application/javascript application/json application/manifest+json app
 """
 
 _MAX_NGINX_CONFIG_SIZE = 16 * 1024 * 1024
+_NGINX_QUOTED_VALUE = re.compile(r'(["\'])(?:\\.|(?!\1).)*\1')
+_NGINX_URL = re.compile(r"(?i)\bhttps?://\S+")
+_NGINX_POSIX_PATH = re.compile(r"/[^\s:]+(?P<line>:\d+)?")
+_NGINX_WINDOWS_PATH = re.compile(r"[A-Za-z]:\\[^\s:]+(?P<line>:\d+)?")
+_NGINX_LONG_TOKEN = re.compile(r"\b[A-Za-z0-9_-]{24,}\b")
 
 _REQUIRED_GZIP_TYPES = (
     "application/javascript",
@@ -607,7 +617,32 @@ def test_nginx(runner: Runner, inventory: Inventory) -> None:
     else:
         result = runner.run(["nginx", "-t"], check=False)
     if result.returncode != 0:
-        raise TransactionError("nginx -t завершился с ошибкой; исходный конфиг будет возвращён.")
+        detail = _redact_nginx_test_error(result.stderr or result.stdout)
+        suffix = f" Причина: {detail}" if detail else ""
+        raise TransactionError(
+            "nginx -t завершился с ошибкой; исходный конфиг будет возвращён."
+            + suffix
+        )
+
+
+def _redact_nginx_test_error(value: str) -> str:
+    """Keep actionable nginx syntax details without exposing config secrets."""
+
+    selected = sanitize_external_text(value, limit=4000)
+    lines = [line.strip() for line in selected.splitlines() if line.strip()][:5]
+    redacted: list[str] = []
+    for line in lines:
+        line = _NGINX_QUOTED_VALUE.sub('"<скрыто>"', line)
+        line = _NGINX_URL.sub("<URL скрыт>", line)
+        line = _NGINX_WINDOWS_PATH.sub(
+            lambda match: "<путь скрыт>" + (match.group("line") or ""), line
+        )
+        line = _NGINX_POSIX_PATH.sub(
+            lambda match: "<путь скрыт>" + (match.group("line") or ""), line
+        )
+        line = _NGINX_LONG_TOKEN.sub("<токен скрыт>", line)
+        redacted.append(line)
+    return " | ".join(redacted)
 
 
 def reload_nginx(runner: Runner, inventory: Inventory) -> None:

@@ -1080,13 +1080,20 @@ class RollbackServiceStateTests(unittest.TestCase):
         with (
             mock.patch("remnawave_manager.update.wait_container"),
             mock.patch("remnawave_manager.update.check_panel_http"),
-            mock.patch("remnawave_manager.update.check_subscription_http"),
+            mock.patch(
+                "remnawave_manager.update.check_subscription_http"
+            ) as subscription_health,
         ):
-            _reconcile_running_services(runner, current, expected)
+            _reconcile_running_services(
+                runner, current, expected, legacy_subscription=True
+            )
 
         starts = [command[-1] for command in commands if "up" in command]
         self.assertEqual(starts, ["panel", "subscription"])
         self.assertEqual(running, expected)
+        subscription_health.assert_called_once_with(
+            runner, current.components["subscription"], legacy=True
+        )
 
 
 if __name__ == "__main__":

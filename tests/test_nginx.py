@@ -47,6 +47,32 @@ def _container_inventory(config: Path) -> Inventory:
 
 
 class NginxMigrationTests(unittest.TestCase):
+    def test_nginx_failure_reports_redacted_actionable_detail(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            config = Path(temporary) / "nginx.conf"
+            inventory = _inventory(config)
+            runner = mock.Mock(spec=Runner)
+            secret = "sensitive-cookie-value-1234567890"
+            runner.run.return_value = Result(
+                (),
+                1,
+                "",
+                "nginx: [emerg] invalid number of arguments in "
+                f'"{secret}" directive in /etc/nginx/nginx.conf:117\n'
+                "nginx: configuration file /etc/nginx/nginx.conf test failed",
+            )
+
+            with self.assertRaises(TransactionError) as raised:
+                validate_nginx(runner, inventory)
+
+            message = str(raised.exception)
+            self.assertIn("[emerg]", message)
+            self.assertIn("invalid number of arguments", message)
+            self.assertIn(":117", message)
+            self.assertIn("<скрыто>", message)
+            self.assertNotIn(secret, message)
+            self.assertNotIn("/etc/nginx", message)
+
     def test_legacy_panel_and_subscription_proxy_contract_is_hardened(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             config = Path(temporary) / "nginx.conf"
