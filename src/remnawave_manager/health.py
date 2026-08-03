@@ -245,17 +245,24 @@ def check_subscription_http(
             check=False,
             timeout=30,
         )
-        ready = (
-            result.returncode == 0 and result.stdout.strip() == "404"
-            if legacy
-            else result.returncode == 0
-        )
+        if legacy:
+            status = result.stdout.strip()
+            ready = (
+                result.returncode == 0
+                and len(status) == 3
+                and status.isascii()
+                and status.isdigit()
+                and 200 <= int(status) < 500
+            )
+        else:
+            ready = result.returncode == 0
         if ready:
             return
         if time.monotonic() >= deadline:
             if legacy:
                 raise TransactionError(
-                    "Subscription Page 7.2.6 не отвечает ожидаемым HTTP 404 на локальный /."
+                    "Subscription Page 7.2.6 не отвечает допустимым HTTP 2xx-4xx "
+                    "на локальный /."
                 )
             raise TransactionError(
                 "Subscription Page не отвечает на локальный /internal/health."
