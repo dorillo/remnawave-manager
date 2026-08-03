@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -396,7 +397,7 @@ server {
                 mock.patch("remnawave_manager.security.secrets.token_hex", return_value="a" * 24),
                 mock.patch(
                     "remnawave_manager.security.secrets.token_urlsafe",
-                    side_effect=["V" * 64, "P" * 48],
+                    side_effect=["V" * 43, "P" * 48],
                 ),
             ):
                 access = rotate_panel_access(mock.Mock(), store)
@@ -404,7 +405,8 @@ server {
             self.assertEqual(access.mode, "manager-path")
             self.assertEqual(access.url, "https://panel.example.com/_rwm/" + "P" * 48)
             rendered = nginx.read_text(encoding="utf-8")
-            self.assertEqual(rendered.count("map_hash_bucket_size 128;"), 1)
+            self.assertNotIn("map_hash_bucket_size", rendered)
+            self.assertIn('"' + "V" * 43 + '" 1;', rendered)
             self.assertIn("$cookie_rwm_" + "a" * 24, rendered)
             self.assertNotIn("$auth_query", rendered)
             self.assertNotIn("$authorized", rendered)
@@ -412,7 +414,7 @@ server {
             gate = rendered.split("location = /_rwm/", 1)[1].split("location /", 1)[0]
             self.assertIn("add_header Referrer-Policy no-referrer always;", gate)
 
-    def test_legacy_rotation_raises_small_map_hash_bucket_size(self) -> None:
+    def test_legacy_rotation_preserves_existing_map_hash_bucket_size(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             nginx = root / "nginx.conf"
@@ -459,8 +461,11 @@ server {
                 rotate_panel_access(mock.Mock(), store)
 
             rendered = nginx.read_text(encoding="utf-8")
-            self.assertEqual(rendered.count("map_hash_bucket_size 128;"), 1)
-            self.assertNotIn("map_hash_bucket_size 64;", rendered)
+            self.assertEqual(rendered.count("map_hash_bucket_size 64;"), 1)
+            manager_value = re.search(r'"([A-Za-z0-9_-]+)" 1;', rendered)
+            self.assertIsNotNone(manager_value)
+            assert manager_value is not None
+            self.assertLessEqual(len(manager_value.group(1)), 43)
 
     def test_rotation_updates_nginx_inventory_and_stored_url(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
