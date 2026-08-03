@@ -177,6 +177,61 @@ class RunnerSecurityTests(unittest.TestCase):
 
             spawn.assert_called_once()
 
+    def test_compose_allows_only_matching_certbot_live_symlink_bind(self) -> None:
+        completed = subprocess.CompletedProcess([], 0, "", "")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            letsencrypt = root / "letsencrypt"
+            live = letsencrypt / "live/panel.example.com"
+            archive = letsencrypt / "archive/panel.example.com"
+            live.mkdir(parents=True)
+            archive.mkdir(parents=True)
+            archived_certificate = archive / "fullchain1.pem"
+            archived_certificate.write_text("certificate\n", encoding="utf-8")
+            certificate = live / "fullchain.pem"
+            try:
+                certificate.symlink_to("../../archive/panel.example.com/fullchain1.pem")
+            except OSError as error:
+                self.skipTest(f"symbolic links unavailable: {error}")
+            compose = root / "docker-compose.yml"
+            compose.write_text(
+                "services:\n"
+                "  app:\n"
+                "    image: example/app:1\n"
+                "    volumes:\n"
+                "      - type: bind\n"
+                f"        source: {certificate}\n"
+                "        target: /etc/tls/fullchain.pem\n",
+                encoding="utf-8",
+            )
+            if os.name == "posix":
+                compose.chmod(0o600)
+                archived_certificate.chmod(0o600)
+            with (
+                mock.patch("remnawave_manager.runner._LETSENCRYPT_ROOT", letsencrypt),
+                mock.patch(
+                    "remnawave_manager.runner.subprocess.run", return_value=completed
+                ) as spawn,
+            ):
+                Runner().run(
+                    ["docker", "compose", "-f", str(compose), "config", "-q"]
+                )
+            spawn.assert_called_once()
+
+            outside = root / "outside.pem"
+            outside.write_text("untrusted target\n", encoding="utf-8")
+            certificate.unlink()
+            certificate.symlink_to(outside)
+            with (
+                mock.patch("remnawave_manager.runner._LETSENCRYPT_ROOT", letsencrypt),
+                mock.patch("remnawave_manager.runner.subprocess.run") as spawn,
+                self.assertRaisesRegex(ValidationError, "Certbot live-ссылка"),
+            ):
+                Runner().run(
+                    ["docker", "compose", "-f", str(compose), "config", "-q"]
+                )
+            spawn.assert_not_called()
+
     def test_compose_rejects_executable_or_external_reference_features(self) -> None:
         payloads = {
             "build": "services:\n  app:\n    build: .\n",

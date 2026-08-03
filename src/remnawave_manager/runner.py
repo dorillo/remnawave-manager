@@ -19,6 +19,8 @@ from .errors import CommandError, ValidationError
 _MAX_ATOMIC_COPY_SIZE = 128 * 1024 * 1024
 _MAX_SANITIZED_TEXT = 16 * 1024
 _MAX_COMPOSE_INPUT_SIZE = 16 * 1024 * 1024
+_LETSENCRYPT_ROOT = Path("/etc/letsencrypt")
+_CERTBOT_LIVE_FILENAMES = {"cert.pem", "chain.pem", "fullchain.pem", "privkey.pem"}
 _FORBIDDEN_COMPOSE_REFERENCE_KEYS = {
     "build",
     "configs",
@@ -500,6 +502,61 @@ def _validate_compose_env_reference(
     _validate_compose_input_path(str(path), label="Внутренний Compose env_file")
 
 
+def _validate_certbot_live_bind(path: Path, before: os.stat_result) -> None:
+    live_root = _LETSENCRYPT_ROOT / "live"
+    archive_root = _LETSENCRYPT_ROOT / "archive"
+    try:
+        relative = path.relative_to(live_root)
+    except ValueError as error:
+        raise ValidationError(
+            f"Compose bind source не может быть символической ссылкой: {path}"
+        ) from error
+    if (
+        len(relative.parts) != 2
+        or path.name not in _CERTBOT_LIVE_FILENAMES
+        or before.st_nlink != 1
+        or (os.name == "posix" and before.st_uid != os.geteuid())
+    ):
+        raise ValidationError(
+            f"Compose bind source не является безопасной Certbot live-ссылкой: {path}"
+        )
+    try:
+        raw_target = os.readlink(path)
+    except OSError as error:
+        raise ValidationError(f"Certbot live-ссылку нельзя прочитать: {path}") from error
+    link_target = Path(raw_target)
+    if link_target.is_absolute():
+        raise ValidationError(
+            f"Certbot live-ссылка должна использовать относительную цель: {path}"
+        )
+    target = Path(os.path.abspath(path.parent / link_target))
+    expected_parent = archive_root / relative.parts[0]
+    expected_name = re.fullmatch(
+        rf"{re.escape(path.stem)}[1-9][0-9]*\.pem", target.name
+    )
+    if target.parent != expected_parent or expected_name is None:
+        raise ValidationError(
+            f"Certbot live-ссылка ведёт вне соответствующего archive lineage: {path}"
+        )
+
+    _validate_compose_parent_chain(path.parent, label="Compose bind source")
+    _validate_compose_input_path(str(target), label="Certbot archive source")
+    try:
+        after = path.lstat()
+        after_target = os.readlink(path)
+    except OSError as error:
+        raise ValidationError(
+            f"Certbot live-ссылка изменилась во время проверки: {path}"
+        ) from error
+    stable_fields = ("st_dev", "st_ino", "st_mode", "st_nlink", "st_uid", "st_gid")
+    if after_target != raw_target or any(
+        getattr(before, field) != getattr(after, field) for field in stable_fields
+    ):
+        raise ValidationError(
+            f"Certbot live-ссылка изменилась во время проверки: {path}"
+        )
+
+
 def _validate_compose_bind_reference(
     value: str,
     *,
@@ -520,6 +577,9 @@ def _validate_compose_bind_reference(
         raise ValidationError(f"Compose bind source отсутствует или недоступен: {path}") from error
     if stat.S_ISREG(info.st_mode):
         _validate_compose_input_path(str(path), label="Compose bind source")
+        return
+    if stat.S_ISLNK(info.st_mode):
+        _validate_certbot_live_bind(path, info)
         return
     if not stat.S_ISDIR(info.st_mode):
         raise ValidationError(
