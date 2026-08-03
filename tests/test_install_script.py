@@ -14,6 +14,32 @@ COMPATIBILITY = json.loads(
 
 
 class InstallScriptTests(unittest.TestCase):
+    def test_installer_can_bootstrap_from_a_single_downloaded_script(self) -> None:
+        bootstrap = INSTALL_SCRIPT.index("bootstrap_manager() {")
+        source_check = INSTALL_SCRIPT.index(
+            'src/remnawave_manager/__init__.py', bootstrap
+        )
+        delegated_install = INSTALL_SCRIPT.index(
+            'bash "${temporary_directory}/source/install.sh" "$@"', source_check
+        )
+
+        self.assertIn(
+            "DEFAULT_MANAGER_REPOSITORY='dorillo/remnawave-manager'",
+            INSTALL_SCRIPT,
+        )
+        self.assertIn("DEFAULT_MANAGER_REF='main'", INSTALL_SCRIPT)
+        self.assertIn("https://api.github.com/repos/", INSTALL_SCRIPT)
+        self.assertIn("--proto '=https' --proto-redir '=https'", INSTALL_SCRIPT)
+        self.assertIn("--strip-components=1", INSTALL_SCRIPT)
+        self.assertIn('! -f "${SCRIPT_DIR}/pyproject.toml"', INSTALL_SCRIPT)
+        self.assertLess(source_check, delegated_install)
+
+    def test_installer_accepts_only_the_optional_install_action(self) -> None:
+        self.assertIn(
+            'if (( $# > 1 )) || [[ "${1:-install}" != \'install\' ]]',
+            INSTALL_SCRIPT,
+        )
+
     def test_installer_sanitizes_root_command_environment(self) -> None:
         platform_probe = INSTALL_SCRIPT.index("uname -s")
 

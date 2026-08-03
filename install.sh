@@ -16,7 +16,78 @@ unset BASH_ENV CDPATH ENV GLOBIGNORE \
     PYTHONPYCACHEPREFIX PYTHONSTARTUP PYTHONWARNINGS VIRTUAL_ENV \
     __PYVENV_LAUNCHER__ 2>/dev/null || true
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+readonly DEFAULT_MANAGER_REPOSITORY='dorillo/remnawave-manager'
+readonly DEFAULT_MANAGER_REF='main'
+
+die() {
+    printf '%s\n' "$1" >&2
+    exit 1
+}
+
+usage() {
+    printf 'Использование: %s [install]\n' "${0##*/}"
+}
+
+if (( $# > 1 )) || [[ "${1:-install}" != 'install' ]]; then
+    usage >&2
+    exit 2
+fi
+
+if [[ "${EUID}" -ne 0 ]]; then
+    printf '%s\n' 'Установщик нужно запускать от root: sudo ./install.sh' >&2
+    exit 1
+fi
+
+bootstrap_manager() {
+    local temporary_directory
+    local archive
+    local status=0
+
+    temporary_directory="$(mktemp -d --tmpdir rwm-bootstrap.XXXXXXXX)" \
+        || die 'Не удалось создать временный каталог для загрузки Remnawave Manager.'
+    archive="${temporary_directory}/remnawave-manager.tar.gz"
+    trap 'rm -rf -- "${temporary_directory}"' EXIT
+
+    printf 'Загрузка Remnawave Manager из %s (%s)...\n' \
+        "${DEFAULT_MANAGER_REPOSITORY}" "${DEFAULT_MANAGER_REF}"
+    if ! curl --disable --fail --silent --show-error --location --retry 3 \
+        --proto '=https' --proto-redir '=https' --tlsv1.2 \
+        "https://api.github.com/repos/${DEFAULT_MANAGER_REPOSITORY}/tarball/${DEFAULT_MANAGER_REF}" \
+        --output "${archive}"; then
+        die 'Не удалось скачать Remnawave Manager с GitHub.'
+    fi
+
+    mkdir -- "${temporary_directory}/source"
+    if ! tar --extract --gzip --file "${archive}" \
+        --directory "${temporary_directory}/source" --strip-components=1 \
+        --no-same-owner --no-same-permissions; then
+        die 'Не удалось распаковать архив Remnawave Manager.'
+    fi
+    if [[ ! -f "${temporary_directory}/source/install.sh" \
+        || ! -f "${temporary_directory}/source/pyproject.toml" \
+        || ! -f "${temporary_directory}/source/src/remnawave_manager/__init__.py" ]]; then
+        die 'Загруженный архив Remnawave Manager неполон.'
+    fi
+
+    bash "${temporary_directory}/source/install.sh" "$@" || status=$?
+    rm -rf -- "${temporary_directory}"
+    trap - EXIT
+    exit "${status}"
+}
+
+SCRIPT_DIR=''
+if [[ -n "${BASH_SOURCE[0]:-}" && -f "${BASH_SOURCE[0]}" ]]; then
+    SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+fi
+if [[ -z "${SCRIPT_DIR}" \
+    || ! -f "${SCRIPT_DIR}/pyproject.toml" \
+    || ! -f "${SCRIPT_DIR}/src/remnawave_manager/__init__.py" ]]; then
+    command -v curl >/dev/null 2>&1 \
+        || die 'Для загрузки Remnawave Manager требуется curl.'
+    command -v tar >/dev/null 2>&1 \
+        || die 'Для загрузки Remnawave Manager требуется tar.'
+    bootstrap_manager "$@"
+fi
 readonly SCRIPT_DIR
 readonly MANAGED_ROOT="/opt/remnawave-manager"
 readonly OWNERSHIP_MARKER="${MANAGED_ROOT}/.managed-by-remnawave-manager"
@@ -34,11 +105,6 @@ readonly VENV_MARKER='.managed-by-remnawave-manager'
 readonly GCORE_PLUGIN_VERSION='0.1.8'
 readonly GCORE_PLUGIN_SHA256='2302e05aee307732f94319081e74a4f17ee2765383a2ecae3ff15fdea8e579f0'
 readonly GCORE_PLUGIN_URL='https://files.pythonhosted.org/packages/5e/89/a0b459ee378254fcba11831623e26e6c73f5eb88c65e6204a924bc55b8e6/certbot_dns_gcore-0.1.8-py3-none-any.whl'
-
-die() {
-    printf '%s\n' "$1" >&2
-    exit 1
-}
 
 install_gcore_certbot_plugin() {
     local wheel_path
@@ -264,11 +330,6 @@ read_os_release_value() {
     fi
     printf '%s\n' "${value}"
 }
-
-if [[ "${EUID}" -ne 0 ]]; then
-    printf '%s\n' 'Установщик нужно запускать от root: sudo ./install.sh' >&2
-    exit 1
-fi
 
 if ! command -v flock >/dev/null 2>&1; then
     die 'Не найден flock из util-linux; невозможно безопасно заблокировать параллельный запуск.'
