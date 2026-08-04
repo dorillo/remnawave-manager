@@ -715,7 +715,7 @@ class CliDispatchTests(unittest.TestCase):
                 "remnawave_manager.cli.configure_firewall", return_value=(22,)
             ) as configure,
         ):
-            code = self.run_main([], answers=["12", "2", "1", "y", "0"])
+            code = self.run_main([], answers=["12", "2", "1", "y", "0", "0"])
 
         self.assertEqual(code, 0, self.stderr.getvalue())
         configure.assert_called_once_with(
@@ -737,7 +737,7 @@ class CliDispatchTests(unittest.TestCase):
             ) as configure,
         ):
             code = self.run_main(
-                [], answers=["12", "2", "1", "192.0.2.10", "y", "0"]
+                [], answers=["12", "2", "1", "192.0.2.10", "y", "0", "0"]
             )
 
         self.assertEqual(code, 0, self.stderr.getvalue())
@@ -755,7 +755,7 @@ class CliDispatchTests(unittest.TestCase):
                 return True
 
         terminal = TerminalBuffer()
-        answers = iter(["12", "2", "1", "", "0"])
+        answers = iter(["12", "2", "1", "", "0", "0"])
         prompts: list[str] = []
 
         def prompt(message: str) -> str:
@@ -988,13 +988,62 @@ class CliDispatchTests(unittest.TestCase):
         ):
             code = self.run_main(
                 [],
-                answers=["4", "3", "1, 1", "1, 3", "y", "0"],
+                answers=["4", "3", "1, 1", "1, 3", "y", "0", "0"],
             )
 
         self.assertEqual(code, 0, self.stderr.getvalue())
         delete.assert_called_once_with(mock.ANY, [backups[0], backups[2]])
         self.assertIn(f"1. {backups[0]}", self.stdout.getvalue())
         self.assertIn("Номера backup не должны повторяться", self.stderr.getvalue())
+
+    def test_interactive_action_returns_to_its_submenu(self) -> None:
+        class TerminalBuffer(io.StringIO):
+            def isatty(self) -> bool:
+                return True
+
+        backup = Path("/var/backups/remnawave-manager/latest.tar.gz")
+        terminal = TerminalBuffer()
+        answers = iter(["4", "2", "", "0", "0"])
+        prompts: list[str] = []
+
+        def prompt(message: str) -> str:
+            prompts.append(message)
+            return next(answers)
+
+        with (
+            mock.patch.dict(os.environ, {"TERM": "xterm-256color"}, clear=False),
+            mock.patch("remnawave_manager.cli.list_backups", return_value=[backup]),
+        ):
+            code = main(
+                [],
+                runtime_paths=self.paths,
+                runner=mock.Mock(),
+                input_fn=prompt,
+                stdout=terminal,
+                stderr=self.stderr,
+            )
+
+        self.assertEqual(code, 0, self.stderr.getvalue())
+        self.assertEqual(terminal.getvalue().count("Backup:"), 2)
+        self.assertIn(str(backup), terminal.getvalue())
+        self.assertIn("Нажмите Enter, чтобы продолжить", prompts[2])
+
+    def test_all_sections_with_action_menus_remain_open(self) -> None:
+        sections = (2, 4, 5, 6, 7, 8, 9, 11, 12, 13, 15)
+        for section in sections:
+            with (
+                self.subTest(section=section),
+                mock.patch(
+                    "remnawave_manager.cli._interactive_arguments",
+                    side_effect=(["inventory"], None),
+                ) as arguments,
+                mock.patch("remnawave_manager.cli.execute", return_value=0) as execute,
+            ):
+                code = self.run_main([], answers=[str(section), "0"])
+
+            self.assertEqual(code, 0, self.stderr.getvalue())
+            self.assertEqual(arguments.call_count, 2)
+            execute.assert_called_once()
 
     def test_success_output_has_terminal_control_barrier(self) -> None:
         status = BackupSchedule(

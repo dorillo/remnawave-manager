@@ -131,7 +131,7 @@ def render_panel_env(environment: PanelEnvironment) -> str:
         + "@remnawave-db:5432/remnawave"
     )
     return (
-        "# Remnawave Panel 3.2.0. Файл содержит секреты.\n"
+        "# Remnawave Panel 3.2.1. Файл содержит секреты.\n"
         "APP_PORT=3000\n"
         "METRICS_PORT=3001\n"
         "API_INSTANCES=1\n"

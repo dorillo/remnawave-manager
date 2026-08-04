@@ -2475,6 +2475,9 @@ def _interactive_arguments(context: CliContext, section: int) -> list[str] | Non
     return None
 
 
+_SECTIONS_WITH_SUBMENU = frozenset({2, 4, 5, 6, 7, 8, 9, 11, 12, 13, 15})
+
+
 def interactive_menu(parser: RussianArgumentParser, context: CliContext) -> int:
     sections = (
         "Обнаружить и принять установку",
@@ -2500,29 +2503,32 @@ def interactive_menu(parser: RussianArgumentParser, context: CliContext) -> int:
         if selected == 0:
             context.write("Работа завершена.")
             return 0
-        pause_after_result = False
-        try:
-            arguments = _interactive_arguments(context, selected)
-            if arguments is None:
-                continue
-            pause_after_result = True
-            args = parser.parse_args(arguments)
-            args.json = False
-            context.json_output = False
-            return_code = execute(args, context)
-            if return_code != 0:
-                context.error(f"Операция завершилась с кодом {return_code}.")
-            if args.handler == "manager-update":
-                return return_code
-        except ManagerError as error:
-            pause_after_result = True
-            context.error(f"Ошибка: {sanitize_external_text(str(error))}")
-        except (EOFError, KeyboardInterrupt):
-            context.error("Операция прервана пользователем.")
-            return 130
-        finally:
-            if pause_after_result:
-                context.pause()
+        while True:
+            pause_after_result = False
+            try:
+                arguments = _interactive_arguments(context, selected)
+                if arguments is None:
+                    break
+                pause_after_result = True
+                args = parser.parse_args(arguments)
+                args.json = False
+                context.json_output = False
+                return_code = execute(args, context)
+                if return_code != 0:
+                    context.error(f"Операция завершилась с кодом {return_code}.")
+                if args.handler == "manager-update":
+                    return return_code
+            except ManagerError as error:
+                pause_after_result = True
+                context.error(f"Ошибка: {sanitize_external_text(str(error))}")
+            except (EOFError, KeyboardInterrupt):
+                context.error("Операция прервана пользователем.")
+                return 130
+            finally:
+                if pause_after_result:
+                    context.pause()
+            if selected not in _SECTIONS_WITH_SUBMENU:
+                break
 
 
 def main(

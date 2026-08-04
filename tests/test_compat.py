@@ -46,9 +46,9 @@ class FakeRunner:
 
 
 class CompatibilityTests(unittest.TestCase):
-    def test_panel_target_is_3_2_0_and_identical_in_both_registries(self) -> None:
+    def test_panel_target_is_3_2_1_and_identical_in_both_registries(self) -> None:
         expected_digest = (
-            "sha256:72af06c106111db7cd11f67da63cee591a4a1c60fc1d1ad57384c498c1e9fa40"
+            "sha256:a6302ff950e1946a70c76567fe323dcd9a4f5f35d563510cf50ca4f64a52921f"
         )
 
         docker_hub = component_target("panel", "docker-hub")
@@ -57,16 +57,16 @@ class CompatibilityTests(unittest.TestCase):
         self.assertEqual(
             docker_hub,
             {
-                "version": "3.2.0",
-                "image": "remnawave/backend:3.2.0",
+                "version": "3.2.1",
+                "image": "remnawave/backend:3.2.1",
                 "digest": expected_digest,
             },
         )
         self.assertEqual(
             ghcr,
             {
-                "version": "3.2.0",
-                "image": "ghcr.io/remnawave/backend:3.2.0",
+                "version": "3.2.1",
+                "image": "ghcr.io/remnawave/backend:3.2.1",
                 "digest": expected_digest,
             },
         )
@@ -93,6 +93,29 @@ class CompatibilityTests(unittest.TestCase):
         )
 
         self.assertEqual(require_supported_source(runner, "panel", component), "3.1.0")
+
+    def test_managed_panel_3_2_0_is_an_approved_update_source(self) -> None:
+        component = Component(
+            name="panel",
+            service="remnawave",
+            configured_image="remnawave/backend:3.2.0",
+            running_image="remnawave/backend:3.2.0",
+            running_image_id="sha256:" + "4" * 64,
+        )
+        runner = FakeRunner(
+            [
+                (
+                    "remnawave/backend@sha256:"
+                    "72af06c106111db7cd11f67da63cee591a4a1c60fc1d1ad57384c498c1e9fa40"
+                )
+            ],
+            container_data={
+                "Config": {"Image": "remnawave/backend:3.2.0"},
+                "Image": "sha256:" + "4" * 64,
+            },
+        )
+
+        self.assertEqual(require_supported_source(runner, "panel", component), "3.2.0")
 
     def test_detects_old_panel_behind_mutable_major_tag_by_digest(self) -> None:
         component = Component(

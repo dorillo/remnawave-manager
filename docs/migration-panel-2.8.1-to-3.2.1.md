@@ -1,4 +1,4 @@
-# Миграция Panel 2.8.1 на 3.2.0
+# Миграция Panel 2.8.1 на 3.2.1
 
 Эта инструкция относится к следующей проверенной связке:
 
@@ -7,7 +7,7 @@
 - PostgreSQL 18.3;
 - Panel и Subscription Page находятся на одном сервере Ubuntu 24.04;
 - nginx уже настроен;
-- целевые версии: Panel 3.2.0, Subscription Page 8.0.0 и PostgreSQL 18.4.
+- целевые версии: Panel 3.2.1, Subscription Page 8.0.0 и PostgreSQL 18.4.
 
 Обновление Panel и Subscription Page выполняется одной транзакцией. Устанавливать или добавлять Node для этого не нужно. Чистая установка Panel через менеджер также не создаёт обязательную Node.
 
@@ -17,7 +17,7 @@
 
 1. Повторно инспектирует фактически существующие контейнеры и останавливается, если image reference или immutable image ID изменились после adoption.
 2. Проверяет, что live-digest Panel, Subscription Page и PostgreSQL относится к поддерживаемой исходной версии, а managed-файлы не изменились.
-3. Проверяет будущие env и Compose в памяти, затем до окна простоя загружает образы Panel 3.2.0, Subscription Page 8.0.0 и PostgreSQL 18.4 и сверяет их digest.
+3. Проверяет будущие env и Compose в памяти, затем до окна простоя загружает образы Panel 3.2.1, Subscription Page 8.0.0 и PostgreSQL 18.4 и сверяет их digest.
 4. Записывает transaction journal и снимок фактически запущенных Compose-сервисов.
 5. Останавливает Panel и Subscription Page и повторно убеждается, что write-path закрыт.
 6. Создаёт локальный backup конфигурации и custom-format dump PostgreSQL, проверяет dump через `pg_restore --list`, а готовый архив по manifest и SHA-256. Только после этого путь архива добавляется в journal.
@@ -31,6 +31,8 @@
 
 Если любой обязательный шаг завершается ошибкой, менеджер пытается восстановить конфигурацию и PostgreSQL из pre-update backup.
 Если не удалось создать сам backup, конфигурация и БД ещё не изменялись: менеджер не вызывает restore и только возвращает исходное состояние сервисов.
+
+При первом запуске Panel 3.2.1 штатная миграция scopes удаляет только записи API-токенов с некорректным UUID. Перед обновлением проверьте, что токен, используемый внешним сайтом, создан штатно и соответствует UUID-формату; сам секрет токена при этом не меняется.
 
 ## Критичный APP_SECRET
 
@@ -150,7 +152,7 @@ Panel stack использует проверенный Subscription Page image 
 Update всё равно создаст собственный pre-update backup. Отдельная контрольная копия полезна для проверки процесса до окна обслуживания:
 
 ```bash
-sudo rwm backup create --reason before-panel-3.2.0
+sudo rwm backup create --reason before-panel-3.2.1
 sudo rwm backup list
 ```
 
