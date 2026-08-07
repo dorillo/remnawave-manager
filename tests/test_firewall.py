@@ -295,17 +295,11 @@ class FirewallPlanningTests(unittest.TestCase):
 
         commands = [call.args[0] for call in runner.run.call_args_list]
         self.assertEqual(commands[0], ["ufw", "show", "added"])
-        self.assertEqual(commands[1][:2], ["ufw", "deny"])
-        self.assertEqual(commands[2][:3], ["ufw", "insert", "1"])
-        self.assertEqual(commands[2][3], "deny")
-        transition_commands = [
-            command
-            for command in commands
-            if any("transition-node-api-deny" in token for token in command)
-        ]
-        self.assertEqual(len(transition_commands), 8)
-        self.assertIn(list(firewall_plan().commands[-4]), commands)
-        self.assertIn(list(firewall_plan().commands[-3]), commands)
+        self.assertEqual(commands[1][:3], ["ufw", "allow", "22022/tcp"])
+        self.assertEqual(commands[6][:3], ["ufw", "insert", "1"])
+        self.assertEqual(commands[6][3], "allow")
+        self.assertEqual(commands[7][:3], ["ufw", "insert", "2"])
+        self.assertEqual(commands[7][3], "deny")
         self.assertEqual(
             [rule[0] for rule in rules[:2]],
             ["allow", "deny"],
@@ -351,7 +345,7 @@ class FirewallPlanningTests(unittest.TestCase):
             commands,
         )
 
-    def test_reapply_deletes_only_previous_manager_rules_before_new_rules(self) -> None:
+    def test_reapply_preserves_desired_rules_and_deletes_obsolete_rules_last(self) -> None:
         runner = mock.Mock(spec=Runner)
         rules = [
             ["allow", "22/tcp", "comment", "foreign:ssh"],
@@ -389,15 +383,6 @@ class FirewallPlanningTests(unittest.TestCase):
 
         commands = [call.args[0] for call in runner.run.call_args_list]
         deletions = [command for command in commands if "delete" in command]
-        old_ssh_delete = [
-            "ufw",
-            "--force",
-            "delete",
-            "allow",
-            "22022/tcp",
-            "comment",
-            "remnawave-manager:ssh",
-        ]
         old_panel_delete = [
             "ufw",
             "--force",
@@ -414,54 +399,11 @@ class FirewallPlanningTests(unittest.TestCase):
             "comment",
             "remnawave-manager:panel-api",
         ]
-        transition_specs = [
-            [
-                "deny",
-                "from",
-                network,
-                "to",
-                "any",
-                "port",
-                "2222",
-                "proto",
-                "tcp",
-                "comment",
-                f"remnawave-manager:transition-node-api-deny-{suffix}",
-            ]
-            for network, suffix in (
-                ("0.0.0.0/1", "v4-low"),
-                ("128.0.0.0/1", "v4-high"),
-                ("::/1", "v6-low"),
-                ("8000::/1", "v6-high"),
-            )
-        ]
-        transition_setup = [
-            ["ufw", "insert", "1", *specification]
-            for specification in transition_specs
-        ]
-        transition_deletes = [
-            ["ufw", "--force", "delete", *specification]
-            for specification in reversed(transition_specs)
-        ]
-        self.assertEqual(
-            deletions,
-            [
-                old_ssh_delete,
-                old_panel_delete,
-                *transition_deletes,
-            ],
-        )
+        self.assertEqual(deletions, [old_panel_delete])
         self.assertNotIn("foreign:ssh", " ".join(" ".join(item) for item in deletions))
         self.assertEqual(commands[0], ["ufw", "show", "added"])
-        for command in transition_setup:
-            self.assertIn(command, commands)
-        self.assertLess(commands.index(transition_setup[-1]), commands.index(old_ssh_delete))
         self.assertLess(
-            commands.index(old_panel_delete), commands.index(list(plan.commands[0]))
-        )
-        self.assertLess(
-            commands.index(list(plan.commands[-1])),
-            commands.index(transition_deletes[0]),
+            commands.index(list(plan.commands[-1])), commands.index(old_panel_delete)
         )
 
     def test_node_api_rules_shadow_preexisting_broad_allow(self) -> None:
@@ -685,13 +627,11 @@ class FirewallPlanningTests(unittest.TestCase):
         apply_firewall(runner, plan)
         commands = [call.args[0] for call in runner.run.call_args_list]
         self.assertEqual(commands[0], ["ufw", "show", "added"])
-        self.assertEqual(commands[1][:2], ["ufw", "deny"])
-        self.assertEqual(commands[2][:3], ["ufw", "insert", "1"])
-        self.assertEqual(commands[5][:3], ["ufw", "allow", "22022/tcp"])
-        self.assertEqual(commands[-7], ["ufw", "--force", "enable"])
-        self.assertEqual(commands[-6], ["ufw", "reload"])
-        for command in commands[-5:-1]:
-            self.assertEqual(command[:4], ["ufw", "--force", "delete", "deny"])
+        self.assertEqual(commands[1][:3], ["ufw", "allow", "22022/tcp"])
+        self.assertEqual(commands[6][:3], ["ufw", "insert", "1"])
+        self.assertEqual(commands[7][:3], ["ufw", "insert", "2"])
+        self.assertEqual(commands[-3], ["ufw", "--force", "enable"])
+        self.assertEqual(commands[-2], ["ufw", "reload"])
         self.assertEqual(commands[-1], ["ufw", "show", "added"])
 
     def test_manual_node_plan_without_panel_ip_is_rejected_before_ufw(self) -> None:
@@ -816,7 +756,7 @@ class FirewallTransactionTests(unittest.TestCase):
 
     def test_every_apply_failure_restores_exact_files_modes_and_runtime(self) -> None:
         plan = firewall_plan()
-        apply_command_count = len(plan.commands) + 4
+        apply_command_count = len(plan.commands)
 
         for active in (False, True):
             for fail_apply_at in range(1, apply_command_count + 1):

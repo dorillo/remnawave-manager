@@ -345,60 +345,31 @@ def plan_firewall(
 
 
 def apply_firewall(runner: Runner, plan: FirewallPlan) -> None:
-    transition_setup: tuple[tuple[str, ...], ...] = ()
-    transition_cleanup: tuple[tuple[str, ...], ...] = ()
-    old_deletions: tuple[tuple[str, ...], ...]
     if plan.role == "node":
         address = _panel_ipv4(plan.panel_ip)
-        has_existing_rules, old_deletions = _existing_ufw_rule_state(runner)
+        _, old_deletions = _existing_ufw_rule_state(runner)
         final_allow = _insert_rule(1, _node_api_allow_rule(address, "panel-api"))
         final_deny = _insert_rule(2, _node_api_deny_rule("node-api-deny"))
         if final_allow not in plan.commands or final_deny not in plan.commands:
             raise ValidationError(
                 "План Node firewall не содержит финальную пару allow/deny для порта 2222."
             )
-        transition_denies = _node_api_transition_deny_rules()
-        transition_setup = tuple(
-            _insert_rule(1, rule)
-            if has_existing_rules or index > 0
-            else ("ufw", *rule)
-            for index, rule in enumerate(transition_denies)
-        )
-        stale_transition_deletions = tuple(
-            command
-            for command in old_deletions
-            if (
-                (comment := _manager_rule_comment(command)) is not None
-                and comment.startswith("remnawave-manager:transition-")
-            )
-        )
-        old_deletions = tuple(
-            command
-            for command in old_deletions
-            if command not in stale_transition_deletions
-        )
-        cleanup_commands = [
-            *stale_transition_deletions,
-            *(_delete_rule(rule) for rule in reversed(transition_denies)),
-        ]
-        transition_cleanup = tuple(
-            command
-            for index, command in enumerate(cleanup_commands)
-            if command not in cleanup_commands[:index]
-        )
     elif plan.role != "panel":
         raise ValidationError(f"Неизвестная роль firewall: {plan.role}")
     else:
         _, old_deletions = _existing_ufw_rule_state(runner)
 
-    for command in transition_setup:
-        runner.run(list(command), timeout=120)
-    for command in old_deletions:
-        runner.run(list(command), timeout=120)
     for command in plan.commands:
         runner.run(list(command), timeout=120)
-    for command in transition_cleanup:
-        runner.run(list(command), timeout=120)
+
+    expected = {
+        _rule_specification(command)
+        for command in plan.commands
+        if _manager_rule_comment(command) is not None
+    }
+    for command in old_deletions:
+        if _rule_specification(command) not in expected:
+            runner.run(list(command), timeout=120)
     _verify_applied_manager_rules(runner, plan)
 
 
@@ -449,37 +420,24 @@ def _node_api_deny_rule(comment: str) -> tuple[str, ...]:
     )
 
 
-def _node_api_transition_deny_rules() -> tuple[tuple[str, ...], ...]:
-    networks = (
-        ("0.0.0.0/1", "v4-low"),
-        ("128.0.0.0/1", "v4-high"),
-        ("::/1", "v6-low"),
-        ("8000::/1", "v6-high"),
-    )
-    return tuple(
-        (
-            "deny",
-            "from",
-            network,
-            "to",
-            "any",
-            "port",
-            "2222",
-            "proto",
-            "tcp",
-            "comment",
-            f"remnawave-manager:transition-node-api-deny-{suffix}",
-        )
-        for network, suffix in networks
-    )
-
-
 def _insert_rule(position: int, specification: tuple[str, ...]) -> tuple[str, ...]:
     return ("ufw", "insert", str(position), *specification)
 
 
 def _delete_rule(specification: tuple[str, ...]) -> tuple[str, ...]:
     return ("ufw", "--force", "delete", *specification)
+
+
+def _rule_specification(command: Sequence[str]) -> tuple[str, ...]:
+    tokens = tuple(command)
+    if tokens[:3] == ("ufw", "--force", "delete"):
+        return tokens[3:]
+    if tokens and tokens[0] == "ufw":
+        specification = tokens[1:]
+        if len(specification) >= 2 and specification[0] == "insert":
+            specification = specification[2:]
+        return specification
+    return ()
 
 
 def _manager_rule_comment(command: Sequence[str]) -> str | None:
