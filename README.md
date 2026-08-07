@@ -27,7 +27,7 @@
 - один сервер: Panel и Subscription Page;
 - отдельный сервер на каждую Node;
 - nginx на Panel и Node;
-- XHTTP Unix sockets, stream separation, Reality, WARP и конфигурация Яндекс CDN сохраняются при обновлении Node, если они обнаружены во время adoption.
+- XHTTP Unix sockets, stream separation, Reality, WARP, Яндекс CDN и Beeline CDN через GET/POST сохраняются при обновлении Node, если они обнаружены во время adoption.
 
 Чистая установка Panel не создаёт Node и не требует её добавления.
 
@@ -200,7 +200,7 @@ sudo rwm backup verify /var/backups/remnawave-manager/ИМЯ_BACKUP.tar.gz
 
 - [миграция Panel 2.8.1 и Subscription Page 7.2.6](docs/migration-panel-2.8.1-to-3.2.1.md);
 - [обновление Node 2.8.0](docs/update-node-2.8.0-to-3.0.0.md);
-- [сохранение XHTTP, stream separation и Яндекс CDN](docs/xhttp-yandex-preservation.md);
+- [сохранение XHTTP, stream separation, Яндекс CDN и Beeline CDN](docs/xhttp-yandex-preservation.md);
 - [rollback и аварийное восстановление](docs/rollback-recovery.md).
 
 ## Резервные копии

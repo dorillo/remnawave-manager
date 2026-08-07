@@ -48,7 +48,7 @@ sudo rwm update --accept-reality-client-risk
 - сравнивает защищаемые файлы с исходными хешами;
 - проверяет, что WARP-интерфейсы не исчезли.
 
-nginx-сервис не переключается на другой image и не пересоздаётся этой операцией. Конфигурация Яндекс CDN не переписывается. Подробная процедура контроля: [сохранение XHTTP и Яндекс CDN](xhttp-yandex-preservation.md).
+nginx-сервис не переключается на другой image и не пересоздаётся этой операцией. Конфигурации Яндекс CDN и Beeline CDN GET/POST не переписываются. Подробная процедура контроля: [сохранение XHTTP и CDN](xhttp-yandex-preservation.md).
 
 ## 1. Установите менеджер и войдите в Registry
 
@@ -92,7 +92,7 @@ sudo rwm service status
 sudo rwm --json inventory
 ```
 
-До обновления проверьте, что в inventory отражены используемые sockets, WARP и признаки XHTTP/Яндекс CDN. Если нужные nginx-файлы не попали в managed files, update не сможет доказать их сохранность. Исправьте bind mounts или расположение конфигурации и повторите adoption.
+До обновления проверьте, что в inventory отражены используемые sockets, WARP и признаки XHTTP/Яндекс CDN/Beeline CDN. Если нужные nginx-файлы не попали в managed files, update не сможет доказать их сохранность. Исправьте bind mounts или расположение конфигурации и повторите adoption.
 
 Старый установщик мог оставить `.env`, Compose и nginx с правами `0644`. Если
 `diagnose` сообщает такую ошибку, выполните `sudo rwm diagnose --repair-permissions`,

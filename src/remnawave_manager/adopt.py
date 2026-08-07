@@ -237,8 +237,22 @@ def _warp_interfaces(runner: Runner) -> list[str]:
     )
 
 
+def _nginx_uses_upstream(config: str, name: str) -> bool:
+    escaped = re.escape(name)
+    declared = re.search(
+        rf"(?mi)^\s*upstream\s+{escaped}\s*\{{",
+        config,
+    )
+    proxied = re.search(
+        rf"(?mi)^\s*proxy_pass\s+https?://{escaped}(?=[/:;\s])",
+        config,
+    )
+    return declared is not None and proxied is not None
+
+
 def _nginx_features(paths: list[Path]) -> tuple[list[str], dict[str, bool]]:
     combined = "\n".join(_read_nginx_text(path) for path in paths)
+    lowered = combined.lower()
     sockets = sorted(
         set(
             re.findall(
@@ -247,10 +261,18 @@ def _nginx_features(paths: list[Path]) -> tuple[list[str], dict[str, bool]]:
             )
         )
     )
+    beeline_post = _nginx_uses_upstream(combined, "beeline_xhttp")
+    beeline_get = _nginx_uses_upstream(combined, "xray_beeline_xhttp")
+    yandex = "yandex" in lowered or (
+        "proxy_protocol_addr" in combined
+        and "cdn" in lowered
+        and not (beeline_get or beeline_post)
+    )
     features = {
-        "xhttp_stream_separation": bool(sockets) or "xhttp" in combined.lower(),
-        "yandex_cdn": "yandex" in combined.lower()
-        or ("proxy_protocol_addr" in combined and "cdn" in combined.lower()),
+        "xhttp_stream_separation": bool(sockets) or "xhttp" in lowered,
+        "yandex_cdn": yandex,
+        "beeline_cdn_get": beeline_get,
+        "beeline_cdn_post": beeline_post,
         "cookie_gate": "$http_cookie" in combined
         or "$cookie_" in combined
         or "auth_cookie" in combined,

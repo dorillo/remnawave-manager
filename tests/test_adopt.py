@@ -130,6 +130,62 @@ class AdoptBindSourceTests(unittest.TestCase):
             with self.assertRaisesRegex(ValidationError, "UTF-8"):
                 _nginx_features([config])
 
+    def test_nginx_feature_scan_detects_beeline_post_separately_from_yandex(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            config = Path(temporary) / "nginx.conf"
+            config.write_text(
+                """\
+# Beeline CDN POST origin.
+upstream beeline_xhttp {
+    server 127.0.0.1:7443;
+}
+server {
+    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    location = /source/origin {
+        proxy_pass http://beeline_xhttp;
+        proxy_set_header X-Real-IP $proxy_protocol_addr;
+        proxy_request_buffering off;
+        proxy_read_timeout 86400s;
+    }
+}
+""",
+                encoding="utf-8",
+            )
+
+            sockets, features = _nginx_features([config])
+
+            self.assertEqual(sockets, ["/dev/shm/nginx.sock"])
+            self.assertTrue(features["xhttp_stream_separation"])
+            self.assertTrue(features["beeline_cdn_post"])
+            self.assertFalse(features["beeline_cdn_get"])
+            self.assertFalse(features["yandex_cdn"])
+
+    def test_nginx_feature_scan_keeps_legacy_beeline_get_detection(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            config = Path(temporary) / "nginx.conf"
+            config.write_text(
+                """\
+# Legacy Beeline CDN GET origin.
+upstream xray_beeline_xhttp {
+    server 127.0.0.1:2092;
+}
+server {
+    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    location = /cdn-assets/example/segment.ts {
+        proxy_pass http://xray_beeline_xhttp/cdn-assets/example/segment.ts/;
+        proxy_set_header X-Real-IP $proxy_protocol_addr;
+    }
+}
+""",
+                encoding="utf-8",
+            )
+
+            _, features = _nginx_features([config])
+
+            self.assertTrue(features["beeline_cdn_get"])
+            self.assertFalse(features["beeline_cdn_post"])
+            self.assertFalse(features["yandex_cdn"])
+
     def test_site_bind_root_symlink_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
