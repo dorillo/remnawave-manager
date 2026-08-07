@@ -347,8 +347,10 @@ def plan_firewall(
 def apply_firewall(runner: Runner, plan: FirewallPlan) -> None:
     transition_setup: tuple[tuple[str, ...], ...] = ()
     transition_cleanup: tuple[tuple[str, ...], ...] = ()
+    old_deletions: tuple[tuple[str, ...], ...]
     if plan.role == "node":
         address = _panel_ipv4(plan.panel_ip)
+        has_existing_rules, old_deletions = _existing_ufw_rule_state(runner)
         final_allow = _insert_rule(1, _node_api_allow_rule(address, "panel-api"))
         final_deny = _insert_rule(2, _node_api_deny_rule("node-api-deny"))
         if final_allow not in plan.commands or final_deny not in plan.commands:
@@ -357,8 +359,13 @@ def apply_firewall(runner: Runner, plan: FirewallPlan) -> None:
             )
         transition_deny = _node_api_deny_rule("transition-node-api-deny")
         transition_allow = _node_api_allow_rule(address, "transition-panel-api")
+        first_deny = (
+            _insert_rule(1, transition_deny)
+            if has_existing_rules
+            else ("ufw", *transition_deny)
+        )
         transition_setup = (
-            _insert_rule(1, transition_deny),
+            first_deny,
             _insert_rule(1, transition_allow),
         )
         transition_cleanup = (
@@ -367,8 +374,9 @@ def apply_firewall(runner: Runner, plan: FirewallPlan) -> None:
         )
     elif plan.role != "panel":
         raise ValidationError(f"Неизвестная роль firewall: {plan.role}")
+    else:
+        _, old_deletions = _existing_ufw_rule_state(runner)
 
-    old_deletions = _managed_rule_delete_commands(runner)
     for command in transition_setup:
         runner.run(list(command), timeout=120)
     for command in old_deletions:
@@ -434,7 +442,9 @@ def _delete_rule(specification: tuple[str, ...]) -> tuple[str, ...]:
     return ("ufw", "--force", "delete", *specification)
 
 
-def _managed_rule_delete_commands(runner: Runner) -> tuple[tuple[str, ...], ...]:
+def _existing_ufw_rule_state(
+    runner: Runner,
+) -> tuple[bool, tuple[tuple[str, ...], ...]]:
     environment = dict(os.environ)
     environment["LC_ALL"] = "C"
     result = runner.run(
@@ -447,8 +457,12 @@ def _managed_rule_delete_commands(runner: Runner) -> tuple[tuple[str, ...], ...]
         raise ValidationError(
             "Не удалось прочитать существующие UFW rules; UFW не изменён."
         )
+    has_rules = False
     commands: list[tuple[str, ...]] = []
     for raw_line in result.stdout.splitlines():
+        if not re.match(r"^\s*ufw(?:\s|$)", raw_line):
+            continue
+        has_rules = True
         if "remnawave-manager:" not in raw_line:
             continue
         try:
@@ -488,7 +502,7 @@ def _managed_rule_delete_commands(runner: Runner) -> tuple[tuple[str, ...], ...]
                 "Существующее manager-правило UFW имеет неожиданный формат."
             )
         commands.append(("ufw", "--force", "delete", *specification))
-    return tuple(commands)
+    return has_rules, tuple(commands)
 
 
 def apply_firewall_transactional(

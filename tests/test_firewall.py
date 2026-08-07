@@ -197,6 +197,76 @@ class FirewallStateRunner:
 
 
 class FirewallPlanningTests(unittest.TestCase):
+    def test_empty_ufw_is_seeded_before_first_positional_insert(self) -> None:
+        runner = mock.Mock(spec=Runner)
+        rules: list[list[str]] = []
+
+        def run(args, **_kwargs):  # type: ignore[no-untyped-def]
+            command = tuple(args)
+            if command == ("ufw", "show", "added"):
+                return Result(command, 0, "Added user rules:\n", "")
+            if command[:2] == ("ufw", "insert"):
+                position = int(command[2])
+                if not rules or position > len(rules):
+                    raise CommandError(f"Invalid position '{position}'")
+                rules.insert(position - 1, list(command[3:]))
+            elif command[:3] == ("ufw", "--force", "delete"):
+                rules.remove(list(command[3:]))
+            elif command[:2] in {("ufw", "allow"), ("ufw", "deny")}:
+                rules.append(list(command[1:]))
+            return Result(command, 0, "", "")
+
+        runner.run.side_effect = run
+
+        apply_firewall(runner, firewall_plan())
+
+        commands = [call.args[0] for call in runner.run.call_args_list]
+        self.assertEqual(commands[0], ["ufw", "show", "added"])
+        self.assertEqual(commands[1][:2], ["ufw", "deny"])
+        self.assertEqual(commands[2][:3], ["ufw", "insert", "1"])
+        self.assertEqual(
+            [rule[0] for rule in rules[:2]],
+            ["allow", "deny"],
+        )
+        self.assertIn("remnawave-manager:panel-api", rules[0])
+        self.assertIn("remnawave-manager:node-api-deny", rules[1])
+        self.assertFalse(
+            any("transition-" in token for rule in rules for token in rule)
+        )
+
+    def test_panel_plan_with_empty_ufw_uses_only_append_rules(self) -> None:
+        runner = mock.Mock(spec=Runner)
+
+        def run(args, **_kwargs):  # type: ignore[no-untyped-def]
+            command = tuple(args)
+            if command == ("ufw", "show", "added"):
+                return Result(command, 0, "Added user rules:\n", "")
+            if command[:2] == ("ufw", "insert"):
+                raise AssertionError("Panel firewall must not use positional inserts")
+            return Result(command, 0, "", "")
+
+        runner.run.side_effect = run
+        plan = FirewallPlan(
+            role="panel",
+            ssh_ports=(22,),
+            commands=tuple(
+                tuple(command)
+                for command in build_firewall_commands("panel", (22,))
+            ),
+        )
+
+        apply_firewall(runner, plan)
+
+        commands = [call.args[0] for call in runner.run.call_args_list]
+        self.assertEqual(commands[0], ["ufw", "show", "added"])
+        self.assertFalse(
+            any(command[:2] == ["ufw", "insert"] for command in commands)
+        )
+        self.assertIn(
+            ["ufw", "allow", "22/tcp", "comment", "remnawave-manager:ssh"],
+            commands,
+        )
+
     def test_reapply_deletes_only_previous_manager_rules_before_new_rules(self) -> None:
         runner = mock.Mock(spec=Runner)
         added = (
@@ -519,7 +589,7 @@ class FirewallPlanningTests(unittest.TestCase):
         apply_firewall(runner, plan)
         commands = [call.args[0] for call in runner.run.call_args_list]
         self.assertEqual(commands[0], ["ufw", "show", "added"])
-        self.assertEqual(commands[1][:3], ["ufw", "insert", "1"])
+        self.assertEqual(commands[1][:2], ["ufw", "deny"])
         self.assertEqual(commands[2][:3], ["ufw", "insert", "1"])
         self.assertEqual(commands[3][:3], ["ufw", "allow", "22022/tcp"])
         self.assertEqual(commands[-4], ["ufw", "--force", "enable"])
@@ -619,6 +689,34 @@ class FirewallPlanningTests(unittest.TestCase):
 
 
 class FirewallTransactionTests(unittest.TestCase):
+    def test_panel_install_enables_empty_inactive_ufw_without_insert(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            paths = firewall_paths(root, enabled=False)
+            runner = UfwRunner(paths, active=False)
+            plan = FirewallPlan(
+                role="panel",
+                ssh_ports=(22,),
+                commands=tuple(
+                    tuple(command)
+                    for command in build_firewall_commands("panel", (22,))
+                ),
+            )
+
+            transaction = apply_firewall_transactional(
+                runner,  # type: ignore[arg-type]
+                plan,
+                transaction_root=root / "transactions",
+                paths=paths,
+            )
+
+            self.assertTrue(runner.active)
+            self.assertFalse(
+                any(command[:2] == ("ufw", "insert") for command in runner.calls)
+            )
+            transaction.commit()
+            self.assertEqual(list((root / "transactions").iterdir()), [])
+
     def test_every_apply_failure_restores_exact_files_modes_and_runtime(self) -> None:
         plan = firewall_plan()
         apply_command_count = len(plan.commands) + 4
