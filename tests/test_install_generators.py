@@ -834,6 +834,27 @@ class InstallGeneratorTests(unittest.TestCase):
         self.assertIn("Content-Security-Policy", nginx)
         self.assertIn("location ~ (^|/)\\.", nginx)
 
+    def test_node_http_redirect_rejects_unknown_host_and_allows_site_scripts(self) -> None:
+        rendered = render_node_nginx(
+            domain="node.example.com",
+            certificate=certificate(),
+        )
+
+        default_http = rendered.split(
+            "server {\n    listen 80 default_server;", 1
+        )[1].split("}\n", 1)[0]
+        redirect_http = rendered.split(
+            "server {\n    listen 80;", 1
+        )[1].split("}\n", 1)[0]
+        self.assertIn("server_name _;", default_http)
+        self.assertIn("return 444;", default_http)
+        self.assertNotIn("$host", default_http)
+        self.assertIn("server_name node.example.com;", redirect_http)
+        self.assertIn("return 308 https://$host$request_uri;", redirect_http)
+        self.assertIn("script-src 'self'", rendered)
+        self.assertIn("connect-src 'none'", rendered)
+        self.assertNotIn("script-src 'none'", rendered)
+
     def test_http01_certbot_command_is_noninteractive_and_has_all_domains(self) -> None:
         command = build_certbot_command(
             ["panel.example.com", "sub.example.com"],

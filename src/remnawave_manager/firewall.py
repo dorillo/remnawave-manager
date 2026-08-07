@@ -357,8 +357,12 @@ def apply_firewall(runner: Runner, plan: FirewallPlan) -> None:
             raise ValidationError(
                 "План Node firewall не содержит финальную пару allow/deny для порта 2222."
             )
-        transition_deny = _node_api_deny_rule("transition-node-api-deny")
-        transition_allow = _node_api_allow_rule(address, "transition-panel-api")
+        transition_deny = _logged_rule(
+            _node_api_deny_rule("transition-node-api-deny")
+        )
+        transition_allow = _logged_rule(
+            _node_api_allow_rule(address, "transition-panel-api")
+        )
         first_deny = (
             _insert_rule(1, transition_deny)
             if has_existing_rules
@@ -385,6 +389,7 @@ def apply_firewall(runner: Runner, plan: FirewallPlan) -> None:
         runner.run(list(command), timeout=120)
     for command in transition_cleanup:
         runner.run(list(command), timeout=120)
+    _verify_applied_manager_rules(runner, plan)
 
 
 def _panel_ipv4(value: str | None) -> ipaddress.IPv4Address:
@@ -440,6 +445,49 @@ def _insert_rule(position: int, specification: tuple[str, ...]) -> tuple[str, ..
 
 def _delete_rule(specification: tuple[str, ...]) -> tuple[str, ...]:
     return ("ufw", "--force", "delete", *specification)
+
+
+def _logged_rule(specification: tuple[str, ...]) -> tuple[str, ...]:
+    if not specification or specification[0] not in {"allow", "deny"}:
+        raise ValidationError("Некорректное временное UFW-правило.")
+    return (specification[0], "log", *specification[1:])
+
+
+def _manager_rule_comment(command: Sequence[str]) -> str | None:
+    indexes = [index for index, token in enumerate(command) if token == "comment"]
+    if len(indexes) != 1 or indexes[0] + 1 >= len(command):
+        return None
+    comment = command[indexes[0] + 1]
+    if not re.fullmatch(r"remnawave-manager:[a-z0-9-]{1,64}", comment):
+        return None
+    return comment
+
+
+def _verify_applied_manager_rules(runner: Runner, plan: FirewallPlan) -> None:
+    expected = {
+        comment
+        for command in plan.commands
+        if (comment := _manager_rule_comment(command)) is not None
+    }
+    _, deletions = _existing_ufw_rule_state(runner)
+    actual = {
+        comment
+        for command in deletions
+        if (comment := _manager_rule_comment(command)) is not None
+    }
+    missing = sorted(expected - actual)
+    transitional = sorted(
+        comment for comment in actual if comment.startswith("remnawave-manager:transition-")
+    )
+    if missing or transitional:
+        details: list[str] = []
+        if missing:
+            details.append("отсутствуют: " + ", ".join(missing))
+        if transitional:
+            details.append("остались временные: " + ", ".join(transitional))
+        raise TransactionError(
+            "UFW не подтвердил итоговый набор правил менеджера; " + "; ".join(details)
+        )
 
 
 def _existing_ufw_rule_state(

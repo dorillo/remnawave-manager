@@ -579,6 +579,18 @@ ssl_session_cache shared:RemnawaveTLS:10m;
 ssl_session_tickets off;
 
 server {{
+    listen 80 default_server;
+    server_name _;
+    return 444;
+}}
+
+server {{
+    listen 80;
+    server_name {selected_domain};
+    return 308 https://$host$request_uri;
+}}
+
+server {{
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
     http2 on;
     server_name {selected_domain};
@@ -594,7 +606,7 @@ server {{
     add_header X-Content-Type-Options nosniff always;
     add_header X-Frame-Options SAMEORIGIN always;
     add_header Referrer-Policy strict-origin-when-cross-origin always;
-    add_header Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'" always;
+    add_header Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'" always;
     add_header Cross-Origin-Opener-Policy same-origin always;
     add_header Cross-Origin-Resource-Policy same-origin always;
 

@@ -64,6 +64,43 @@ def firewall_plan() -> FirewallPlan:
     )
 
 
+def ufw_rule_identity(rule: list[str]) -> tuple[str, ...]:
+    if "comment" not in rule:
+        return tuple(rule)
+    index = rule.index("comment")
+    return tuple([*rule[:index], *rule[index + 2 :]])
+
+
+def apply_ufw_rule_command(rules: list[list[str]], command: tuple[str, ...]) -> None:
+    if command[:2] == ("ufw", "insert"):
+        position = int(command[2])
+        if not rules or position > len(rules):
+            raise CommandError(f"Invalid position '{position}'")
+        candidate = list(command[3:])
+        if ufw_rule_identity(candidate) not in {
+            ufw_rule_identity(rule) for rule in rules
+        }:
+            rules.insert(position - 1, candidate)
+    elif command[:3] == ("ufw", "--force", "delete"):
+        target = ufw_rule_identity(list(command[3:]))
+        rules.remove(next(rule for rule in rules if ufw_rule_identity(rule) == target))
+    elif command[:2] in {("ufw", "allow"), ("ufw", "deny")}:
+        candidate = list(command[1:])
+        identity = ufw_rule_identity(candidate)
+        for index, rule in enumerate(rules):
+            if ufw_rule_identity(rule) == identity:
+                rules[index] = candidate
+                break
+        else:
+            rules.append(candidate)
+
+
+def ufw_added_output(rules: list[list[str]]) -> str:
+    return "Added user rules:\n" + "".join(
+        f"ufw {shlex.join(rule)}\n" for rule in rules
+    )
+
+
 class UfwRunner:
     def __init__(
         self,
@@ -77,6 +114,7 @@ class UfwRunner:
         self.fail_apply_at = fail_apply_at
         self.apply_calls = 0
         self.calls: list[tuple[str, ...]] = []
+        self.rules: list[list[str]] = []
 
     def run(self, args, **kwargs):  # type: ignore[no-untyped-def]
         command = tuple(args)
@@ -85,7 +123,7 @@ class UfwRunner:
             state = "active" if self.active else "inactive"
             return Result(command, 0, f"Status: {state}\n", "")
         if command == ("ufw", "show", "added"):
-            return Result(command, 0, "Added user rules:\n", "")
+            return Result(command, 0, ufw_added_output(self.rules), "")
         if command[0] != "ufw":
             return Result(command, 0, "", "")
 
@@ -110,6 +148,7 @@ class UfwRunner:
             self.active = True
             self.paths.ufw_conf.write_text("ENABLED=yes\n", encoding="utf-8")
         else:
+            apply_ufw_rule_command(self.rules, command)
             with self.paths.user_rules.open("a", encoding="utf-8") as stream:
                 stream.write("manager-rule\n")
             with self.paths.user6_rules.open("a", encoding="utf-8") as stream:
@@ -156,17 +195,9 @@ class FirewallStateRunner:
     def run(self, args, **_kwargs):  # type: ignore[no-untyped-def]
         command = tuple(args)
         if command == ("ufw", "show", "added"):
-            stdout = "Added user rules:\n" + "".join(
-                f"ufw {shlex.join(rule)}\n" for rule in self.rules
-            )
-            result = Result(command, 0, stdout, "")
+            result = Result(command, 0, ufw_added_output(self.rules), "")
         else:
-            if command[:2] == ("ufw", "insert"):
-                self.rules.insert(int(command[2]) - 1, list(command[3:]))
-            elif command[:3] == ("ufw", "--force", "delete"):
-                self.rules.remove(list(command[3:]))
-            elif command[:2] == ("ufw", "allow"):
-                self.rules.append(list(command[1:]))
+            apply_ufw_rule_command(self.rules, command)
             result = Result(command, 0, "", "")
         self.states.append(
             (
@@ -204,16 +235,8 @@ class FirewallPlanningTests(unittest.TestCase):
         def run(args, **_kwargs):  # type: ignore[no-untyped-def]
             command = tuple(args)
             if command == ("ufw", "show", "added"):
-                return Result(command, 0, "Added user rules:\n", "")
-            if command[:2] == ("ufw", "insert"):
-                position = int(command[2])
-                if not rules or position > len(rules):
-                    raise CommandError(f"Invalid position '{position}'")
-                rules.insert(position - 1, list(command[3:]))
-            elif command[:3] == ("ufw", "--force", "delete"):
-                rules.remove(list(command[3:]))
-            elif command[:2] in {("ufw", "allow"), ("ufw", "deny")}:
-                rules.append(list(command[1:]))
+                return Result(command, 0, ufw_added_output(rules), "")
+            apply_ufw_rule_command(rules, command)
             return Result(command, 0, "", "")
 
         runner.run.side_effect = run
@@ -223,7 +246,9 @@ class FirewallPlanningTests(unittest.TestCase):
         commands = [call.args[0] for call in runner.run.call_args_list]
         self.assertEqual(commands[0], ["ufw", "show", "added"])
         self.assertEqual(commands[1][:2], ["ufw", "deny"])
+        self.assertEqual(commands[1][2], "log")
         self.assertEqual(commands[2][:3], ["ufw", "insert", "1"])
+        self.assertEqual(commands[2][4], "log")
         self.assertEqual(
             [rule[0] for rule in rules[:2]],
             ["allow", "deny"],
@@ -236,13 +261,15 @@ class FirewallPlanningTests(unittest.TestCase):
 
     def test_panel_plan_with_empty_ufw_uses_only_append_rules(self) -> None:
         runner = mock.Mock(spec=Runner)
+        rules: list[list[str]] = []
 
         def run(args, **_kwargs):  # type: ignore[no-untyped-def]
             command = tuple(args)
             if command == ("ufw", "show", "added"):
-                return Result(command, 0, "Added user rules:\n", "")
+                return Result(command, 0, ufw_added_output(rules), "")
             if command[:2] == ("ufw", "insert"):
                 raise AssertionError("Panel firewall must not use positional inserts")
+            apply_ufw_rule_command(rules, command)
             return Result(command, 0, "", "")
 
         runner.run.side_effect = run
@@ -269,20 +296,33 @@ class FirewallPlanningTests(unittest.TestCase):
 
     def test_reapply_deletes_only_previous_manager_rules_before_new_rules(self) -> None:
         runner = mock.Mock(spec=Runner)
-        added = (
-            "Added user rules:\n"
-            "ufw allow 22/tcp comment 'foreign:ssh'\n"
-            "ufw allow 22022/tcp comment 'remnawave-manager:ssh'\n"
-            "ufw insert 1 allow from 198.51.100.7 to any port 2222 proto tcp "
-            "comment 'remnawave-manager:panel-api'\n"
-        )
+        rules = [
+            ["allow", "22/tcp", "comment", "foreign:ssh"],
+            ["allow", "22022/tcp", "comment", "remnawave-manager:ssh"],
+            [
+                "allow",
+                "from",
+                "198.51.100.7",
+                "to",
+                "any",
+                "port",
+                "2222",
+                "proto",
+                "tcp",
+                "comment",
+                "remnawave-manager:panel-api",
+            ],
+        ]
 
         def run(args, **_kwargs):  # type: ignore[no-untyped-def]
             command = tuple(args)
+            if command == ("ufw", "show", "added"):
+                return Result(command, 0, ufw_added_output(rules), "")
+            apply_ufw_rule_command(rules, command)
             return Result(
                 command,
                 0,
-                added if command == ("ufw", "show", "added") else "",
+                "",
                 "",
             )
 
@@ -322,6 +362,7 @@ class FirewallPlanningTests(unittest.TestCase):
             "insert",
             "1",
             "deny",
+            "log",
             "to",
             "any",
             "port",
@@ -336,6 +377,7 @@ class FirewallPlanningTests(unittest.TestCase):
             "insert",
             "1",
             "allow",
+            "log",
             "from",
             "203.0.113.10",
             "to",
@@ -586,16 +628,27 @@ class FirewallPlanningTests(unittest.TestCase):
         )
         self.assertEqual(plan.ssh_ports, (22022,))
         runner.reset_mock()
+        rules: list[list[str]] = []
+
+        def apply_run(args, **_kwargs):  # type: ignore[no-untyped-def]
+            command = tuple(args)
+            if command == ("ufw", "show", "added"):
+                return Result(command, 0, ufw_added_output(rules), "")
+            apply_ufw_rule_command(rules, command)
+            return Result(command, 0, "", "")
+
+        runner.run.side_effect = apply_run
         apply_firewall(runner, plan)
         commands = [call.args[0] for call in runner.run.call_args_list]
         self.assertEqual(commands[0], ["ufw", "show", "added"])
         self.assertEqual(commands[1][:2], ["ufw", "deny"])
         self.assertEqual(commands[2][:3], ["ufw", "insert", "1"])
         self.assertEqual(commands[3][:3], ["ufw", "allow", "22022/tcp"])
-        self.assertEqual(commands[-4], ["ufw", "--force", "enable"])
-        self.assertEqual(commands[-3], ["ufw", "reload"])
-        self.assertEqual(commands[-2][:4], ["ufw", "--force", "delete", "allow"])
-        self.assertEqual(commands[-1][:4], ["ufw", "--force", "delete", "deny"])
+        self.assertEqual(commands[-5], ["ufw", "--force", "enable"])
+        self.assertEqual(commands[-4], ["ufw", "reload"])
+        self.assertEqual(commands[-3][:4], ["ufw", "--force", "delete", "allow"])
+        self.assertEqual(commands[-2][:4], ["ufw", "--force", "delete", "deny"])
+        self.assertEqual(commands[-1], ["ufw", "show", "added"])
 
     def test_manual_node_plan_without_panel_ip_is_rejected_before_ufw(self) -> None:
         runner = mock.Mock(spec=Runner)
