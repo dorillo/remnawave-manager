@@ -345,6 +345,63 @@ class FirewallPlanningTests(unittest.TestCase):
             commands,
         )
 
+    def test_panel_reapply_preserves_public_rules_and_removes_old_ssh_last(
+        self,
+    ) -> None:
+        runner = mock.Mock(spec=Runner)
+        rules = [
+            ["allow", "22/tcp", "comment", "remnawave-manager:ssh"],
+            ["allow", "22022/tcp", "comment", "remnawave-manager:ssh"],
+            ["allow", "80/tcp", "comment", "remnawave-manager:http"],
+            ["allow", "443/tcp", "comment", "remnawave-manager:https"],
+        ]
+
+        def run(args, **_kwargs):  # type: ignore[no-untyped-def]
+            command = tuple(args)
+            if command == ("ufw", "show", "added"):
+                return Result(command, 0, ufw_added_output(rules), "")
+            apply_ufw_rule_command(rules, command)
+            return Result(command, 0, "", "")
+
+        runner.run.side_effect = run
+        plan = FirewallPlan(
+            role="panel",
+            ssh_ports=(22,),
+            commands=tuple(
+                tuple(command)
+                for command in build_firewall_commands("panel", (22,))
+            ),
+        )
+
+        apply_firewall(runner, plan)
+
+        commands = [call.args[0] for call in runner.run.call_args_list]
+        obsolete_delete = [
+            "ufw",
+            "--force",
+            "delete",
+            "allow",
+            "22022/tcp",
+            "comment",
+            "remnawave-manager:ssh",
+        ]
+        self.assertFalse(
+            any(command[:2] == ["ufw", "insert"] for command in commands)
+        )
+        self.assertEqual(
+            [command for command in commands if "delete" in command],
+            [obsolete_delete],
+        )
+        self.assertLess(commands.index(["ufw", "reload"]), commands.index(obsolete_delete))
+        self.assertEqual(
+            rules,
+            [
+                ["allow", "22/tcp", "comment", "remnawave-manager:ssh"],
+                ["allow", "80/tcp", "comment", "remnawave-manager:http"],
+                ["allow", "443/tcp", "comment", "remnawave-manager:https"],
+            ],
+        )
+
     def test_reapply_preserves_desired_rules_and_deletes_obsolete_rules_last(self) -> None:
         runner = mock.Mock(spec=Runner)
         rules = [

@@ -1058,6 +1058,28 @@ class RemnawaveApiHttpTests(unittest.TestCase):
 
 
 class RealityProvisioningTests(unittest.TestCase):
+    def test_generated_reality_uses_google_dns_and_core_client_default(self) -> None:
+        config = build_reality_config(
+            "node.example.com",
+            "REALITY",
+            "private-key",
+        )
+
+        self.assertEqual(
+            config["dns"],
+            {
+                "queryStrategy": "UseIPv4",
+                "servers": [
+                    {
+                        "address": "https://dns.google/dns-query",
+                        "skipFallback": False,
+                    }
+                ],
+            },
+        )
+        reality = config["inbounds"][0]["streamSettings"]["realitySettings"]
+        self.assertNotIn("minClientVer", reality)
+
     def test_reality_domain_and_node_address_validation_is_strict(self) -> None:
         build_reality_config("node.example.com", "REALITY", "private-key")
         build_reality_config("xn--e1afmkfd.xn--p1ai", "REALITY", "private-key")

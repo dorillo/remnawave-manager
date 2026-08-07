@@ -825,7 +825,7 @@ def build_reality_config(
         "dns": {
             "queryStrategy": "UseIPv4",
             "servers": [
-                {"address": "https://1.1.1.1/dns-query", "skipFallback": False}
+                {"address": "https://dns.google/dns-query", "skipFallback": False}
             ],
         },
         "inbounds": [
@@ -846,7 +846,6 @@ def build_reality_config(
                         "shortIds": [secrets.token_hex(8)],
                         "privateKey": private_key,
                         "serverNames": [domain],
-                        "minClientVer": "26.3.27",
                     },
                 },
             }
