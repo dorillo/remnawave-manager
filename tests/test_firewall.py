@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import shlex
@@ -65,11 +66,15 @@ def firewall_plan() -> FirewallPlan:
 
 
 def ufw_rule_identity(rule: list[str]) -> tuple[str, ...]:
-    rule = [token for token in rule if token not in {"log", "log-all"}]
-    if "comment" not in rule:
-        return tuple(rule)
-    index = rule.index("comment")
-    return tuple([*rule[:index], *rule[index + 2 :]])
+    return tuple(rule)
+
+
+def ufw_insert_match_identity(rule: list[str]) -> tuple[str, ...]:
+    normalized = [token for token in rule[1:] if token not in {"log", "log-all"}]
+    if "comment" in normalized:
+        index = normalized.index("comment")
+        normalized = [*normalized[:index], *normalized[index + 2 :]]
+    return tuple(normalized)
 
 
 def apply_ufw_rule_command(rules: list[list[str]], command: tuple[str, ...]) -> None:
@@ -78,26 +83,18 @@ def apply_ufw_rule_command(rules: list[list[str]], command: tuple[str, ...]) -> 
         if not rules or position > len(rules):
             raise CommandError(f"Invalid position '{position}'")
         candidate = list(command[3:])
-        if ufw_rule_identity(candidate) not in {
-            ufw_rule_identity(rule) for rule in rules
+        if ufw_insert_match_identity(candidate) not in {
+            ufw_insert_match_identity(rule) for rule in rules
         }:
             rules.insert(position - 1, candidate)
     elif command[:3] == ("ufw", "--force", "delete"):
         target = ufw_rule_identity(list(command[3:]))
         rules.remove(next(rule for rule in rules if ufw_rule_identity(rule) == target))
-    elif command[:2] in {
-        ("ufw", "allow"),
-        ("ufw", "deny"),
-        ("ufw", "limit"),
-        ("ufw", "reject"),
-    }:
+    elif command[:2] in {("ufw", "allow"), ("ufw", "deny")}:
         candidate = list(command[1:])
-        identity = ufw_rule_identity(candidate)
-        for index, rule in enumerate(rules):
-            if ufw_rule_identity(rule) == identity:
-                rules[index] = candidate
-                break
-        else:
+        if ufw_rule_identity(candidate) not in {
+            ufw_rule_identity(rule) for rule in rules
+        }:
             rules.append(candidate)
 
 
@@ -216,7 +213,7 @@ class FirewallStateRunner:
 
     def _allows_node_api(self, source: str) -> bool:
         for rule in self.rules:
-            if rule[0] not in {"allow", "deny", "limit", "reject"}:
+            if rule[0] not in {"allow", "deny"}:
                 continue
             if "2222/tcp" not in rule:
                 try:
@@ -227,13 +224,60 @@ class FirewallStateRunner:
                     continue
             if "from" in rule:
                 source_index = rule.index("from")
-                if source_index + 1 >= len(rule) or rule[source_index + 1] != source:
+                if source_index + 1 >= len(rule):
                     continue
-            return rule[0] in {"allow", "limit"}
+                try:
+                    source_matches = ipaddress.ip_address(source) in ipaddress.ip_network(
+                        rule[source_index + 1], strict=False
+                    )
+                except ValueError:
+                    source_matches = rule[source_index + 1] == source
+                if not source_matches:
+                    continue
+            return rule[0] == "allow"
         return False
 
 
 class FirewallPlanningTests(unittest.TestCase):
+    def test_ufw_insert_duplicate_matching_ignores_action_log_and_comment(self) -> None:
+        existing = [
+            "allow",
+            "from",
+            "203.0.113.10",
+            "to",
+            "any",
+            "port",
+            "2222",
+            "proto",
+            "tcp",
+            "comment",
+            "remnawave-manager:panel-api",
+        ]
+        rules = [existing.copy()]
+
+        apply_ufw_rule_command(
+            rules,
+            (
+                "ufw",
+                "insert",
+                "1",
+                "limit",
+                "log",
+                "from",
+                "203.0.113.10",
+                "to",
+                "any",
+                "port",
+                "2222",
+                "proto",
+                "tcp",
+                "comment",
+                "remnawave-manager:transition-panel-api",
+            ),
+        )
+
+        self.assertEqual(rules, [existing])
+
     def test_empty_ufw_is_seeded_before_first_positional_insert(self) -> None:
         runner = mock.Mock(spec=Runner)
         rules: list[list[str]] = []
@@ -251,9 +295,17 @@ class FirewallPlanningTests(unittest.TestCase):
 
         commands = [call.args[0] for call in runner.run.call_args_list]
         self.assertEqual(commands[0], ["ufw", "show", "added"])
-        self.assertEqual(commands[1][:2], ["ufw", "reject"])
+        self.assertEqual(commands[1][:2], ["ufw", "deny"])
         self.assertEqual(commands[2][:3], ["ufw", "insert", "1"])
-        self.assertEqual(commands[2][3], "limit")
+        self.assertEqual(commands[2][3], "deny")
+        transition_commands = [
+            command
+            for command in commands
+            if any("transition-node-api-deny" in token for token in command)
+        ]
+        self.assertEqual(len(transition_commands), 8)
+        self.assertIn(list(firewall_plan().commands[-4]), commands)
+        self.assertIn(list(firewall_plan().commands[-3]), commands)
         self.assertEqual(
             [rule[0] for rule in rules[:2]],
             ["allow", "deny"],
@@ -362,65 +414,54 @@ class FirewallPlanningTests(unittest.TestCase):
             "comment",
             "remnawave-manager:panel-api",
         ]
-        transition_deny = [
-            "ufw",
-            "insert",
-            "1",
-            "reject",
-            "to",
-            "any",
-            "port",
-            "2222",
-            "proto",
-            "tcp",
-            "comment",
-            "remnawave-manager:transition-node-api-deny",
+        transition_specs = [
+            [
+                "deny",
+                "from",
+                network,
+                "to",
+                "any",
+                "port",
+                "2222",
+                "proto",
+                "tcp",
+                "comment",
+                f"remnawave-manager:transition-node-api-deny-{suffix}",
+            ]
+            for network, suffix in (
+                ("0.0.0.0/1", "v4-low"),
+                ("128.0.0.0/1", "v4-high"),
+                ("::/1", "v6-low"),
+                ("8000::/1", "v6-high"),
+            )
         ]
-        transition_allow = [
-            "ufw",
-            "insert",
-            "1",
-            "limit",
-            "from",
-            "203.0.113.10",
-            "to",
-            "any",
-            "port",
-            "2222",
-            "proto",
-            "tcp",
-            "comment",
-            "remnawave-manager:transition-panel-api",
+        transition_setup = [
+            ["ufw", "insert", "1", *specification]
+            for specification in transition_specs
         ]
-        transition_allow_delete = ["ufw", "--force", "delete", *transition_allow[3:]]
-        transition_deny_delete = ["ufw", "--force", "delete", *transition_deny[3:]]
+        transition_deletes = [
+            ["ufw", "--force", "delete", *specification]
+            for specification in reversed(transition_specs)
+        ]
         self.assertEqual(
             deletions,
             [
                 old_ssh_delete,
                 old_panel_delete,
-                transition_allow_delete,
-                transition_deny_delete,
+                *transition_deletes,
             ],
         )
         self.assertNotIn("foreign:ssh", " ".join(" ".join(item) for item in deletions))
         self.assertEqual(commands[0], ["ufw", "show", "added"])
-        self.assertLess(
-            commands.index(transition_deny), commands.index(transition_allow)
-        )
-        self.assertLess(
-            commands.index(transition_allow), commands.index(old_ssh_delete)
-        )
+        for command in transition_setup:
+            self.assertIn(command, commands)
+        self.assertLess(commands.index(transition_setup[-1]), commands.index(old_ssh_delete))
         self.assertLess(
             commands.index(old_panel_delete), commands.index(list(plan.commands[0]))
         )
         self.assertLess(
             commands.index(list(plan.commands[-1])),
-            commands.index(transition_allow_delete),
-        )
-        self.assertLess(
-            commands.index(transition_allow_delete),
-            commands.index(transition_deny_delete),
+            commands.index(transition_deletes[0]),
         )
 
     def test_node_api_rules_shadow_preexisting_broad_allow(self) -> None:
@@ -644,13 +685,13 @@ class FirewallPlanningTests(unittest.TestCase):
         apply_firewall(runner, plan)
         commands = [call.args[0] for call in runner.run.call_args_list]
         self.assertEqual(commands[0], ["ufw", "show", "added"])
-        self.assertEqual(commands[1][:2], ["ufw", "reject"])
+        self.assertEqual(commands[1][:2], ["ufw", "deny"])
         self.assertEqual(commands[2][:3], ["ufw", "insert", "1"])
-        self.assertEqual(commands[3][:3], ["ufw", "allow", "22022/tcp"])
-        self.assertEqual(commands[-5], ["ufw", "--force", "enable"])
-        self.assertEqual(commands[-4], ["ufw", "reload"])
-        self.assertEqual(commands[-3][:4], ["ufw", "--force", "delete", "limit"])
-        self.assertEqual(commands[-2][:4], ["ufw", "--force", "delete", "reject"])
+        self.assertEqual(commands[5][:3], ["ufw", "allow", "22022/tcp"])
+        self.assertEqual(commands[-7], ["ufw", "--force", "enable"])
+        self.assertEqual(commands[-6], ["ufw", "reload"])
+        for command in commands[-5:-1]:
+            self.assertEqual(command[:4], ["ufw", "--force", "delete", "deny"])
         self.assertEqual(commands[-1], ["ufw", "show", "added"])
 
     def test_manual_node_plan_without_panel_ip_is_rejected_before_ufw(self) -> None:

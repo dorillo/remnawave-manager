@@ -357,24 +357,34 @@ def apply_firewall(runner: Runner, plan: FirewallPlan) -> None:
             raise ValidationError(
                 "План Node firewall не содержит финальную пару allow/deny для порта 2222."
             )
-        transition_deny = _temporary_node_api_rule(
-            _node_api_deny_rule("transition-node-api-deny")
+        transition_denies = _node_api_transition_deny_rules()
+        transition_setup = tuple(
+            _insert_rule(1, rule)
+            if has_existing_rules or index > 0
+            else ("ufw", *rule)
+            for index, rule in enumerate(transition_denies)
         )
-        transition_allow = _temporary_node_api_rule(
-            _node_api_allow_rule(address, "transition-panel-api")
+        stale_transition_deletions = tuple(
+            command
+            for command in old_deletions
+            if (
+                (comment := _manager_rule_comment(command)) is not None
+                and comment.startswith("remnawave-manager:transition-")
+            )
         )
-        first_deny = (
-            _insert_rule(1, transition_deny)
-            if has_existing_rules
-            else ("ufw", *transition_deny)
+        old_deletions = tuple(
+            command
+            for command in old_deletions
+            if command not in stale_transition_deletions
         )
-        transition_setup = (
-            first_deny,
-            _insert_rule(1, transition_allow),
-        )
-        transition_cleanup = (
-            _delete_rule(transition_allow),
-            _delete_rule(transition_deny),
+        cleanup_commands = [
+            *stale_transition_deletions,
+            *(_delete_rule(rule) for rule in reversed(transition_denies)),
+        ]
+        transition_cleanup = tuple(
+            command
+            for index, command in enumerate(cleanup_commands)
+            if command not in cleanup_commands[:index]
         )
     elif plan.role != "panel":
         raise ValidationError(f"Неизвестная роль firewall: {plan.role}")
@@ -439,19 +449,37 @@ def _node_api_deny_rule(comment: str) -> tuple[str, ...]:
     )
 
 
+def _node_api_transition_deny_rules() -> tuple[tuple[str, ...], ...]:
+    networks = (
+        ("0.0.0.0/1", "v4-low"),
+        ("128.0.0.0/1", "v4-high"),
+        ("::/1", "v6-low"),
+        ("8000::/1", "v6-high"),
+    )
+    return tuple(
+        (
+            "deny",
+            "from",
+            network,
+            "to",
+            "any",
+            "port",
+            "2222",
+            "proto",
+            "tcp",
+            "comment",
+            f"remnawave-manager:transition-node-api-deny-{suffix}",
+        )
+        for network, suffix in networks
+    )
+
+
 def _insert_rule(position: int, specification: tuple[str, ...]) -> tuple[str, ...]:
     return ("ufw", "insert", str(position), *specification)
 
 
 def _delete_rule(specification: tuple[str, ...]) -> tuple[str, ...]:
     return ("ufw", "--force", "delete", *specification)
-
-
-def _temporary_node_api_rule(specification: tuple[str, ...]) -> tuple[str, ...]:
-    if not specification or specification[0] not in {"allow", "deny"}:
-        raise ValidationError("Некорректное временное UFW-правило.")
-    action = "limit" if specification[0] == "allow" else "reject"
-    return (action, *specification[1:])
 
 
 def _manager_rule_comment(command: Sequence[str]) -> str | None:
@@ -538,7 +566,7 @@ def _existing_ufw_rule_state(
         ]
         if (
             not specification
-            or specification[0] not in {"allow", "deny", "limit", "reject"}
+            or specification[0] not in {"allow", "deny"}
             or len(comment_indexes) != 1
             or comment_indexes[0] + 1 >= len(specification)
             or not re.fullmatch(
