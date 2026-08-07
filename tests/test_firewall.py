@@ -65,6 +65,7 @@ def firewall_plan() -> FirewallPlan:
 
 
 def ufw_rule_identity(rule: list[str]) -> tuple[str, ...]:
+    rule = [token for token in rule if token not in {"log", "log-all"}]
     if "comment" not in rule:
         return tuple(rule)
     index = rule.index("comment")
@@ -84,7 +85,12 @@ def apply_ufw_rule_command(rules: list[list[str]], command: tuple[str, ...]) -> 
     elif command[:3] == ("ufw", "--force", "delete"):
         target = ufw_rule_identity(list(command[3:]))
         rules.remove(next(rule for rule in rules if ufw_rule_identity(rule) == target))
-    elif command[:2] in {("ufw", "allow"), ("ufw", "deny")}:
+    elif command[:2] in {
+        ("ufw", "allow"),
+        ("ufw", "deny"),
+        ("ufw", "limit"),
+        ("ufw", "reject"),
+    }:
         candidate = list(command[1:])
         identity = ufw_rule_identity(candidate)
         for index, rule in enumerate(rules):
@@ -210,7 +216,7 @@ class FirewallStateRunner:
 
     def _allows_node_api(self, source: str) -> bool:
         for rule in self.rules:
-            if rule[0] not in {"allow", "deny"}:
+            if rule[0] not in {"allow", "deny", "limit", "reject"}:
                 continue
             if "2222/tcp" not in rule:
                 try:
@@ -223,7 +229,7 @@ class FirewallStateRunner:
                 source_index = rule.index("from")
                 if source_index + 1 >= len(rule) or rule[source_index + 1] != source:
                     continue
-            return rule[0] == "allow"
+            return rule[0] in {"allow", "limit"}
         return False
 
 
@@ -245,10 +251,9 @@ class FirewallPlanningTests(unittest.TestCase):
 
         commands = [call.args[0] for call in runner.run.call_args_list]
         self.assertEqual(commands[0], ["ufw", "show", "added"])
-        self.assertEqual(commands[1][:2], ["ufw", "deny"])
-        self.assertEqual(commands[1][2], "log")
+        self.assertEqual(commands[1][:2], ["ufw", "reject"])
         self.assertEqual(commands[2][:3], ["ufw", "insert", "1"])
-        self.assertEqual(commands[2][4], "log")
+        self.assertEqual(commands[2][3], "limit")
         self.assertEqual(
             [rule[0] for rule in rules[:2]],
             ["allow", "deny"],
@@ -361,8 +366,7 @@ class FirewallPlanningTests(unittest.TestCase):
             "ufw",
             "insert",
             "1",
-            "deny",
-            "log",
+            "reject",
             "to",
             "any",
             "port",
@@ -376,8 +380,7 @@ class FirewallPlanningTests(unittest.TestCase):
             "ufw",
             "insert",
             "1",
-            "allow",
-            "log",
+            "limit",
             "from",
             "203.0.113.10",
             "to",
@@ -641,13 +644,13 @@ class FirewallPlanningTests(unittest.TestCase):
         apply_firewall(runner, plan)
         commands = [call.args[0] for call in runner.run.call_args_list]
         self.assertEqual(commands[0], ["ufw", "show", "added"])
-        self.assertEqual(commands[1][:2], ["ufw", "deny"])
+        self.assertEqual(commands[1][:2], ["ufw", "reject"])
         self.assertEqual(commands[2][:3], ["ufw", "insert", "1"])
         self.assertEqual(commands[3][:3], ["ufw", "allow", "22022/tcp"])
         self.assertEqual(commands[-5], ["ufw", "--force", "enable"])
         self.assertEqual(commands[-4], ["ufw", "reload"])
-        self.assertEqual(commands[-3][:4], ["ufw", "--force", "delete", "allow"])
-        self.assertEqual(commands[-2][:4], ["ufw", "--force", "delete", "deny"])
+        self.assertEqual(commands[-3][:4], ["ufw", "--force", "delete", "limit"])
+        self.assertEqual(commands[-2][:4], ["ufw", "--force", "delete", "reject"])
         self.assertEqual(commands[-1], ["ufw", "show", "added"])
 
     def test_manual_node_plan_without_panel_ip_is_rejected_before_ufw(self) -> None:

@@ -357,10 +357,10 @@ def apply_firewall(runner: Runner, plan: FirewallPlan) -> None:
             raise ValidationError(
                 "План Node firewall не содержит финальную пару allow/deny для порта 2222."
             )
-        transition_deny = _logged_rule(
+        transition_deny = _temporary_node_api_rule(
             _node_api_deny_rule("transition-node-api-deny")
         )
-        transition_allow = _logged_rule(
+        transition_allow = _temporary_node_api_rule(
             _node_api_allow_rule(address, "transition-panel-api")
         )
         first_deny = (
@@ -447,10 +447,11 @@ def _delete_rule(specification: tuple[str, ...]) -> tuple[str, ...]:
     return ("ufw", "--force", "delete", *specification)
 
 
-def _logged_rule(specification: tuple[str, ...]) -> tuple[str, ...]:
+def _temporary_node_api_rule(specification: tuple[str, ...]) -> tuple[str, ...]:
     if not specification or specification[0] not in {"allow", "deny"}:
         raise ValidationError("Некорректное временное UFW-правило.")
-    return (specification[0], "log", *specification[1:])
+    action = "limit" if specification[0] == "allow" else "reject"
+    return (action, *specification[1:])
 
 
 def _manager_rule_comment(command: Sequence[str]) -> str | None:
@@ -537,7 +538,7 @@ def _existing_ufw_rule_state(
         ]
         if (
             not specification
-            or specification[0] not in {"allow", "deny"}
+            or specification[0] not in {"allow", "deny", "limit", "reject"}
             or len(comment_indexes) != 1
             or comment_indexes[0] + 1 >= len(specification)
             or not re.fullmatch(
