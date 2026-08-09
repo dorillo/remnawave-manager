@@ -186,6 +186,29 @@ server {
             self.assertFalse(features["beeline_cdn_post"])
             self.assertFalse(features["yandex_cdn"])
 
+    def test_nginx_feature_scan_detects_direct_unix_proxy_pass_socket(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            config = Path(temporary) / "nginx.conf"
+            config.write_text(
+                """\
+server {
+    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    location ^~ /assets/opaque/ {
+        proxy_pass http://unix:/dev/shm/xrxh.socket;
+    }
+}
+""",
+                encoding="utf-8",
+            )
+
+            sockets, features = _nginx_features([config])
+
+            self.assertEqual(
+                sockets,
+                ["/dev/shm/nginx.sock", "/dev/shm/xrxh.socket"],
+            )
+            self.assertTrue(features["xhttp_stream_separation"])
+
     def test_site_bind_root_symlink_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

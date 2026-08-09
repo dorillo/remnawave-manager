@@ -253,14 +253,22 @@ def _nginx_uses_upstream(config: str, name: str) -> bool:
 def _nginx_features(paths: list[Path]) -> tuple[list[str], dict[str, bool]]:
     combined = "\n".join(_read_nginx_text(path) for path in paths)
     lowered = combined.lower()
-    sockets = sorted(
-        set(
-            re.findall(
-                r"(?:listen|server)[ \t]+(?:unix:)?(/(?:dev/shm|run)/[^; \t]+\.sock(?:et)?)",
-                combined,
-            )
+    sockets = set(
+        re.findall(
+            r"(?:listen|server)[ \t]+(?:unix:)?(/(?:dev/shm|run)/[^; \t]+\.sock(?:et)?)",
+            combined,
         )
     )
+    # XHTTP stream separation commonly points nginx directly at an Xray Unix
+    # socket instead of declaring an nginx upstream block.
+    sockets.update(
+        re.findall(
+            r"\bproxy_pass[ \t]+https?://unix:(/(?:dev/shm|run)/[^;:\s]+\.sock(?:et)?)(?::[^;]*)?;",
+            combined,
+            re.IGNORECASE,
+        )
+    )
+    sockets = sorted(sockets)
     beeline_post = _nginx_uses_upstream(combined, "beeline_xhttp")
     beeline_get = _nginx_uses_upstream(combined, "xray_beeline_xhttp")
     yandex = "yandex" in lowered or (

@@ -200,6 +200,7 @@ sudo rwm backup verify /var/backups/remnawave-manager/ИМЯ_BACKUP.tar.gz
 
 - [миграция Panel 2.8.1 и Subscription Page 7.2.6](docs/migration-panel-2.8.1-to-3.2.1.md);
 - [обновление Node 2.8.0](docs/update-node-2.8.0-to-3.0.0.md);
+- [XHTTP через nginx: уникальный путь и снижение шаблонности](docs/xhttp-nginx-hardening.md);
 - [сохранение XHTTP, stream separation, Яндекс CDN и Beeline CDN](docs/xhttp-yandex-preservation.md);
 - [rollback и аварийное восстановление](docs/rollback-recovery.md).
 
