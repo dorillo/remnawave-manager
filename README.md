@@ -10,13 +10,13 @@
 
 Менеджер никогда не следует плавающему тегу `latest` и не повышает версии только потому, что upstream опубликовал новый релиз. Новая версия становится поддерживаемой после отдельной проверки release notes, миграций, API-контрактов и digest образов, затем явно добавляется в compatibility manifest. Перед production-обновлением новая связка дополнительно проверяется на отдельной Ubuntu 24.04 с копией реальных данных.
 
-Для Panel 3.2.1 проверены официальные release notes и полный diff backend/frontend с 3.2.0: Prisma-схема, `.env` и Compose-контракт не изменились, а multiarch manifest digest совпадает в Docker Hub и GHCR. Backend исправляет генерацию mihomo-заголовков, валидацию UUID API-токенов и обработку шаблонов; отдельная миграция конфигурации или схемы базы не требуется.
+Для Panel 3.2.3 проверены официальные release notes и полный diff backend с 3.2.1: `.env` и Compose-контракт не изменились, multiarch manifest digest закреплён в Docker Hub/GHCR, а штатная Prisma-миграция `node_ips` выполняется самим Panel при старте. Backend добавляет Node IPs, snippets и `cipherSuites`; отдельная ручная миграция конфигурации или схемы базы не требуется.
 
 | Компонент | Проверенная исходная версия | Целевая версия |
 | --- | --- | --- |
-| Remnawave Panel | 2.8.1, 3.0.0, 3.1.0, 3.2.0, 3.2.1 | 3.2.1 |
+| Remnawave Panel | 2.8.1, 3.0.0, 3.1.0, 3.2.0, 3.2.1, 3.2.2, 3.2.3 | 3.2.3 |
 | Subscription Page | 7.2.6, 8.0.0 | 8.0.0 |
-| Remnawave Node | 2.8.0, 3.0.0 | 3.0.0 |
+| Remnawave Node | 2.8.0, 3.0.0, 3.1.0, 3.1.1 | 3.1.1 |
 | PostgreSQL | 18.3, 18.4 | 18.4 |
 | `wgcf` | не применяется | 2.2.32 с фиксированным SHA-256 |
 
@@ -133,7 +133,7 @@ sudo rwm install panel \
   --email admin@example.com
 ```
 
-Менеджер установит Panel 3.2.1 и Subscription Page 8.0.0 на одном сервере, настроит nginx, UFW, TLS и защитный URL с cookie. Node при этом не устанавливается.
+Менеджер установит Panel 3.2.3 и Subscription Page 8.0.0 на одном сервере, настроит nginx, UFW, TLS и защитный URL с cookie. Node при этом не устанавливается.
 
 Имя и стойкий пароль администратора генерируются автоматически и показываются один раз. Можно указать `--admin-username` и запросить собственный пароль через `--ask-admin-password`. Передача пароля значением аргумента командной строки не поддерживается.
 
@@ -198,8 +198,8 @@ sudo rwm backup verify /var/backups/remnawave-manager/ИМЯ_BACKUP.tar.gz
 
 Подробные инструкции:
 
-- [миграция Panel 2.8.1 и Subscription Page 7.2.6](docs/migration-panel-2.8.1-to-3.2.1.md);
-- [обновление Node 2.8.0](docs/update-node-2.8.0-to-3.0.0.md);
+- [обновление Panel 3.2.1-3.2.3 и Subscription Page 8.0.0](docs/migration-panel-3.2.1-to-3.2.3.md);
+- [обновление Node 3.0.0-3.1.1](docs/update-node-3.0.0-to-3.1.1.md);
 - [XHTTP через nginx: уникальный путь и снижение шаблонности](docs/xhttp-nginx-hardening.md);
 - [сохранение XHTTP, stream separation, Яндекс CDN и Beeline CDN](docs/xhttp-yandex-preservation.md);
 - [rollback и аварийное восстановление](docs/rollback-recovery.md).

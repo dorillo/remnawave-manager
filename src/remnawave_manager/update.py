@@ -610,7 +610,7 @@ def _preflight_node_config(
             raise ValidationError(
                 "Reality inbound без явного minClientVer: "
                 + ", ".join(risky)
-                + ". Node 3.0.0 по умолчанию требует клиент 26.3.27. "
+                + ". Node 3.1.1 по умолчанию требует клиент 26.3.27. "
                 "Проверьте версии клиентов и повторите с --accept-reality-client-risk. "
                 "Менеджер не будет автоматически ставить небезопасное 0.0.0."
             )

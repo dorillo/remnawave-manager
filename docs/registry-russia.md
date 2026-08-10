@@ -8,8 +8,8 @@ CLI принимает только два идентификатора:
 
 | Идентификатор | Docker host | Доступные проверенные компоненты |
 | --- | --- | --- |
-| `docker-hub` | `docker.io` | Panel 3.2.1, Subscription Page 8.0.0, Node 3.0.0 |
-| `ghcr` | `ghcr.io` | Panel 3.2.1, Node 3.0.0 |
+| `docker-hub` | `docker.io` | Panel 3.2.3, Subscription Page 8.0.0, Node 3.1.1 |
+| `ghcr` | `ghcr.io` | Panel 3.2.3, Node 3.1.1 |
 
 Для Panel-сервера выбирайте `docker-hub`. Panel обновляется вместе с Subscription Page, а для Subscription Page 8.0.0 в текущем compatibility manifest нет проверенного GHCR-образа.
 
@@ -175,5 +175,5 @@ sudo rwm registry status
 
 - [официальная справка `docker login`](https://docs.docker.com/reference/cli/docker/login/)
 - [матрица совместимости проекта](../src/remnawave_manager/data/compatibility.json)
-- [миграция Panel](migration-panel-2.8.1-to-3.2.1.md)
-- [обновление Node](update-node-2.8.0-to-3.0.0.md)
+- [обновление Panel](migration-panel-3.2.1-to-3.2.3.md)
+- [обновление Node](update-node-3.0.0-to-3.1.1.md)
