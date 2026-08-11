@@ -51,6 +51,16 @@ def detect_component_version(
     if not isinstance(known, dict):
         raise ValidationError(f"known_digests компонента {name} повреждён.")
     by_digest = {str(digest): str(version) for version, digest in known.items()}
+    aliases = contract.get("known_digest_aliases", {})
+    if not isinstance(aliases, dict):
+        raise ValidationError(f"known_digest_aliases компонента {name} повреждён.")
+    for version, digests in aliases.items():
+        if not isinstance(digests, list) or any(
+            not isinstance(digest, str) for digest in digests
+        ):
+            raise ValidationError(f"known_digest_aliases компонента {name} повреждён.")
+        for digest in digests:
+            by_digest[digest] = str(version)
 
     # A running container is the authoritative source. Falling back to a
     # supported Compose tag after an unknown container image would approve a

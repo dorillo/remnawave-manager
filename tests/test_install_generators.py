@@ -673,7 +673,7 @@ class InstallGeneratorTests(unittest.TestCase):
         self.assertEqual(
             POSTGRES_IMAGE,
             "postgres:18.4@sha256:"
-            "3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a",
+            "a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636",
         )
         self.assertEqual(
             VALKEY_IMAGE,

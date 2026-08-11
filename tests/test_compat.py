@@ -46,6 +46,25 @@ class FakeRunner:
 
 
 class CompatibilityTests(unittest.TestCase):
+    def test_legacy_postgres_manifest_digest_remains_an_approved_source(self) -> None:
+        digest = "3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a"
+        component = Component(
+            name="database",
+            service="remnawave-db",
+            configured_image="postgres:18.4@sha256:" + digest,
+            running_image="postgres:18.4@sha256:" + digest,
+            running_image_id="sha256:" + "d" * 64,
+        )
+        runner = FakeRunner(
+            [],
+            container_data={
+                "Config": {"Image": component.running_image},
+                "Image": component.running_image_id,
+            },
+        )
+
+        self.assertEqual(require_supported_source(runner, "database", component), "18.4")
+
     def test_panel_target_is_3_2_3_and_identical_in_both_registries(self) -> None:
         expected_digest = (
             "sha256:bee71b9c3974e24007de4c13efd4aa6d5ec04b7fbf97cbe81095faac075a41b4"
