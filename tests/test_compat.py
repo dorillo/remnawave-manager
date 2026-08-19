@@ -65,9 +65,9 @@ class CompatibilityTests(unittest.TestCase):
 
         self.assertEqual(require_supported_source(runner, "database", component), "18.4")
 
-    def test_panel_target_is_3_2_3_and_identical_in_both_registries(self) -> None:
+    def test_panel_target_is_3_3_0_and_identical_in_both_registries(self) -> None:
         expected_digest = (
-            "sha256:bee71b9c3974e24007de4c13efd4aa6d5ec04b7fbf97cbe81095faac075a41b4"
+            "sha256:a93047b52f7ef6368b2b776e0cd728ae7548bd50fe8ca6f782277e5cbb6dbab1"
         )
 
         docker_hub = component_target("panel", "docker-hub")
@@ -76,38 +76,38 @@ class CompatibilityTests(unittest.TestCase):
         self.assertEqual(
             docker_hub,
             {
-                "version": "3.2.3",
-                "image": "remnawave/backend:3.2.3",
+                "version": "3.3.0",
+                "image": "remnawave/backend:3.3.0",
                 "digest": expected_digest,
             },
         )
         self.assertEqual(
             ghcr,
             {
-                "version": "3.2.3",
-                "image": "ghcr.io/remnawave/backend:3.2.3",
+                "version": "3.3.0",
+                "image": "ghcr.io/remnawave/backend:3.3.0",
                 "digest": expected_digest,
             },
         )
 
-    def test_node_target_is_3_1_1_and_identical_in_both_registries(self) -> None:
+    def test_node_target_is_3_3_0_and_identical_in_both_registries(self) -> None:
         expected_digest = (
-            "sha256:85849e3255250b5b60000ecffc1470a7bee7edf634497ee2c91d531b194fa8eb"
+            "sha256:5a7dee867675deb1341e6cec748dff4467c6abf6c7c35879c4e307bbd0e5bbfb"
         )
 
         self.assertEqual(
             component_target("node", "docker-hub"),
             {
-                "version": "3.1.1",
-                "image": "remnawave/node:3.1.1",
+                "version": "3.3.0",
+                "image": "remnawave/node:3.3.0",
                 "digest": expected_digest,
             },
         )
         self.assertEqual(
             component_target("node", "ghcr"),
             {
-                "version": "3.1.1",
-                "image": "ghcr.io/remnawave/node:3.1.1",
+                "version": "3.3.0",
+                "image": "ghcr.io/remnawave/node:3.3.0",
                 "digest": expected_digest,
             },
         )
@@ -203,6 +203,25 @@ class CompatibilityTests(unittest.TestCase):
         )
 
         self.assertEqual(require_supported_source(runner, "node", component), "3.1.0")
+
+    def test_managed_node_3_2_2_is_an_approved_update_source(self) -> None:
+        digest = "6a4c26eb07c91c5eb10fa0ff7f6defda8b49a3557f2dc25fa13a0110bde646e2"
+        component = Component(
+            name="node",
+            service="remnanode",
+            configured_image="remnawave/node:3.2.2",
+            running_image="remnawave/node:3.2.2",
+            running_image_id="sha256:" + "7" * 64,
+        )
+        runner = FakeRunner(
+            ["remnawave/node@sha256:" + digest],
+            container_data={
+                "Config": {"Image": component.running_image},
+                "Image": component.running_image_id,
+            },
+        )
+
+        self.assertEqual(require_supported_source(runner, "node", component), "3.2.2")
 
     def test_detects_old_panel_behind_mutable_major_tag_by_digest(self) -> None:
         component = Component(

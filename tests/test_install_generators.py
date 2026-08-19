@@ -64,6 +64,27 @@ def certificate() -> CertificateMaterial:
 
 
 class InstallGeneratorTests(unittest.TestCase):
+    def test_node_install_requires_panel_3_3_confirmation_before_preflight(self) -> None:
+        with (
+            mock.patch("remnawave_manager.install._preflight") as preflight,
+            self.assertRaisesRegex(ValidationError, "--panel-3-3-ready"),
+        ):
+            install_node(
+                mock.Mock(spec=Runner),
+                mock.Mock(spec=StateStore),
+                NodeInstallOptions(
+                    domain="node.example.com",
+                    panel_ip="203.0.113.10",
+                    secret_key="node.secret_123",
+                    certificate=CertificateSpec(
+                        method="http-01", email="admin@example.com"
+                    ),
+                    site_source=Path("/not-used"),
+                ),
+            )
+
+        preflight.assert_not_called()
+
     def test_panel_install_rejects_ghcr_before_pulling_any_image(self) -> None:
         store = mock.Mock()
         store.load_settings.return_value = {"registry": "ghcr"}
@@ -1431,6 +1452,7 @@ class InstallGeneratorTests(unittest.TestCase):
                             method="http-01", email="admin@example.com"
                         ),
                         site_source=site,
+                        panel_3_3_ready=True,
                         install_dir=install_dir,
                     ),
                 )
@@ -1645,6 +1667,7 @@ class InstallGeneratorTests(unittest.TestCase):
                             method="http-01", email="admin@example.com"
                         ),
                         site_source=site,
+                        panel_3_3_ready=True,
                         install_dir=install_dir,
                     ),
                 )
@@ -1723,6 +1746,7 @@ class InstallGeneratorTests(unittest.TestCase):
                             method="http-01", email="admin@example.com"
                         ),
                         site_source=site,
+                        panel_3_3_ready=True,
                         install_dir=install_dir,
                     ),
                 )

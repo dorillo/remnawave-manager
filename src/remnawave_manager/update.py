@@ -610,7 +610,7 @@ def _preflight_node_config(
             raise ValidationError(
                 "Reality inbound без явного minClientVer: "
                 + ", ".join(risky)
-                + ". Node 3.1.1 по умолчанию требует клиент 26.3.27. "
+                + ". Node 3.3.0 по умолчанию требует клиент 26.3.27. "
                 "Проверьте версии клиентов и повторите с --accept-reality-client-risk. "
                 "Менеджер не будет автоматически ставить небезопасное 0.0.0."
             )
@@ -696,6 +696,7 @@ def update_node(
     runner: Runner,
     store: StateStore,
     *,
+    panel_3_3_ready: bool = False,
     accept_reality_client_risk: bool = False,
     accept_unknown_source: bool = False,
 ) -> BackupResult:
@@ -703,12 +704,18 @@ def update_node(
     if inventory.role != "node" or "node" not in inventory.components:
         raise ValidationError("Эта команда предназначена для отдельного node-сервера.")
     _require_clean_inventory(inventory)
-    require_supported_source(
+    source_version = require_supported_source(
         runner,
         "node",
         inventory.components["node"],
         accept_unknown=accept_unknown_source,
     )
+    if source_version != "3.3.0" and not panel_3_3_ready:
+        raise ValidationError(
+            "Node 3.3.0 требует Panel 3.3.0: новый Node API принимает соединения только "
+            "с производным SNI. Сначала обновите Panel, убедитесь, что она работает, затем "
+            "повторите update Node с --panel-3-3-ready."
+        )
     TransactionJournal.ensure_available(store)
     registry, retention = _settings(store)
     compose_path = Path(inventory.compose_file)

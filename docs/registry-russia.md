@@ -8,8 +8,8 @@ CLI принимает только два идентификатора:
 
 | Идентификатор | Docker host | Доступные проверенные компоненты |
 | --- | --- | --- |
-| `docker-hub` | `docker.io` | Panel 3.2.3, Subscription Page 8.0.0, Node 3.1.1 |
-| `ghcr` | `ghcr.io` | Panel 3.2.3, Node 3.1.1 |
+| `docker-hub` | `docker.io` | Panel 3.3.0, Subscription Page 8.0.0, Node 3.3.0 |
+| `ghcr` | `ghcr.io` | Panel 3.3.0, Node 3.3.0 |
 
 Для Panel-сервера выбирайте `docker-hub`. Panel обновляется вместе с Subscription Page, а для Subscription Page 8.0.0 в текущем compatibility manifest нет проверенного GHCR-образа.
 

@@ -86,6 +86,7 @@ class NodeInstallOptions:
     secret_key: str
     certificate: CertificateSpec
     site_source: Path
+    panel_3_3_ready: bool = False
     install_dir: Path = Path("/opt/remnanode")
     configure_ufw: bool = True
     ssh_ports: tuple[int, ...] | None = None
@@ -131,7 +132,7 @@ def render_panel_env(environment: PanelEnvironment) -> str:
         + "@remnawave-db:5432/remnawave"
     )
     return (
-        "# Remnawave Panel 3.2.3. Файл содержит секреты.\n"
+        "# Remnawave Panel 3.3.0. Файл содержит секреты.\n"
         "APP_PORT=3000\n"
         "METRICS_PORT=3001\n"
         "API_INSTANCES=1\n"
@@ -182,7 +183,7 @@ def render_subscription_env(api_token: str) -> str:
 def render_node_env(secret_key: str) -> str:
     selected = _secret_value(secret_key, "SECRET_KEY ноды")
     return (
-        "# Remnawave Node 3.1.1. Файл содержит секрет.\n"
+        "# Remnawave Node 3.3.0. Файл содержит секрет.\n"
         "NODE_PORT=2222\n"
         f"SECRET_KEY={_dotenv_value(selected)}\n"
     )
@@ -1000,6 +1001,11 @@ def install_node(
     store: StateStore,
     options: NodeInstallOptions,
 ) -> NodeInstallResult:
+    if not options.panel_3_3_ready:
+        raise ValidationError(
+            "Node 3.3.0 требует Panel 3.3.0. Сначала обновите Panel и подтвердите "
+            "совместимость параметром --panel-3-3-ready."
+        )
     _preflight(
         runner,
         store,

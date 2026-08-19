@@ -398,6 +398,11 @@ def build_parser() -> RussianArgumentParser:
     node.add_argument(
         "--panel-ip", required=True, help="IPv4-адрес Panel для доступа к порту 2222."
     )
+    node.add_argument(
+        "--panel-3-3-ready",
+        action="store_true",
+        help="Подтвердить, что Panel уже работает на версии 3.3.0.",
+    )
     source = node.add_mutually_exclusive_group(required=True)
     source.add_argument("--template", choices=DISGUISE_IDS)
     source.add_argument("--site-source", type=Path, metavar="КАТАЛОГ")
@@ -413,6 +418,11 @@ def build_parser() -> RussianArgumentParser:
 
     update = commands.add_parser(
         "update", help="Обновить компоненты согласно роли сервера."
+    )
+    update.add_argument(
+        "--panel-3-3-ready",
+        action="store_true",
+        help="Подтвердить, что Panel уже обновлена до 3.3.0 перед обновлением Node.",
     )
     update.add_argument(
         "--accept-reality-client-risk",
@@ -1100,6 +1110,7 @@ def dispatch(args: argparse.Namespace, context: CliContext) -> int:
                 ),
                 certificate=_certificate_spec(args, context),
                 site_source=Path(source),
+                panel_3_3_ready=args.panel_3_3_ready,
                 configure_ufw=not args.no_ufw,
                 ssh_ports=tuple(args.ssh_port) if args.ssh_port else None,
             ),
@@ -1117,7 +1128,8 @@ def dispatch(args: argparse.Namespace, context: CliContext) -> int:
             "Будет создан проверенный backup, затем Panel и Subscription Page обновятся одной транзакцией. "
             "Миграции PostgreSQL откатываются только восстановлением dump."
             if inventory.role == "panel"
-            else "Будет создан backup и протестирован текущий Xray-конфиг новым образом Node."
+            else "Будет создан backup и протестирован текущий Xray-конфиг новым образом Node. "
+            "Перед обновлением Node 3.3.0 сначала обновите Panel до 3.3.0: эта версия Node принимает API-соединения только с производным SNI, которое отправляет Panel 3.3.0."
         )
         _confirm(context, warning, assume_yes=args.yes)
         result = (
@@ -1130,6 +1142,7 @@ def dispatch(args: argparse.Namespace, context: CliContext) -> int:
             else update_node(
                 context.runner,
                 context.store,
+                panel_3_3_ready=args.panel_3_3_ready,
                 accept_reality_client_risk=args.accept_reality_client_risk,
                 accept_unknown_source=args.accept_unknown_source,
             )
@@ -2109,11 +2122,19 @@ def _interactive_arguments(context: CliContext, section: int) -> list[str] | Non
             "--template",
             catalog[template - 1]["id"],
         ]
+        if _yes_no(
+            context, "Panel уже установлена или обновлена до 3.3.0", default=False
+        ):
+            result.append("--panel-3-3-ready")
         if not _yes_no(context, "Настроить UFW", default=True):
             result.append("--no-ufw")
         return result + _interactive_certificate(context)
     if section == 3:
         result = ["update"]
+        if _yes_no(
+            context, "Panel уже обновлена до 3.3.0 и прошла проверку", default=False
+        ):
+            result.append("--panel-3-3-ready")
         if _yes_no(
             context, "Все Reality-клиенты имеют версию не ниже 26.3.27", default=False
         ):
