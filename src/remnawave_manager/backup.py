@@ -22,10 +22,10 @@ from .compose import compose_command, validate_rendered_compose
 from .errors import TransactionError, ValidationError
 from .health import (
     check_node_runtime,
-    check_panel_http,
     check_subscription_http,
     wait_container,
     wait_for_paths,
+    wait_panel_http,
 )
 from .journal import TransactionJournal
 from .models import Inventory
@@ -1440,7 +1440,7 @@ def _restore_backup_snapshot(
             )
         panel = inventory.components.get("panel")
         if panel is not None and panel.service in expected:
-            check_panel_http(runner, panel)
+            wait_panel_http(runner, panel)
         subscription = inventory.components.get("subscription")
         if subscription is not None and subscription.service in expected:
             subscription_version = detect_component_version(

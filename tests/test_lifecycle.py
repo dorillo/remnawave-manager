@@ -114,7 +114,7 @@ class ServiceToolTests(unittest.TestCase):
         with (
             mock.patch("remnawave_manager.lifecycle.wait_container") as wait,
             mock.patch("remnawave_manager.lifecycle.test_nginx") as nginx,
-            mock.patch("remnawave_manager.lifecycle.check_panel_http") as panel_http,
+            mock.patch("remnawave_manager.lifecycle.wait_panel_http") as panel_http,
             mock.patch(
                 "remnawave_manager.lifecycle.check_subscription_http"
             ) as sub_http,

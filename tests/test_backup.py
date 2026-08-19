@@ -976,7 +976,7 @@ class RestoreTransactionTests(unittest.TestCase):
                     return_value=running,
                 ),
                 mock.patch("remnawave_manager.backup.wait_container"),
-                mock.patch("remnawave_manager.backup.check_panel_http"),
+                mock.patch("remnawave_manager.backup.wait_panel_http"),
                 mock.patch(
                     "remnawave_manager.backup.detect_component_version",
                     return_value="7.2.6",
@@ -1128,7 +1128,7 @@ class RestoreTransactionTests(unittest.TestCase):
             with (
                 mock.patch("remnawave_manager.backup.wait_container"),
                 mock.patch(
-                    "remnawave_manager.backup.check_panel_http",
+                    "remnawave_manager.backup.wait_panel_http",
                     side_effect=[TransactionError("panel health failed"), None],
                 ),
                 mock.patch("remnawave_manager.backup.test_nginx"),
@@ -1325,7 +1325,7 @@ class DatabaseRestoreTests(unittest.TestCase):
 
             with (
                 mock.patch("remnawave_manager.backup.wait_container") as wait,
-                mock.patch("remnawave_manager.backup.check_panel_http"),
+                mock.patch("remnawave_manager.backup.wait_panel_http"),
                 mock.patch("remnawave_manager.backup.test_nginx"),
                 mock.patch("remnawave_manager.backup.reload_nginx"),
             ):

@@ -212,6 +212,27 @@ def check_panel_http(runner: Runner, component: Component) -> None:
         raise TransactionError("После обновления Panel не разрешает обычный вход.")
 
 
+def wait_panel_http(
+    runner: Runner,
+    component: Component,
+    *,
+    timeout: int = 90,
+    interval: int = 3,
+) -> None:
+    """Wait until the main API is ready after the metrics healthcheck passes."""
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            check_panel_http(runner, component)
+            return
+        except TransactionError as error:
+            if time.monotonic() >= deadline:
+                raise TransactionError(
+                    f"Panel не стала готова за {timeout} секунд: {error}"
+                ) from error
+            time.sleep(interval)
+
+
 def check_subscription_http(
     runner: Runner,
     component: Component,

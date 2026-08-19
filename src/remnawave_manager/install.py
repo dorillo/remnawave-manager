@@ -22,12 +22,12 @@ from .compose import compose_command
 from .errors import TransactionError, ValidationError
 from .firewall import FirewallTransaction, apply_firewall_transactional, plan_firewall
 from .health import (
-    check_panel_http,
     check_subscription_api_scopes,
     check_subscription_http,
     wait_container,
     wait_for_paths,
     wait_node_runtime,
+    wait_panel_http,
 )
 from .journal import TransactionJournal
 from .models import Component, Inventory, ManagedFile, Role
@@ -846,7 +846,7 @@ def install_panel(
         )
         wait_container(runner, _component("nginx", "remnawave-nginx"))
         runner.run(["docker", "exec", "remnawave-nginx", "nginx", "-t"])
-        check_panel_http(runner, _component("panel", "remnawave"))
+        wait_panel_http(runner, _component("panel", "remnawave"), timeout=180)
         check_subscription_http(
             runner,
             _component("subscription", "remnawave-subscription-page"),

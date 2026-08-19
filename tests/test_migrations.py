@@ -449,7 +449,7 @@ class LegacyPanelMigrationTests(unittest.TestCase):
                 mock.patch("remnawave_manager.update.pull_verified", side_effect=fake_pull) as pull,
                 mock.patch("remnawave_manager.update.validate_rendered_compose"),
                 mock.patch("remnawave_manager.update.wait_container") as wait,
-                mock.patch("remnawave_manager.update.check_panel_http"),
+                mock.patch("remnawave_manager.update.wait_panel_http"),
                 mock.patch("remnawave_manager.update.check_subscription_http"),
                 mock.patch("remnawave_manager.update.check_subscription_api_scopes"),
                 mock.patch("remnawave_manager.update.test_nginx"),
@@ -543,7 +543,7 @@ class LegacyPanelMigrationTests(unittest.TestCase):
                     side_effect=inspect_attached_backup,
                 ),
                 mock.patch("remnawave_manager.update.wait_container"),
-                mock.patch("remnawave_manager.update.check_panel_http"),
+                mock.patch("remnawave_manager.update.wait_panel_http"),
                 mock.patch("remnawave_manager.update.check_subscription_http"),
                 mock.patch("remnawave_manager.update.check_subscription_api_scopes"),
                 mock.patch("remnawave_manager.update.test_nginx"),
@@ -586,7 +586,7 @@ class LegacyPanelMigrationTests(unittest.TestCase):
                 mock.patch("remnawave_manager.update.pull_verified", side_effect=fake_pull),
                 mock.patch("remnawave_manager.update.validate_rendered_compose"),
                 mock.patch("remnawave_manager.update.wait_container"),
-                mock.patch("remnawave_manager.update.check_panel_http"),
+                mock.patch("remnawave_manager.update.wait_panel_http"),
                 mock.patch("remnawave_manager.update.restore_backup") as restore,
                 self.assertRaisesRegex(TransactionError, "состояние сервисов восстановлено"),
             ):
@@ -663,7 +663,7 @@ class LegacyPanelMigrationTests(unittest.TestCase):
                 mock.patch("remnawave_manager.update.validate_rendered_compose"),
                 mock.patch("remnawave_manager.update.wait_container"),
                 mock.patch(
-                    "remnawave_manager.update.check_panel_http",
+                    "remnawave_manager.update.wait_panel_http",
                     side_effect=TransactionError("panel health failure"),
                 ),
                 mock.patch("remnawave_manager.update.restore_backup", side_effect=restore) as rollback,
@@ -1092,7 +1092,7 @@ class RollbackServiceStateTests(unittest.TestCase):
         runner.run.side_effect = run
         with (
             mock.patch("remnawave_manager.update.wait_container"),
-            mock.patch("remnawave_manager.update.check_panel_http"),
+            mock.patch("remnawave_manager.update.wait_panel_http"),
             mock.patch(
                 "remnawave_manager.update.check_subscription_http"
             ) as subscription_health,

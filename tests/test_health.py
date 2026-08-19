@@ -16,6 +16,7 @@ from remnawave_manager.health import (
     check_subscription_http,
     wait_container,
     wait_node_runtime,
+    wait_panel_http,
 )
 from remnawave_manager.models import Component, Inventory
 from remnawave_manager.runner import Result
@@ -407,6 +408,54 @@ class PanelHealthTests(unittest.TestCase):
         command = runner.run.call_args.args[0]
         self.assertIn("--noproxy", command)
         self.assertIn("--max-filesize", command)
+
+    def test_retries_until_panel_api_is_ready_after_metrics_health(self) -> None:
+        component = Component("panel", "remnawave", "remnawave")
+        runner = SequenceRunner(
+            [7, 0],
+            [
+                "",
+                json.dumps(
+                    {
+                        "response": {
+                            "isRegisterAllowed": False,
+                            "isLoginAllowed": True,
+                        }
+                    }
+                ),
+            ],
+        )
+        with (
+            mock.patch(
+                "remnawave_manager.health._container_http_url",
+                return_value="http://127.0.0.1:3000/api/auth/status",
+            ),
+            mock.patch(
+                "remnawave_manager.health.time.monotonic",
+                side_effect=[0.0, 0.0],
+            ),
+            mock.patch("remnawave_manager.health.time.sleep") as sleep,
+        ):
+            wait_panel_http(runner, component, timeout=90)  # type: ignore[arg-type]
+
+        self.assertEqual(runner.calls, 2)
+        sleep.assert_called_once_with(3)
+
+    def test_panel_readiness_timeout_preserves_last_error(self) -> None:
+        component = Component("panel", "remnawave", "remnawave")
+        runner = SequenceRunner([7], [""])
+        with (
+            mock.patch(
+                "remnawave_manager.health._container_http_url",
+                return_value="http://127.0.0.1:3000/api/auth/status",
+            ),
+            mock.patch(
+                "remnawave_manager.health.time.monotonic",
+                side_effect=[0.0, 1.0],
+            ),
+            self.assertRaisesRegex(TransactionError, "не стала готова"),
+        ):
+            wait_panel_http(runner, component, timeout=0)  # type: ignore[arg-type]
 
 
 class UnixSocketHealthTests(unittest.TestCase):

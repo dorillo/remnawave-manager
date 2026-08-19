@@ -1524,7 +1524,7 @@ class InstallGeneratorTests(unittest.TestCase):
                 ),
                 mock.patch("remnawave_manager.install.wait_container"),
                 mock.patch("remnawave_manager.install._wait_api_ready"),
-                mock.patch("remnawave_manager.install.check_panel_http"),
+                mock.patch("remnawave_manager.install.wait_panel_http"),
                 mock.patch("remnawave_manager.install.check_subscription_http"),
                 mock.patch("remnawave_manager.install.check_subscription_api_scopes"),
                 mock.patch(

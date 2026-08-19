@@ -9,11 +9,11 @@ from typing import Literal
 from .compose import compose_command
 from .errors import TransactionError, ValidationError
 from .health import (
-    check_panel_http,
     check_subscription_http,
     wait_container,
     wait_for_paths,
     wait_node_runtime,
+    wait_panel_http,
 )
 from .models import Component, Inventory
 from .nginx import test_nginx
@@ -127,7 +127,7 @@ def _verify_started_components(
 
     if inventory.role == "panel":
         if "panel" in names:
-            check_panel_http(runner, _component(inventory, "panel"))
+            wait_panel_http(runner, _component(inventory, "panel"))
         if "subscription" in names:
             check_subscription_http(runner, _component(inventory, "subscription"))
     elif "node" in names:

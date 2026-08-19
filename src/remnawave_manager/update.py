@@ -16,12 +16,12 @@ from .compose import ComposeDocument, compose_command, validate_rendered_compose
 from .envfile import EnvDocument
 from .errors import TransactionError, ValidationError
 from .health import (
-    check_panel_http,
     check_subscription_api_scopes,
     check_subscription_http,
     wait_container,
     wait_for_paths,
     wait_node_runtime,
+    wait_panel_http,
 )
 from .integrity import configuration_drift, snapshot_hashes
 from .journal import TransactionJournal
@@ -214,7 +214,7 @@ def _reconcile_running_services(
             require_health=name in {"database", "panel"},
         )
         if name == "panel":
-            check_panel_http(runner, component)
+            wait_panel_http(runner, component)
         elif name == "subscription":
             check_subscription_http(
                 runner, component, legacy=legacy_subscription
@@ -409,7 +409,7 @@ def update_panel_stack(
             cwd=compose_path.parent,
         )
         wait_container(runner, panel, timeout=600, require_health=True)
-        check_panel_http(runner, panel)
+        wait_panel_http(runner, panel, timeout=180)
 
         subscription = inventory.components["subscription"]
         journal.phase("starting-subscription")
