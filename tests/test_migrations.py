@@ -839,6 +839,63 @@ class LegacyNodeMigrationTests(unittest.TestCase):
             self.assertEqual(env_path.read_bytes(), original_env)
             self.assertFalse((store.paths.state / "active-transaction.json").exists())
 
+    def test_replacement_secret_updates_direct_compose_environment_without_env_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            install_dir = copy_fixture(temporary, "legacy_node_2_8_0")
+            compose_path = install_dir / "docker-compose.yml"
+            compose_path.write_text(
+                compose_path.read_text(encoding="utf-8").replace(
+                    "    env_file: .env\n",
+                    "    environment:\n"
+                    "      - NODE_PORT=2222\n"
+                    "      - SECRET_KEY=legacy.node.secret.must.stay.opaque\n",
+                ),
+                encoding="utf-8",
+            )
+            (install_dir / ".env").unlink()
+            runner = LegacyRunner(install_dir, "legacy_node_2_8_0")
+            store = StateStore(RuntimePaths(Path(temporary) / "runtime"))
+            inventory = adopt(runner, store, directory=install_dir, requested_role="node")
+            if os.name == "posix":
+                for item in inventory.managed_files:
+                    if item.kind in {"compose", "env", "nginx", "secret"}:
+                        Path(item.path).chmod(0o600)
+            backup = BackupResult(Path(temporary) / "pre-node.tar.gz", {})
+
+            with (
+                mock.patch("remnawave_manager.update.create_backup", return_value=backup),
+                mock.patch("remnawave_manager.update.pull_verified", side_effect=fake_pull),
+                mock.patch(
+                    "remnawave_manager.update._node_secret",
+                    return_value="legacy.node.secret.must.stay.opaque",
+                ),
+                mock.patch("remnawave_manager.update.validate_node_secret") as validate_secret,
+                mock.patch("remnawave_manager.update.validate_rendered_compose"),
+                mock.patch("remnawave_manager.update.wait_container"),
+                mock.patch("remnawave_manager.update.wait_node_runtime"),
+                mock.patch("remnawave_manager.update.wait_for_paths"),
+                mock.patch("remnawave_manager.update.adopt"),
+                mock.patch(
+                    "remnawave_manager.update._existing_warp_interfaces",
+                    return_value=set(),
+                ),
+            ):
+                result = update_node(
+                    runner,
+                    store,
+                    panel_3_3_ready=True,
+                    replacement_secret="replacement-node-secret",
+                )
+
+            self.assertEqual(result, backup)
+            validate_secret.assert_called_once_with(
+                runner, TARGET_IMAGES["node"], "replacement-node-secret"
+            )
+            self.assertIn(
+                "      - SECRET_KEY=replacement-node-secret\n",
+                compose_path.read_text(encoding="utf-8"),
+            )
+
     def test_operator_edit_after_manager_write_blocks_automatic_restore(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             _, runner, store, inventory = adopt_fixture(

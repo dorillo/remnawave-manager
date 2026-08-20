@@ -202,6 +202,53 @@ class ComposeDocumentTests(unittest.TestCase):
             original.replace("./logs:/var/log/remnanode:rw", "./logs:/var/log/xray:rw"),
         )
 
+    def test_replaces_secret_key_in_list_environment_without_touching_neighbors(self) -> None:
+        original = (
+            "services:\n"
+            "  remnanode:\n"
+            "    image: remnawave/node:3.3.1\n"
+            "    environment:\n"
+            "      - NODE_PORT=2222\n"
+            "      - SECRET_KEY=old-key # supplied by Panel\n"
+            "      - CUSTOM_NODE_SETTING=preserve\n"
+        )
+        document = ComposeDocument(original)
+
+        document.set_service_environment("remnanode", "SECRET_KEY", "new-key")
+
+        self.assertEqual(
+            document.render(),
+            original.replace("SECRET_KEY=old-key", "SECRET_KEY=new-key"),
+        )
+
+    def test_replaces_secret_key_in_mapping_environment_without_touching_comment(self) -> None:
+        original = (
+            "services:\n"
+            "  remnanode:\n"
+            "    environment:\n"
+            "      NODE_PORT: 2222\n"
+            "      SECRET_KEY: old-key # supplied by Panel\n"
+        )
+        document = ComposeDocument(original)
+
+        document.set_service_environment("remnanode", "SECRET_KEY", "new-key")
+
+        self.assertEqual(
+            document.render(),
+            original.replace("SECRET_KEY: old-key", 'SECRET_KEY: "new-key"'),
+        )
+
+    def test_rejects_environment_without_unambiguous_secret_key(self) -> None:
+        document = ComposeDocument(
+            "services:\n"
+            "  remnanode:\n"
+            "    environment:\n"
+            "      - NODE_PORT=2222\n"
+        )
+
+        with self.assertRaisesRegex(ValidationError, "SECRET_KEY"):
+            document.set_service_environment("remnanode", "SECRET_KEY", "new-key")
+
 
 if __name__ == "__main__":
     unittest.main()

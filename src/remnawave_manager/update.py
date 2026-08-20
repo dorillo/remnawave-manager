@@ -765,11 +765,6 @@ def update_node(
         replacement_secret if replacement_secret is not None else current_secret
     )
     replace_secret = replacement_secret is not None and replacement_secret != current_secret
-    if replace_secret and env_path is None:
-        raise ValidationError(
-            "Новый SECRET_KEY прошёл ввод, но inventory не содержит управляемого env-файла. "
-            "Обновление остановлено до изменений."
-        )
     backup = create_backup(runner, store, reason="pre-node-update", retention=retention)
     journal = TransactionJournal(store, "node-update", backup.path)
     mutation_started = False
@@ -808,7 +803,9 @@ def update_node(
         _require_clean_inventory(inventory)
         running_before = _running_component_services(runner, inventory)
         journal.set_running_services(running_before)
-        ignored_kinds = {"compose", "env"} if replace_secret else {"compose"}
+        ignored_kinds = (
+            {"compose", "env"} if replace_secret and env_path is not None else {"compose"}
+        )
         unchanged_before = snapshot_hashes(inventory, ignore_kinds=ignored_kinds)
         sockets_before = _existing_paths(inventory.xhttp_sockets)
         warp_before = _existing_warp_interfaces(inventory.warp_interfaces)
@@ -821,11 +818,13 @@ def update_node(
             "/var/log/xray",
         )
         if replace_secret:
-            assert env_path is not None
-            replacement_env = EnvDocument.load(env_path)
-            replacement_env.set("SECRET_KEY", json.dumps(selected_secret))
             journal.phase("replacing-node-secret")
-            replacement_env.save(env_path, before_write=mark_env_write)
+            if env_path is not None:
+                replacement_env = EnvDocument.load(env_path)
+                replacement_env.set("SECRET_KEY", json.dumps(selected_secret))
+                replacement_env.save(env_path, before_write=mark_env_write)
+            else:
+                compose.set_service_environment(node.service, "SECRET_KEY", selected_secret)
         validate_rendered_compose(runner, compose_path, compose.render(), env_path)
 
         journal.phase("recreating-node")

@@ -26,6 +26,9 @@ _VOLUME_TARGET = re.compile(
 _LIST_SCALAR = re.compile(
     r"^(?P<prefix> +-[ \t]+)(?P<value>[^#\r\n]*?)(?P<comment>[ \t]+#[^\r\n]*)?(?P<newline>\r\n|\n)?$"
 )
+_MAPPING_SCALAR = re.compile(
+    r"^(?P<prefix> +)(?P<key>[A-Za-z_][A-Za-z0-9_]*):[ \t]*(?P<value>[^#\r\n]*?)(?P<comment>[ \t]+#[^\r\n]*)?(?P<newline>\r\n|\n)?$"
+)
 _MAX_COMPOSE_DOCUMENT_SIZE = 16 * 1024 * 1024
 
 
@@ -217,6 +220,95 @@ class ComposeDocument:
         index, start_at, end_at = replacements[0]
         self.lines[index] = self.lines[index][:start_at] + current + self.lines[index][end_at:]
         return True
+
+    def set_service_environment(self, service: str, key: str, value: str) -> None:
+        """Replace one direct environment value without reformatting the Compose file."""
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
+            raise ValidationError(f"Некорректное имя переменной окружения: {key}")
+        if not isinstance(value, str) or any(
+            ord(character) < 32 or ord(character) == 127 for character in value
+        ):
+            raise ValidationError(f"Некорректное значение переменной окружения {key}.")
+
+        block = self._block(service)
+        direct_keys: list[tuple[int, re.Match[str]]] = []
+        for index in range(block.start + 1, block.end):
+            match = _KEY.match(self.lines[index])
+            if match and len(match.group("indent")) == block.indent + 2:
+                direct_keys.append((index, match))
+        environment_keys = [
+            (index, match)
+            for index, match in direct_keys
+            if match.group("key") == "environment"
+        ]
+        if len(environment_keys) != 1:
+            raise ValidationError(
+                f"Не удалось однозначно определить environment сервиса {service} для {key}."
+            )
+
+        environment_index, environment_match = environment_keys[0]
+        environment_indent = len(environment_match.group("indent"))
+        end = block.end
+        for index in range(environment_index + 1, block.end):
+            line = self.lines[index]
+            if not line.strip() or line.lstrip().startswith("#"):
+                continue
+            if len(line) - len(line.lstrip(" ")) <= environment_indent:
+                end = index
+                break
+
+        entries = [
+            index
+            for index in range(environment_index + 1, end)
+            if self.lines[index].strip() and not self.lines[index].lstrip().startswith("#")
+        ]
+        if not entries:
+            raise ValidationError(
+                f"Environment сервиса {service} пуст или имеет неподдерживаемый формат."
+            )
+
+        first = self.lines[entries[0]]
+        rendered_value = json.dumps(value)
+        if first.lstrip().startswith("-"):
+            matches: list[tuple[int, re.Match[str]]] = []
+            for index in entries:
+                match = _LIST_SCALAR.match(self.lines[index])
+                if not match:
+                    raise ValidationError(
+                        f"Environment сервиса {service} смешивает неподдерживаемые форматы."
+                    )
+                raw = self._unquoted(match.group("value"))
+                if raw.startswith(key + "="):
+                    matches.append((index, match))
+            if len(matches) != 1:
+                raise ValidationError(
+                    f"Не удалось однозначно определить {key} в environment сервиса {service}."
+                )
+            index, match = matches[0]
+            self.lines[index] = (
+                f"{match.group('prefix')}{key}={value}{match.group('comment') or ''}"
+                f"{match.group('newline') or ''}"
+            )
+            return
+
+        matches = []
+        for index in entries:
+            match = _MAPPING_SCALAR.match(self.lines[index])
+            if not match:
+                raise ValidationError(
+                    f"Environment сервиса {service} смешивает неподдерживаемые форматы."
+                )
+            if match.group("key") == key:
+                matches.append((index, match))
+        if len(matches) != 1:
+            raise ValidationError(
+                f"Не удалось однозначно определить {key} в environment сервиса {service}."
+            )
+        index, match = matches[0]
+        self.lines[index] = (
+            f"{match.group('prefix')}{key}: {rendered_value}{match.group('comment') or ''}"
+            f"{match.group('newline') or ''}"
+        )
 
     @staticmethod
     def _unquoted(value: str) -> str:
