@@ -18,7 +18,7 @@ from remnawave_manager.backup_schedule import BackupSchedule
 from remnawave_manager.certificates import CertbotRenewalPlan, IssuedCertificate
 from remnawave_manager.cli import build_parser, main
 from remnawave_manager.errors import ValidationError
-from remnawave_manager.host import HostStatus
+from remnawave_manager.host import HostStatus, OperatingSystemUpdate
 from remnawave_manager.install import NodeInstallResult
 from remnawave_manager.models import Component, Inventory
 from remnawave_manager.paths import RuntimePaths
@@ -146,11 +146,14 @@ class CliParserTests(unittest.TestCase):
 
     def test_system_and_maintenance_parsers(self) -> None:
         system = build_parser().parse_args(["system", "status"])
+        system_update = build_parser().parse_args(["system", "update", "--yes"])
         maintenance = build_parser().parse_args(
             ["maintenance", "archive-stack", "--yes"]
         )
 
         self.assertEqual(system.handler, "system-status")
+        self.assertEqual(system_update.handler, "system-update")
+        self.assertTrue(system_update.yes)
         self.assertEqual(maintenance.handler, "maintenance-archive-stack")
         self.assertTrue(maintenance.yes)
 
@@ -651,6 +654,20 @@ class CliDispatchTests(unittest.TestCase):
         self.assertEqual(code, 0, self.stderr.getvalue())
         update.assert_called_once()
         self.assertIn("следующий запуск использует новую версию", self.stdout.getvalue())
+
+    def test_interactive_ubuntu_section_can_update_packages(self) -> None:
+        with (
+            mock.patch(
+                "remnawave_manager.cli.update_operating_system",
+                return_value=OperatingSystemUpdate(reboot_required=False),
+            ) as update,
+            mock.patch("remnawave_manager.cli.assert_no_active_certbot_renewal"),
+        ):
+            code = self.run_main([], answers=["15", "3", "y", "0", "0"])
+
+        self.assertEqual(code, 0, self.stderr.getvalue())
+        update.assert_called_once_with(mock.ANY, self.paths)
+        self.assertIn("Обновление пакетов Ubuntu завершено", self.stdout.getvalue())
 
     def test_interactive_menu_redraws_only_on_a_real_terminal(self) -> None:
         class TerminalBuffer(io.StringIO):
@@ -1182,6 +1199,20 @@ class CliDispatchTests(unittest.TestCase):
         self.assertEqual(code, 0, self.stderr.getvalue())
         require_root.assert_not_called()
         self.assertIn("BBR: включён", self.stdout.getvalue())
+
+    def test_system_update_emits_machine_readable_reboot_status(self) -> None:
+        with mock.patch(
+            "remnawave_manager.cli.update_operating_system",
+            return_value=OperatingSystemUpdate(reboot_required=True),
+        ) as update:
+            code = self.run_main(["--json", "system", "update", "--yes"])
+
+        self.assertEqual(code, 0, self.stderr.getvalue())
+        self.assertEqual(
+            json.loads(self.stdout.getvalue()),
+            {"reboot_required": True, "status": "updated"},
+        )
+        update.assert_called_once_with(mock.ANY, self.paths)
 
     def test_backup_schedule_enable_delegates_validated_values(self) -> None:
         status = BackupSchedule(True, True, "weekly", "03:15", 12, None)

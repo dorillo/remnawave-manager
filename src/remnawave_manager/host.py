@@ -29,6 +29,21 @@ _APT_CONFIG = (
 _APT_TIMER_UNITS = ("apt-daily.timer", "apt-daily-upgrade.timer")
 _UNATTENDED_UNIT = "unattended-upgrades.service"
 _MAX_HOST_CONFIG_SIZE = 1024 * 1024
+_APT_ENVIRONMENT_KEYS = {
+    "ALL_PROXY",
+    "HTTPS_PROXY",
+    "HTTP_PROXY",
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+    "NO_PROXY",
+    "SSL_CERT_DIR",
+    "SSL_CERT_FILE",
+    "all_proxy",
+    "http_proxy",
+    "https_proxy",
+    "no_proxy",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +58,14 @@ class HostStatus:
     apt_upgrade_timer_active: bool
     unattended_service_enabled: bool
     unattended_service_active: bool
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True, slots=True)
+class OperatingSystemUpdate:
+    reboot_required: bool
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -273,6 +296,46 @@ def host_status(runner: Runner, runtime: RuntimePaths) -> HostStatus:
             runner, "is-active", _UNATTENDED_UNIT
         ),
     )
+
+
+def update_operating_system(
+    runner: Runner,
+    runtime: RuntimePaths,
+) -> OperatingSystemUpdate:
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if key in _APT_ENVIRONMENT_KEYS
+    }
+    environment.update(
+        {
+            "APT_LISTCHANGES_FRONTEND": "none",
+            "DEBIAN_FRONTEND": "noninteractive",
+            "NEEDRESTART_MODE": "a",
+        }
+    )
+    lock_options = ["-o", "DPkg::Lock::Timeout=600"]
+    runner.run(
+        ["apt-get", *lock_options, "update"],
+        env=environment,
+        timeout=1800,
+    )
+    runner.run(
+        [
+            "apt-get",
+            *lock_options,
+            "-o",
+            "Dpkg::Options::=--force-confdef",
+            "-o",
+            "Dpkg::Options::=--force-confold",
+            "-y",
+            "full-upgrade",
+        ],
+        env=environment,
+        timeout=7200,
+    )
+    reboot_marker = runtime.root / "var/run/reboot-required"
+    return OperatingSystemUpdate(reboot_required=reboot_marker.is_file())
 
 
 def configure_host(runner: Runner, runtime: RuntimePaths) -> HostStatus:

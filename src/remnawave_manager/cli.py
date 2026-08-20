@@ -48,7 +48,7 @@ from .diagnose import repair_permissions, run_diagnostics
 from .disguise import DISGUISE_TEMPLATE_COUNT, apply_template, template_catalog
 from .errors import ManagerError, TransactionError, ValidationError
 from .firewall import configure_firewall
-from .host import configure_host, host_status
+from .host import configure_host, host_status, update_operating_system
 from .install import (
     NodeInstallOptions,
     PanelInstallOptions,
@@ -814,6 +814,11 @@ def build_parser() -> RussianArgumentParser:
     )
     _add_yes(system_apply)
     system_apply.set_defaults(handler="system-apply")
+    system_update = system_commands.add_parser(
+        "update", help="Установить доступные обновления пакетов Ubuntu."
+    )
+    _add_yes(system_update)
+    system_update.set_defaults(handler="system-update")
 
     maintenance = commands.add_parser(
         "maintenance",
@@ -1779,6 +1784,31 @@ def dispatch(args: argparse.Namespace, context: CliContext) -> int:
             "BBR/fq и автоматические security updates настроены и проверены."
         )
         return 0
+    if handler == "system-update":
+        _confirm(
+            context,
+            "Будут выполнены apt-get update и full-upgrade. Системные сервисы, "
+            "включая Docker, могут быть перезапущены пакетными скриптами; сервер "
+            "автоматически перезагружен не будет.",
+            assume_yes=args.yes,
+        )
+        if not context.json_output:
+            context.write(
+                "Обновляются пакеты Ubuntu. Операция может занять несколько минут..."
+            )
+        result = update_operating_system(context.runner, context.paths)
+        if context.json_output:
+            context.emit({"status": "updated", **result.to_dict()})
+        else:
+            context.write("Обновление пакетов Ubuntu завершено.")
+            if result.reboot_required:
+                context.write(
+                    "Ubuntu сообщает, что требуется перезагрузка сервера. "
+                    "Выполните её вручную в согласованное окно обслуживания."
+                )
+            else:
+                context.write("Перезагрузка сервера сейчас не требуется.")
+        return 0
     if handler == "maintenance-archive-stack":
         _confirm(
             context,
@@ -2484,11 +2514,15 @@ def _interactive_arguments(context: CliContext, section: int) -> list[str] | Non
         action = _choose(
             context,
             "Настройка Ubuntu:",
-            ("Показать состояние", "Включить BBR/fq и security updates"),
+            (
+                "Показать состояние",
+                "Включить BBR/fq и security updates",
+                "Обновить пакеты Ubuntu",
+            ),
         )
         if action == 0:
             return None
-        return ["system", "status" if action == 1 else "apply"]
+        return ["system", ("status", "apply", "update")[action - 1]]
     if section == 16:
         return ["maintenance", "archive-stack"]
     if section == 17:
@@ -2515,7 +2549,7 @@ def interactive_menu(parser: RussianArgumentParser, context: CliContext) -> int:
         "Межсетевой экран UFW",
         "Защитный URL и cookie Panel",
         "Показать inventory",
-        "BBR и автоматические security updates",
+        "Настройка и обновление Ubuntu",
         "Архивировать стек перед удалением или переустановкой",
         "Обновить Remnawave Manager",
     )

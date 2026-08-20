@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,6 +12,7 @@ from remnawave_manager.host import (
     _restore_unit_state,
     configure_host,
     host_status,
+    update_operating_system,
 )
 from remnawave_manager.paths import RuntimePaths
 from remnawave_manager.runner import Result
@@ -33,6 +35,59 @@ def _successful_result(args: list[str]) -> Result:
 
 
 class HostManagementTests(unittest.TestCase):
+    def test_os_update_runs_full_upgrade_noninteractively_and_reports_reboot(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            runtime = RuntimePaths(Path(temporary))
+            marker = runtime.root / "var/run/reboot-required"
+            marker.parent.mkdir(parents=True)
+            marker.write_text("", encoding="utf-8")
+            runner = mock.Mock()
+            runner.run.return_value = Result(("apt-get",), 0, "", "")
+
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "HTTPS_PROXY": "http://proxy.example:3128",
+                    "APT_CONFIG": "/untrusted/apt.conf",
+                    "RWM_API_TOKEN": "must-not-leak",
+                },
+                clear=True,
+            ):
+                result = update_operating_system(runner, runtime)
+
+        self.assertTrue(result.reboot_required)
+        self.assertEqual(runner.run.call_count, 2)
+        update_call, upgrade_call = runner.run.call_args_list
+        self.assertEqual(
+            update_call.args[0],
+            ["apt-get", "-o", "DPkg::Lock::Timeout=600", "update"],
+        )
+        self.assertEqual(upgrade_call.args[0][-2:], ["-y", "full-upgrade"])
+        self.assertIn("Dpkg::Options::=--force-confdef", upgrade_call.args[0])
+        self.assertIn("Dpkg::Options::=--force-confold", upgrade_call.args[0])
+        environment = update_call.kwargs["env"]
+        self.assertEqual(environment, upgrade_call.kwargs["env"])
+        self.assertEqual(environment["DEBIAN_FRONTEND"], "noninteractive")
+        self.assertEqual(environment["NEEDRESTART_MODE"], "a")
+        self.assertEqual(
+            environment["HTTPS_PROXY"], "http://proxy.example:3128"
+        )
+        self.assertNotIn("APT_CONFIG", environment)
+        self.assertNotIn("RWM_API_TOKEN", environment)
+        self.assertEqual(update_call.kwargs["timeout"], 1800)
+        self.assertEqual(upgrade_call.kwargs["timeout"], 7200)
+
+    def test_os_update_stops_if_package_lists_cannot_be_refreshed(self) -> None:
+        runner = mock.Mock()
+        runner.run.side_effect = TransactionError("apt update failed")
+
+        with self.assertRaisesRegex(TransactionError, "apt update failed"):
+            update_operating_system(runner, RuntimePaths(Path("/")))
+
+        runner.run.assert_called_once()
+
     def test_unit_snapshot_accepts_all_restorable_systemd_enablement_states(self) -> None:
         for enabled_state in (
             "enabled",

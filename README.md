@@ -299,6 +299,7 @@ runtime Xray Node, `nginx -t` и сохранённые XHTTP-сокеты. Ош
 | UFW | `sudo rwm firewall status` |
 | BBR и security updates | `sudo rwm system status` |
 | Применить настройку Ubuntu | `sudo rwm system apply` |
+| Обновить пакеты Ubuntu | `sudo rwm system update` |
 | Заглушки | `sudo rwm disguise list` |
 | Защищённый URL Panel | `sudo rwm security access` |
 | Ротация cookie и URL | `sudo rwm security rotate-access` |
@@ -395,6 +396,14 @@ sudo rwm system apply
 ```
 
 Чужие файлы на этих путях не перезаписываются. При ошибке возвращаются исходные файлы, параметры ядра и состояния systemd units.
+
+Доступные обновления Ubuntu устанавливаются отдельно. Команда выполняет `apt-get update` и `apt-get -y full-upgrade` в noninteractive-режиме, сохраняет текущие версии изменённых conffile и может перезапустить системные сервисы, включая Docker, через штатные пакетные скрипты. Remnawave-контейнеры менеджер самостоятельно не останавливает, а сервер автоматически не перезагружает:
+
+```bash
+sudo rwm system update
+```
+
+Если после обновления существует `/var/run/reboot-required`, менеджер явно попросит выполнить перезагрузку вручную в согласованное окно обслуживания.
 
 ## Удаление и переустановка стека
 
