@@ -5,7 +5,7 @@ import stat
 import time
 from pathlib import Path
 
-from .errors import TransactionError, ValidationError
+from .errors import NodeSecretValidationError, TransactionError, ValidationError
 from .models import Component, Inventory
 from .runner import Runner, sanitize_external_text
 
@@ -13,6 +13,17 @@ _NODE_SECRET_PROBE = r"""
 import { X509Certificate, createPublicKey } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
+const fail = (code) => {
+    process.stderr.write(`RWM_NODE_SECRET_INVALID:${code}\n`);
+    process.exit(42);
+};
+const check = (code, callback) => {
+    try {
+        return callback();
+    } catch {
+        fail(code);
+    }
+};
 const normalizePem = (pem) => {
     let value = pem.replace(/\\n/g, '\n');
     value = value.replace(/\r\n/g, '\n');
@@ -22,22 +33,36 @@ const normalizePem = (pem) => {
     return value.trim();
 };
 const secret = readFileSync(0, 'utf8');
-const parsed = JSON.parse(Buffer.from(secret, 'base64').toString('utf8'));
+const parsed = check('payload', () => JSON.parse(Buffer.from(secret, 'base64').toString('utf8')));
 const fields = ['caCertPem', 'jwtPublicKey', 'nodeCertPem', 'nodeKeyPem'];
 if (!parsed || typeof parsed !== 'object' || fields.some((key) => typeof parsed[key] !== 'string')) {
-    throw new Error('invalid SECRET_KEY payload structure');
+    fail('payload');
 }
-const ca = new X509Certificate(normalizePem(parsed.caCertPem));
-const node = new X509Certificate(normalizePem(parsed.nodeCertPem));
+const ca = check('ca-parse', () => new X509Certificate(normalizePem(parsed.caCertPem)));
+const node = check('node-parse', () => new X509Certificate(normalizePem(parsed.nodeCertPem)));
 const now = new Date();
-if (new Date(ca.validFrom) > now || new Date(ca.validTo) < now) throw new Error('CA is not valid now');
-if (!ca.verify(ca.publicKey)) throw new Error('CA self-signature mismatch');
-if (!node.verify(ca.publicKey)) throw new Error('node certificate is not signed by CA');
+if (new Date(ca.validFrom) > now || new Date(ca.validTo) < now) fail('ca-time');
+if (!check('ca-signature', () => ca.verify(ca.publicKey))) fail('ca-signature');
+if (!check('node-signature', () => node.verify(ca.publicKey))) fail('node-signature');
 const certKey = node.publicKey.export({ type: 'spki', format: 'der' });
-const privateKey = createPublicKey(normalizePem(parsed.nodeKeyPem)).export({ type: 'spki', format: 'der' });
-if (!certKey.equals(privateKey)) throw new Error('node key does not match certificate');
-createPublicKey(normalizePem(parsed.jwtPublicKey));
+const privateKey = check('node-key', () =>
+    createPublicKey(normalizePem(parsed.nodeKeyPem)).export({ type: 'spki', format: 'der' })
+);
+if (!certKey.equals(privateKey)) fail('node-key');
+check('jwt-key', () => createPublicKey(normalizePem(parsed.jwtPublicKey)));
+process.stdout.write('RWM_NODE_SECRET_OK\n');
 """
+
+_NODE_SECRET_FAILURES = {
+    "payload": "некорректная структура или кодировка payload",
+    "ca-parse": "сертификат CA не удалось прочитать",
+    "ca-time": "сертификат CA ещё не действует или уже истёк",
+    "ca-signature": "самоподпись CA некорректна",
+    "node-parse": "сертификат Node не удалось прочитать",
+    "node-signature": "сертификат Node не подписан указанным CA",
+    "node-key": "приватный ключ Node не соответствует сертификату",
+    "jwt-key": "публичный JWT-ключ некорректен",
+}
 
 
 def wait_container(
@@ -548,11 +573,27 @@ def validate_node_secret(runner: Runner, image: str, secret: str) -> None:
         sensitive=True,
         timeout=60,
     )
+    marker = "RWM_NODE_SECRET_INVALID:"
+    failure_code = next(
+        (
+            line.removeprefix(marker).strip()
+            for line in (result.stderr + "\n" + result.stdout).splitlines()
+            if line.startswith(marker)
+        ),
+        None,
+    )
+    if result.returncode != 0 and failure_code in _NODE_SECRET_FAILURES:
+        raise NodeSecretValidationError(
+            "SECRET_KEY отклонён валидатором Node 3.3.2: "
+            + _NODE_SECRET_FAILURES[failure_code]
+            + ". Получите новый SECRET_KEY в обновлённой Panel через /api/keygen. "
+            "Текущий образ Node не переключён."
+        )
     if result.returncode != 0:
-        raise ValidationError(
-            "SECRET_KEY не прошёл строгую проверку Node 3.3.2: проверьте CA, "
-            "срок действия и соответствие сертификата приватному ключу. "
-            "Образ Node не переключён."
+        raise TransactionError(
+            "Не удалось выполнить изолированный валидатор SECRET_KEY в образе Node 3.3.2. "
+            "Это ошибка запуска preflight, а не подтверждение повреждения ключа; "
+            "текущий образ Node не переключён."
         )
 
 

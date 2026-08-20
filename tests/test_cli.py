@@ -14,10 +14,11 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from remnawave_manager.api import ProvisionedReality
+from remnawave_manager.backup import BackupResult
 from remnawave_manager.backup_schedule import BackupSchedule
 from remnawave_manager.certificates import CertbotRenewalPlan, IssuedCertificate
 from remnawave_manager.cli import build_parser, main
-from remnawave_manager.errors import ValidationError
+from remnawave_manager.errors import NodeSecretValidationError, ValidationError
 from remnawave_manager.host import HostStatus, OperatingSystemUpdate
 from remnawave_manager.install import NodeInstallResult
 from remnawave_manager.models import Component, Inventory
@@ -590,6 +591,85 @@ class CliDispatchTests(unittest.TestCase):
         self.assertEqual(code, 2)
         update.assert_not_called()
         self.assertIn("отменена", self.stderr.getvalue())
+
+    def test_node_update_retries_with_validated_replacement_secret(self) -> None:
+        backup = BackupResult(Path(self.temporary.name) / "pre-node.tar.gz", {})
+        with (
+            mock.patch(
+                "remnawave_manager.cli.StateStore.load_inventory",
+                return_value=inventory("node"),
+            ),
+            mock.patch("remnawave_manager.cli.assert_no_active_certbot_renewal"),
+            mock.patch(
+                "remnawave_manager.cli.update_node",
+                side_effect=[
+                    NodeSecretValidationError("old SECRET_KEY rejected"),
+                    backup,
+                ],
+            ) as update,
+        ):
+            code = self.run_main(
+                ["update", "--yes", "--panel-3-3-ready"],
+                secrets=["replacement-node-secret"],
+            )
+
+        self.assertEqual(code, 0, self.stderr.getvalue())
+        self.assertEqual(update.call_count, 2)
+        self.assertNotIn("replacement-node-secret", self.stdout.getvalue())
+        self.assertNotIn("replacement-node-secret", self.stderr.getvalue())
+        self.assertEqual(
+            update.call_args_list[1].kwargs["replacement_secret"],
+            "replacement-node-secret",
+        )
+
+    def test_json_node_update_requires_replacement_secret_on_retry(self) -> None:
+        with (
+            mock.patch(
+                "remnawave_manager.cli.StateStore.load_inventory",
+                return_value=inventory("node"),
+            ),
+            mock.patch("remnawave_manager.cli.assert_no_active_certbot_renewal"),
+            mock.patch(
+                "remnawave_manager.cli.update_node",
+                side_effect=NodeSecretValidationError("old SECRET_KEY rejected"),
+            ) as update,
+        ):
+            code = self.run_main(["--json", "update", "--yes"])
+
+        self.assertEqual(code, 2)
+        update.assert_called_once()
+        self.assertIn("RWM_NODE_SECRET_KEY", self.stderr.getvalue())
+
+    def test_json_node_update_uses_replacement_secret_from_environment(self) -> None:
+        backup = BackupResult(Path(self.temporary.name) / "pre-node.tar.gz", {})
+        with (
+            mock.patch.dict(
+                os.environ,
+                {"RWM_NODE_SECRET_KEY": "replacement-node-secret"},
+                clear=False,
+            ),
+            mock.patch(
+                "remnawave_manager.cli.StateStore.load_inventory",
+                return_value=inventory("node"),
+            ),
+            mock.patch("remnawave_manager.cli.assert_no_active_certbot_renewal"),
+            mock.patch(
+                "remnawave_manager.cli.update_node",
+                side_effect=[
+                    NodeSecretValidationError("old SECRET_KEY rejected"),
+                    backup,
+                ],
+            ) as update,
+        ):
+            code = self.run_main(["--json", "update", "--yes"])
+
+        self.assertEqual(code, 0, self.stderr.getvalue())
+        self.assertEqual(
+            update.call_args_list[1].kwargs["replacement_secret"],
+            "replacement-node-secret",
+        )
+        self.assertNotIn("RWM_NODE_SECRET_KEY", os.environ)
+        self.assertNotIn("replacement-node-secret", self.stdout.getvalue())
 
     def test_warp_plus_key_comes_only_from_environment(self) -> None:
         with (

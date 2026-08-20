@@ -46,7 +46,12 @@ from .certificates import (
 from .compose import inspect_compose
 from .diagnose import repair_permissions, run_diagnostics
 from .disguise import DISGUISE_TEMPLATE_COUNT, apply_template, template_catalog
-from .errors import ManagerError, TransactionError, ValidationError
+from .errors import (
+    ManagerError,
+    NodeSecretValidationError,
+    TransactionError,
+    ValidationError,
+)
 from .firewall import configure_firewall
 from .host import configure_host, host_status, update_operating_system
 from .install import (
@@ -434,6 +439,10 @@ def build_parser() -> RussianArgumentParser:
         "--accept-unknown-source",
         action="store_true",
         help="Разрешить обновление, если digest исходного релиза не удалось определить.",
+    )
+    update.epilog = (
+        "Если текущий SECRET_KEY несовместим с Node 3.3.2, менеджер запросит новый "
+        "ключ из Panel API. Для автоматизации задайте его через RWM_NODE_SECRET_KEY."
     )
     _add_yes(update)
     update.set_defaults(handler="update")
@@ -1138,21 +1147,50 @@ def dispatch(args: argparse.Namespace, context: CliContext) -> int:
             "Перед обновлением Node 3.3.2 сначала обновите Panel как минимум до 3.3.0: эта версия Node принимает API-соединения только с производным SNI, которое отправляет Panel 3.3.x."
         )
         _confirm(context, warning, assume_yes=args.yes)
-        result = (
-            update_panel_stack(
+        if inventory.role == "panel":
+            result = update_panel_stack(
                 context.runner,
                 context.store,
                 accept_unknown_source=args.accept_unknown_source,
             )
-            if inventory.role == "panel"
-            else update_node(
-                context.runner,
-                context.store,
-                panel_3_3_ready=args.panel_3_3_ready,
-                accept_reality_client_risk=args.accept_reality_client_risk,
-                accept_unknown_source=args.accept_unknown_source,
-            )
-        )
+        else:
+            update_options = {
+                "panel_3_3_ready": args.panel_3_3_ready,
+                "accept_reality_client_risk": args.accept_reality_client_risk,
+                "accept_unknown_source": args.accept_unknown_source,
+            }
+            try:
+                result = update_node(
+                    context.runner,
+                    context.store,
+                    **update_options,
+                )
+            except NodeSecretValidationError:
+                replacement_secret = _optional_environment_secret(
+                    "RWM_NODE_SECRET_KEY"
+                )
+                if replacement_secret is None:
+                    if context.json_output:
+                        raise ValidationError(
+                            "Текущий SECRET_KEY несовместим с Node 3.3.2. "
+                            "Задайте новый ключ через RWM_NODE_SECRET_KEY и повторите команду."
+                        )
+                    context.write(
+                        "Текущий SECRET_KEY не совместим с Node 3.3.2. Получите новый "
+                        "ключ в Panel через API /api/keygen или в настройках Node, затем "
+                        "введите его ниже."
+                    )
+                    replacement_secret = _required_secret(
+                        context,
+                        "RWM_NODE_SECRET_KEY",
+                        "Новый SECRET_KEY Node: ",
+                    )
+                result = update_node(
+                    context.runner,
+                    context.store,
+                    replacement_secret=replacement_secret,
+                    **update_options,
+                )
         if context.json_output:
             context.emit(result)
         else:

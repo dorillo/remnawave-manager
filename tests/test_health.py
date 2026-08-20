@@ -6,7 +6,11 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from remnawave_manager.errors import TransactionError, ValidationError
+from remnawave_manager.errors import (
+    NodeSecretValidationError,
+    TransactionError,
+    ValidationError,
+)
 from remnawave_manager.health import (
     _container_http_url,
     _missing_unix_sockets,
@@ -74,7 +78,9 @@ class NodeSecretValidationTests(unittest.TestCase):
     def test_secret_is_base64_decoded_from_stdin_in_isolated_image(self) -> None:
         secret = "eyJjYUNlcnRQZW0iOiJzZW5zaXRpdmUifQ=="
         runner = mock.Mock()
-        runner.run.return_value = Result(("docker", "run"), 0, "", "")
+        runner.run.return_value = Result(
+            ("docker", "run"), 0, "RWM_NODE_SECRET_OK\n", ""
+        )
 
         validate_node_secret(runner, "remnawave/node:3.3.2@sha256:verified", secret)
 
@@ -91,11 +97,23 @@ class NodeSecretValidationTests(unittest.TestCase):
         self.assertTrue(options["sensitive"])
         self.assertNotIn("env", options)
 
-    def test_failed_secret_validation_stops_update(self) -> None:
+    def test_node_rejection_is_distinguished_from_preflight_failure(self) -> None:
         runner = mock.Mock()
-        runner.run.return_value = Result(("docker", "run"), 1, "", "invalid")
+        runner.run.return_value = Result(
+            ("docker", "run"),
+            42,
+            "",
+            "RWM_NODE_SECRET_INVALID:node-key\n",
+        )
 
-        with self.assertRaisesRegex(ValidationError, "SECRET_KEY"):
+        with self.assertRaisesRegex(NodeSecretValidationError, "приватный ключ"):
+            validate_node_secret(runner, "remnawave/node:3.3.2", "dmFsaWQ=")
+
+    def test_preflight_launch_failure_is_not_reported_as_invalid_key(self) -> None:
+        runner = mock.Mock()
+        runner.run.return_value = Result(("docker", "run"), 125, "", "docker unavailable")
+
+        with self.assertRaisesRegex(TransactionError, "ошибка запуска preflight"):
             validate_node_secret(runner, "remnawave/node:3.3.2", "dmFsaWQ=")
 
     def test_rejects_control_characters_without_running_image(self) -> None:

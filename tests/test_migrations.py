@@ -804,6 +804,41 @@ class LegacyNodeMigrationTests(unittest.TestCase):
             )
             self.assertFalse((store.paths.state / "active-transaction.json").exists())
 
+    def test_replacement_secret_is_checked_before_env_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            install_dir, runner, store, inventory = adopt_fixture(
+                temporary, "legacy_node_2_8_0"
+            )
+            env_path = install_dir / ".env"
+            original_env = env_path.read_bytes()
+            backup = BackupResult(Path(temporary) / "pre-node.tar.gz", {})
+
+            with (
+                mock.patch(
+                    "remnawave_manager.update.create_backup", return_value=backup
+                ),
+                mock.patch(
+                    "remnawave_manager.update.pull_verified", side_effect=fake_pull
+                ),
+                mock.patch(
+                    "remnawave_manager.update.validate_node_secret",
+                    side_effect=ValidationError("replacement SECRET_KEY rejected"),
+                ) as validate_secret,
+                self.assertRaisesRegex(ValidationError, "replacement SECRET_KEY"),
+            ):
+                update_node(
+                    runner,
+                    store,
+                    panel_3_3_ready=True,
+                    replacement_secret="replacement-node-secret",
+                )
+
+            validate_secret.assert_called_once_with(
+                runner, TARGET_IMAGES["node"], "replacement-node-secret"
+            )
+            self.assertEqual(env_path.read_bytes(), original_env)
+            self.assertFalse((store.paths.state / "active-transaction.json").exists())
+
     def test_operator_edit_after_manager_write_blocks_automatic_restore(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             _, runner, store, inventory = adopt_fixture(

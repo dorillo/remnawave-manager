@@ -600,10 +600,11 @@ def _preflight_node_config(
     runner: Runner,
     inventory: Inventory,
     image: str,
+    secret: str,
     *,
     accept_reality_client_risk: bool,
 ) -> None:
-    validate_node_secret(runner, image, _node_secret(runner, inventory))
+    validate_node_secret(runner, image, secret)
     config, path = _dump_node_config(runner, inventory)
     primary_error: BaseException | None = None
     try:
@@ -737,6 +738,7 @@ def update_node(
     panel_3_3_ready: bool = False,
     accept_reality_client_risk: bool = False,
     accept_unknown_source: bool = False,
+    replacement_secret: str | None = None,
 ) -> BackupResult:
     inventory = store.load_inventory()
     if inventory.role != "node" or "node" not in inventory.components:
@@ -758,6 +760,16 @@ def update_node(
     registry, retention = _settings(store)
     compose_path = Path(inventory.compose_file)
     env_path = Path(inventory.env_file) if inventory.env_file else None
+    current_secret = _node_secret(runner, inventory)
+    selected_secret = (
+        replacement_secret if replacement_secret is not None else current_secret
+    )
+    replace_secret = replacement_secret is not None and replacement_secret != current_secret
+    if replace_secret and env_path is None:
+        raise ValidationError(
+            "Новый SECRET_KEY прошёл ввод, но inventory не содержит управляемого env-файла. "
+            "Обновление остановлено до изменений."
+        )
     backup = create_backup(runner, store, reason="pre-node-update", retention=retention)
     journal = TransactionJournal(store, "node-update", backup.path)
     mutation_started = False
@@ -771,6 +783,17 @@ def update_node(
             compose.render().encode("utf-8")
         ).hexdigest()
 
+    def mark_env_write() -> None:
+        nonlocal mutation_started
+        if env_path is None or replacement_env is None:
+            raise TransactionError("Не удалось подготовить замену SECRET_KEY в env-файле.")
+        mutation_started = True
+        manager_hashes[_managed_key(env_path)] = hashlib.sha256(
+            replacement_env.render().encode("utf-8")
+        ).hexdigest()
+
+    replacement_env: EnvDocument | None = None
+
     try:
         journal.phase("pulling-image")
         image = pull_verified(runner, "node", registry)
@@ -778,13 +801,15 @@ def update_node(
             runner,
             inventory,
             image,
+            selected_secret,
             accept_reality_client_risk=accept_reality_client_risk,
         )
 
         _require_clean_inventory(inventory)
         running_before = _running_component_services(runner, inventory)
         journal.set_running_services(running_before)
-        unchanged_before = snapshot_hashes(inventory, ignore_kinds={"compose"})
+        ignored_kinds = {"compose", "env"} if replace_secret else {"compose"}
+        unchanged_before = snapshot_hashes(inventory, ignore_kinds=ignored_kinds)
         sockets_before = _existing_paths(inventory.xhttp_sockets)
         warp_before = _existing_warp_interfaces(inventory.warp_interfaces)
         node = inventory.components["node"]
@@ -795,6 +820,12 @@ def update_node(
             "/var/log/remnanode",
             "/var/log/xray",
         )
+        if replace_secret:
+            assert env_path is not None
+            replacement_env = EnvDocument.load(env_path)
+            replacement_env.set("SECRET_KEY", json.dumps(selected_secret))
+            journal.phase("replacing-node-secret")
+            replacement_env.save(env_path, before_write=mark_env_write)
         validate_rendered_compose(runner, compose_path, compose.render(), env_path)
 
         journal.phase("recreating-node")
@@ -815,10 +846,16 @@ def update_node(
         wait_node_runtime(runner, inventory)
         wait_for_paths(sockets_before)
 
-        unchanged_after = snapshot_hashes(inventory, ignore_kinds={"compose"})
+        unchanged_after = snapshot_hashes(inventory, ignore_kinds=ignored_kinds)
         changed = [path for path, digest in unchanged_before.items() if unchanged_after.get(path) != digest]
         if changed:
             raise TransactionError("Node update изменила защищённые файлы: " + ", ".join(changed))
+        if replace_secret and env_path is not None:
+            persisted_secret = EnvDocument.load(env_path).effective_value("SECRET_KEY")
+            if persisted_secret != selected_secret:
+                raise TransactionError(
+                    "После запуска Node новый SECRET_KEY не сохранился в env-файле."
+                )
         missing_warp = sorted(warp_before - _existing_warp_interfaces(warp_before))
         if missing_warp:
             raise TransactionError("После Node update пропал WARP-интерфейс: " + ", ".join(missing_warp))

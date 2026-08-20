@@ -12,7 +12,7 @@
 
 Для Panel 3.3.2 проверены официальные release notes и diff backend с 3.3.0: обязательные `.env`, Compose и API-контракты не изменились, multiarch manifest digest закреплён в Docker Hub/GHCR. Изменения 3.3.1-3.3.2 относятся к Torrent Blocker, сортировке Node Plugins и ссылкам UI; отдельная ручная миграция конфигурации или схемы базы не требуется.
 
-Node 3.3.2 сохраняет API за производным SNI, введённым в 3.3.0. Panel не ниже 3.3.0 вычисляет и отправляет этот SNI, поэтому Node обновляется только после Panel; CLI требует явное `--panel-3-3-ready` при переходе со старой Node. Перед переключением менеджер новым образом проверяет строгий контракт `SECRET_KEY` 3.3.2 и текущий Xray JSON.
+Node 3.3.2 сохраняет API за производным SNI, введённым в 3.3.0. Panel не ниже 3.3.0 вычисляет и отправляет этот SNI, поэтому Node обновляется только после Panel; CLI требует явное `--panel-3-3-ready` при переходе со старой Node. Перед переключением менеджер новым образом проверяет строгий контракт `SECRET_KEY` 3.3.2 и текущий Xray JSON. Если старый ключ несовместим, интерактивное обновление запросит новый ключ из Panel и проверит его до изменения `.env` или Compose.
 
 | Компонент | Проверенная исходная версия | Целевая версия |
 | --- | --- | --- |
@@ -341,7 +341,7 @@ sudo rwm disguise apply 03-morrow-coffee
 | Переменная | Назначение |
 | --- | --- |
 | `RWM_ADMIN_PASSWORD` | собственный пароль при чистой установке Panel |
-| `RWM_NODE_SECRET_KEY` | `SECRET_KEY` чистой установки Node |
+| `RWM_NODE_SECRET_KEY` | `SECRET_KEY` чистой установки Node или замены несовместимого ключа при `rwm update` |
 | `RWM_REGISTRY_PASSWORD` | пароль или access token Docker Registry |
 | `RWM_CLOUDFLARE_TOKEN` | Cloudflare API Token для DNS-01 |
 | `RWM_GCORE_TOKEN` | Gcore API Token для DNS-01 |
