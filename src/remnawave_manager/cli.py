@@ -1219,7 +1219,9 @@ def dispatch(args: argparse.Namespace, context: CliContext) -> int:
                         "Admin API token Panel: ",
                     )
                     cookies = parse_panel_cookies(
-                        _optional_environment_secret("RWM_PANEL_COOKIES_JSON")
+                        context.secret_fn(
+                            "Cookie JSON Panel (Enter, если cookie-gate не используется): "
+                        )
                     )
                     api_options = {"cookies": cookies} if cookies else {}
                     replacement_secret = RemnawaveApi(base_url, **api_options).keygen(token)

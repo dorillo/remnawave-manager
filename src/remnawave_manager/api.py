@@ -124,16 +124,16 @@ def parse_panel_cookies(value: str | None) -> dict[str, str]:
     if value is None or value == "":
         return {}
     if not isinstance(value, str) or len(value) > 16_384:
-        raise ValidationError("RWM_PANEL_COOKIES_JSON имеет небезопасный формат.")
+        raise ValidationError("Cookie Panel имеет небезопасный формат.")
     try:
         parsed = json.loads(value, parse_constant=_reject_json_constant)
     except (TypeError, ValueError, json.JSONDecodeError) as error:
         raise ValidationError(
-            "RWM_PANEL_COOKIES_JSON должен быть JSON-объектом cookie name/value."
+            "Cookie Panel должна быть JSON-объектом cookie name/value."
         ) from error
     if not isinstance(parsed, dict) or not parsed:
         raise ValidationError(
-            "RWM_PANEL_COOKIES_JSON должен быть непустым JSON-объектом cookie name/value."
+            "Cookie Panel должна быть непустым JSON-объектом cookie name/value."
         )
     cookies: dict[str, str] = {}
     for name, cookie_value in parsed.items():
@@ -143,7 +143,7 @@ def parse_panel_cookies(value: str | None) -> dict[str, str]:
             or not _COOKIE_NAME.fullmatch(name)
             or not _COOKIE_VALUE.fullmatch(cookie_value)
         ):
-            raise ValidationError("RWM_PANEL_COOKIES_JSON содержит недопустимую cookie.")
+            raise ValidationError("Cookie Panel содержит недопустимую cookie.")
         cookies[name] = cookie_value
     return cookies
 

@@ -694,7 +694,7 @@ class CliDispatchTests(unittest.TestCase):
             code = self.run_main(
                 ["update", "--yes"],
                 answers=["y", "https://panel.example.com"],
-                secrets=["copied-node-secret", "admin-api-token"],
+                secrets=["copied-node-secret", "admin-api-token", ""],
             )
 
         self.assertEqual(code, 0, self.stderr.getvalue())
@@ -707,16 +707,11 @@ class CliDispatchTests(unittest.TestCase):
         self.assertNotIn("admin-api-token", output)
         self.assertNotIn("api-node-secret", output)
 
-    def test_node_update_passes_panel_cookie_gate_to_keygen_api(self) -> None:
+    def test_node_update_prompts_for_panel_cookie_gate_for_keygen_api(self) -> None:
         backup = BackupResult(Path(self.temporary.name) / "pre-node.tar.gz", {})
         api = mock.Mock()
         api.keygen.return_value = "api-node-secret"
         with (
-            mock.patch.dict(
-                os.environ,
-                {'RWM_PANEL_COOKIES_JSON': '{"rwm_access":"cookie-value"}'},
-                clear=False,
-            ),
             mock.patch(
                 "remnawave_manager.cli.StateStore.load_inventory",
                 return_value=inventory("node"),
@@ -735,14 +730,17 @@ class CliDispatchTests(unittest.TestCase):
             code = self.run_main(
                 ["update", "--yes"],
                 answers=["y", "https://panel.example.com"],
-                secrets=["copied-node-secret", "admin-api-token"],
+                secrets=[
+                    "copied-node-secret",
+                    "admin-api-token",
+                    '{"rwm_access":"cookie-value"}',
+                ],
             )
 
         self.assertEqual(code, 0, self.stderr.getvalue())
         api_type.assert_called_once_with(
             "https://panel.example.com", cookies={"rwm_access": "cookie-value"}
         )
-        self.assertNotIn("RWM_PANEL_COOKIES_JSON", os.environ)
 
     def test_warp_plus_key_comes_only_from_environment(self) -> None:
         with (

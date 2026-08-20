@@ -342,7 +342,6 @@ sudo rwm disguise apply 03-morrow-coffee
 | --- | --- |
 | `RWM_ADMIN_PASSWORD` | собственный пароль при чистой установке Panel |
 | `RWM_NODE_SECRET_KEY` | `SECRET_KEY` чистой установки Node или замены несовместимого ключа при `rwm update` |
-| `RWM_PANEL_COOKIES_JSON` | JSON-объект cookie для запроса менеджера к защищённому Panel API, например `{"rwm_access":"…"}` |
 | `RWM_REGISTRY_PASSWORD` | пароль или access token Docker Registry |
 | `RWM_CLOUDFLARE_TOKEN` | Cloudflare API Token для DNS-01 |
 | `RWM_GCORE_TOKEN` | Gcore API Token для DNS-01 |
