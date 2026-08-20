@@ -120,20 +120,29 @@ def _validated_base_url(value: str) -> str:
 
 
 def parse_panel_cookies(value: str | None) -> dict[str, str]:
-    """Validate an optional JSON object for the Panel reverse-proxy Cookie header."""
+    """Validate optional JSON or ``name=value`` cookies for the Panel API."""
     if value is None or value == "":
         return {}
     if not isinstance(value, str) or len(value) > 16_384:
         raise ValidationError("Cookie Panel имеет небезопасный формат.")
-    try:
-        parsed = json.loads(value, parse_constant=_reject_json_constant)
-    except (TypeError, ValueError, json.JSONDecodeError) as error:
+    selected = value.strip()
+    if selected.startswith("{"):
+        try:
+            parsed = json.loads(selected, parse_constant=_reject_json_constant)
+        except (TypeError, ValueError, json.JSONDecodeError) as error:
+            raise ValidationError(
+                "Cookie Panel должна быть JSON-объектом или строкой name=value."
+            ) from error
+        if not isinstance(parsed, dict) or not parsed:
+            raise ValidationError(
+                "Cookie Panel должна быть непустым JSON-объектом или строкой name=value."
+            )
+    elif "=" in selected:
+        name, cookie_value = selected.split("=", 1)
+        parsed = {name: cookie_value}
+    else:
         raise ValidationError(
-            "Cookie Panel должна быть JSON-объектом cookie name/value."
-        ) from error
-    if not isinstance(parsed, dict) or not parsed:
-        raise ValidationError(
-            "Cookie Panel должна быть непустым JSON-объектом cookie name/value."
+            "Cookie Panel должна быть JSON-объектом или строкой name=value."
         )
     cookies: dict[str, str] = {}
     for name, cookie_value in parsed.items():

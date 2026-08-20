@@ -1220,7 +1220,7 @@ def dispatch(args: argparse.Namespace, context: CliContext) -> int:
                     )
                     cookies = parse_panel_cookies(
                         context.secret_fn(
-                            "Cookie JSON Panel (Enter, если cookie-gate не используется): "
+                            "Cookie Panel (name=value или JSON; Enter, если cookie-gate не используется): "
                         )
                     )
                     api_options = {"cookies": cookies} if cookies else {}

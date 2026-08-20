@@ -269,10 +269,17 @@ class RemnawaveApiHttpTests(unittest.TestCase):
         request = open_request.call_args.args[0]
         self.assertEqual(request.get_header("Cookie"), "rwm_access=cookie-value")
 
+    def test_accepts_single_reverse_proxy_cookie_as_name_value(self) -> None:
+        self.assertEqual(
+            parse_panel_cookies("rwm_access=cookie-value=="),
+            {"rwm_access": "cookie-value=="},
+        )
+
     def test_rejects_invalid_reverse_proxy_cookie_json(self) -> None:
         for value in (
             "[]",
             "{}",
+            "rwm_access",
             '{"rwm_access": 1}',
             '{"bad;name": "value"}',
             '{"rwm_access": "value;injection"}',
