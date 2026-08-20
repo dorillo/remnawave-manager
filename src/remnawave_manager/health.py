@@ -628,6 +628,7 @@ def validate_node_secret(runner: Runner, image: str, secret: str) -> None:
             "docker",
             "run",
             "--rm",
+            "--interactive",
             "--network",
             "none",
             "--read-only",

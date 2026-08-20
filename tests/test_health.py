@@ -99,6 +99,7 @@ class NodeSecretValidationTests(unittest.TestCase):
         command = runner.run.call_args.args[0]
         options = runner.run.call_args.kwargs
         self.assertEqual(command[:3], ["docker", "run", "--rm"])
+        self.assertIn("--interactive", command)
         self.assertIn("--read-only", command)
         self.assertEqual(command[command.index("--network") + 1], "none")
         self.assertEqual(command[command.index("--cap-drop") + 1], "ALL")
