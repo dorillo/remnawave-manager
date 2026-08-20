@@ -401,7 +401,7 @@ def build_parser() -> RussianArgumentParser:
     node.add_argument(
         "--panel-3-3-ready",
         action="store_true",
-        help="Подтвердить, что Panel уже работает на версии 3.3.0.",
+        help="Подтвердить, что Panel уже работает на версии не ниже 3.3.0.",
     )
     source = node.add_mutually_exclusive_group(required=True)
     source.add_argument("--template", choices=DISGUISE_IDS)
@@ -422,7 +422,7 @@ def build_parser() -> RussianArgumentParser:
     update.add_argument(
         "--panel-3-3-ready",
         action="store_true",
-        help="Подтвердить, что Panel уже обновлена до 3.3.0 перед обновлением Node.",
+        help="Подтвердить, что Panel уже обновлена как минимум до 3.3.0 перед обновлением Node.",
     )
     update.add_argument(
         "--accept-reality-client-risk",
@@ -1129,7 +1129,7 @@ def dispatch(args: argparse.Namespace, context: CliContext) -> int:
             "Миграции PostgreSQL откатываются только восстановлением dump."
             if inventory.role == "panel"
             else "Будет создан backup и протестирован текущий Xray-конфиг новым образом Node. "
-            "Перед обновлением Node 3.3.0 сначала обновите Panel до 3.3.0: эта версия Node принимает API-соединения только с производным SNI, которое отправляет Panel 3.3.0."
+            "Перед обновлением Node 3.3.2 сначала обновите Panel как минимум до 3.3.0: эта версия Node принимает API-соединения только с производным SNI, которое отправляет Panel 3.3.x."
         )
         _confirm(context, warning, assume_yes=args.yes)
         result = (
@@ -2123,7 +2123,7 @@ def _interactive_arguments(context: CliContext, section: int) -> list[str] | Non
             catalog[template - 1]["id"],
         ]
         if _yes_no(
-            context, "Panel уже установлена или обновлена до 3.3.0", default=False
+            context, "Panel уже установлена или обновлена как минимум до 3.3.0", default=False
         ):
             result.append("--panel-3-3-ready")
         if not _yes_no(context, "Настроить UFW", default=True):
@@ -2132,7 +2132,7 @@ def _interactive_arguments(context: CliContext, section: int) -> list[str] | Non
     if section == 3:
         result = ["update"]
         if _yes_no(
-            context, "Panel уже обновлена до 3.3.0 и прошла проверку", default=False
+            context, "Panel уже обновлена как минимум до 3.3.0 и прошла проверку", default=False
         ):
             result.append("--panel-3-3-ready")
         if _yes_no(

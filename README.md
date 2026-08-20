@@ -10,15 +10,15 @@
 
 Менеджер никогда не следует плавающему тегу `latest` и не повышает версии только потому, что upstream опубликовал новый релиз. Новая версия становится поддерживаемой после отдельной проверки release notes, миграций, API-контрактов и digest образов, затем явно добавляется в compatibility manifest. Перед production-обновлением новая связка дополнительно проверяется на отдельной Ubuntu 24.04 с копией реальных данных.
 
-Для Panel 3.3.0 проверены официальные release notes и diff backend с 3.2.3: обязательные `.env` и Compose-контракты не изменились, multiarch manifest digest закреплён в Docker Hub/GHCR, а новые Prisma-миграции host mapper, node integrations и shared lists выполняются самим Panel при старте. Отдельная ручная миграция конфигурации или схемы базы не требуется.
+Для Panel 3.3.2 проверены официальные release notes и diff backend с 3.3.0: обязательные `.env`, Compose и API-контракты не изменились, multiarch manifest digest закреплён в Docker Hub/GHCR. Изменения 3.3.1-3.3.2 относятся к Torrent Blocker, сортировке Node Plugins и ссылкам UI; отдельная ручная миграция конфигурации или схемы базы не требуется.
 
-Node 3.3.0 закрывает API за производным SNI. Panel 3.3.0 вычисляет и отправляет этот SNI, поэтому Node обновляется только после Panel; CLI требует явное `--panel-3-3-ready` при переходе со старой Node.
+Node 3.3.2 сохраняет API за производным SNI, введённым в 3.3.0. Panel не ниже 3.3.0 вычисляет и отправляет этот SNI, поэтому Node обновляется только после Panel; CLI требует явное `--panel-3-3-ready` при переходе со старой Node. Перед переключением менеджер новым образом проверяет строгий контракт `SECRET_KEY` 3.3.2 и текущий Xray JSON.
 
 | Компонент | Проверенная исходная версия | Целевая версия |
 | --- | --- | --- |
-| Remnawave Panel | 2.8.1, 3.0.0, 3.1.0, 3.2.0, 3.2.1, 3.2.2, 3.2.3, 3.3.0 | 3.3.0 |
+| Remnawave Panel | 2.8.1, 3.0.0, 3.1.0, 3.2.0, 3.2.1, 3.2.2, 3.2.3, 3.3.0, 3.3.1, 3.3.2 | 3.3.2 |
 | Subscription Page | 7.2.6, 8.0.0 | 8.0.0 |
-| Remnawave Node | 2.8.0, 3.0.0, 3.1.0, 3.1.1, 3.2.0, 3.2.1, 3.2.2, 3.3.0 | 3.3.0 |
+| Remnawave Node | 2.8.0, 3.0.0, 3.1.0, 3.1.1, 3.2.0, 3.2.1, 3.2.2, 3.3.0, 3.3.1, 3.3.2 | 3.3.2 |
 | PostgreSQL | 18.3, 18.4 | 18.4 |
 | `wgcf` | не применяется | 2.2.32 с фиксированным SHA-256 |
 
@@ -135,7 +135,7 @@ sudo rwm install panel \
   --email admin@example.com
 ```
 
-Менеджер установит Panel 3.3.0 и Subscription Page 8.0.0 на одном сервере, настроит nginx, UFW, TLS и защитный URL с cookie. Node при этом не устанавливается.
+Менеджер установит Panel 3.3.2 и Subscription Page 8.0.0 на одном сервере, настроит nginx, UFW, TLS и защитный URL с cookie. Node при этом не устанавливается.
 
 Имя и стойкий пароль администратора генерируются автоматически и показываются один раз. Можно указать `--admin-username` и запросить собственный пароль через `--ask-admin-password`. Передача пароля значением аргумента командной строки не поддерживается.
 
@@ -201,8 +201,8 @@ sudo rwm backup verify /var/backups/remnawave-manager/ИМЯ_BACKUP.tar.gz
 
 Подробные инструкции:
 
-- [обновление Panel до 3.3.0 и Subscription Page 8.0.0](docs/migration-panel-3.2.1-to-3.2.3.md);
-- [обновление Node до 3.3.0](docs/update-node-3.0.0-to-3.1.1.md);
+- [обновление Panel до 3.3.2 и Subscription Page 8.0.0](docs/migration-panel-3.2.1-to-3.2.3.md);
+- [обновление Node до 3.3.2](docs/update-node-3.0.0-to-3.1.1.md);
 - [XHTTP через nginx: уникальный путь и снижение шаблонности](docs/xhttp-nginx-hardening.md);
 - [сохранение XHTTP, stream separation, Яндекс CDN и Beeline CDN](docs/xhttp-yandex-preservation.md);
 - [rollback и аварийное восстановление](docs/rollback-recovery.md).

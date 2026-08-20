@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from remnawave_manager.errors import TransactionError
+from remnawave_manager.errors import TransactionError, ValidationError
 from remnawave_manager.health import (
     _container_http_url,
     _missing_unix_sockets,
@@ -14,6 +14,7 @@ from remnawave_manager.health import (
     check_panel_http,
     check_subscription_api_scopes,
     check_subscription_http,
+    validate_node_secret,
     wait_container,
     wait_node_runtime,
     wait_panel_http,
@@ -67,6 +68,43 @@ class ContainerWaitTests(unittest.TestCase):
         self.assertNotIn("\x1b", message)
         self.assertNotIn("\r", message)
         self.assertNotIn("\u202e", message)
+
+
+class NodeSecretValidationTests(unittest.TestCase):
+    def test_secret_is_base64_decoded_from_stdin_in_isolated_image(self) -> None:
+        secret = "eyJjYUNlcnRQZW0iOiJzZW5zaXRpdmUifQ=="
+        runner = mock.Mock()
+        runner.run.return_value = Result(("docker", "run"), 0, "", "")
+
+        validate_node_secret(runner, "remnawave/node:3.3.2@sha256:verified", secret)
+
+        command = runner.run.call_args.args[0]
+        options = runner.run.call_args.kwargs
+        self.assertEqual(command[:3], ["docker", "run", "--rm"])
+        self.assertIn("--read-only", command)
+        self.assertEqual(command[command.index("--network") + 1], "none")
+        self.assertEqual(command[command.index("--cap-drop") + 1], "ALL")
+        self.assertIn("no-new-privileges", command)
+        self.assertIn("JSON.parse(Buffer.from(secret, 'base64')", command[-1])
+        self.assertNotIn(secret, " ".join(command))
+        self.assertEqual(options["input_text"], secret)
+        self.assertTrue(options["sensitive"])
+        self.assertNotIn("env", options)
+
+    def test_failed_secret_validation_stops_update(self) -> None:
+        runner = mock.Mock()
+        runner.run.return_value = Result(("docker", "run"), 1, "", "invalid")
+
+        with self.assertRaisesRegex(ValidationError, "SECRET_KEY"):
+            validate_node_secret(runner, "remnawave/node:3.3.2", "dmFsaWQ=")
+
+    def test_rejects_control_characters_without_running_image(self) -> None:
+        runner = mock.Mock()
+
+        with self.assertRaisesRegex(ValidationError, "небезопасный формат"):
+            validate_node_secret(runner, "remnawave/node:3.3.2", "secret\n")
+
+        runner.run.assert_not_called()
 
 
 class SubscriptionHealthTests(unittest.TestCase):

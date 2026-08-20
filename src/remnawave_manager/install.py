@@ -24,6 +24,7 @@ from .firewall import FirewallTransaction, apply_firewall_transactional, plan_fi
 from .health import (
     check_subscription_api_scopes,
     check_subscription_http,
+    validate_node_secret,
     wait_container,
     wait_for_paths,
     wait_node_runtime,
@@ -132,7 +133,7 @@ def render_panel_env(environment: PanelEnvironment) -> str:
         + "@remnawave-db:5432/remnawave"
     )
     return (
-        "# Remnawave Panel 3.3.0. Файл содержит секреты.\n"
+        "# Remnawave Panel 3.3.2. Файл содержит секреты.\n"
         "APP_PORT=3000\n"
         "METRICS_PORT=3001\n"
         "API_INSTANCES=1\n"
@@ -183,7 +184,7 @@ def render_subscription_env(api_token: str) -> str:
 def render_node_env(secret_key: str) -> str:
     selected = _secret_value(secret_key, "SECRET_KEY ноды")
     return (
-        "# Remnawave Node 3.3.0. Файл содержит секрет.\n"
+        "# Remnawave Node 3.3.2. Файл содержит секрет.\n"
         "NODE_PORT=2222\n"
         f"SECRET_KEY={_dotenv_value(selected)}\n"
     )
@@ -1003,7 +1004,7 @@ def install_node(
 ) -> NodeInstallResult:
     if not options.panel_3_3_ready:
         raise ValidationError(
-            "Node 3.3.0 требует Panel 3.3.0. Сначала обновите Panel и подтвердите "
+            "Node 3.3.2 требует Panel не ниже 3.3.0. Сначала обновите Panel и подтвердите "
             "совместимость параметром --panel-3-3-ready."
         )
     _preflight(
@@ -1029,6 +1030,7 @@ def install_node(
     )
     registry = str(store.load_settings().get("registry", "docker-hub"))
     node_image = _pull_component_image(runner, "node", registry)
+    validate_node_secret(runner, node_image, options.secret_key)
     _pull_base_images(runner, (NGINX_IMAGE,))
 
     directory = options.install_dir

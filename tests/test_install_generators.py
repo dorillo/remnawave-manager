@@ -64,6 +64,23 @@ def certificate() -> CertificateMaterial:
 
 
 class InstallGeneratorTests(unittest.TestCase):
+    def test_generated_env_comments_match_current_targets(self) -> None:
+        panel = render_panel_env(
+            PanelEnvironment(
+                panel_domain="panel.example.com",
+                subscription_domain="sub.example.com",
+                app_secret="a" * 128,
+                postgres_password="b" * 64,
+                metrics_password="c" * 128,
+                webhook_secret="d" * 64,
+            )
+        )
+
+        self.assertTrue(panel.startswith("# Remnawave Panel 3.3.2."))
+        self.assertTrue(
+            render_node_env("node-secret").startswith("# Remnawave Node 3.3.2.")
+        )
+
     def test_node_install_requires_panel_3_3_confirmation_before_preflight(self) -> None:
         with (
             mock.patch("remnawave_manager.install._preflight") as preflight,

@@ -9,6 +9,36 @@ from .errors import TransactionError, ValidationError
 from .models import Component, Inventory
 from .runner import Runner, sanitize_external_text
 
+_NODE_SECRET_PROBE = r"""
+import { X509Certificate, createPublicKey } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+
+const normalizePem = (pem) => {
+    let value = pem.replace(/\\n/g, '\n');
+    value = value.replace(/\r\n/g, '\n');
+    value = value.replace(/(-----BEGIN [A-Z ]+-----)/g, '$1\n');
+    value = value.replace(/(-----END [A-Z ]+-----)/g, '\n$1');
+    value = value.replace(/\n+/g, '\n');
+    return value.trim();
+};
+const secret = readFileSync(0, 'utf8');
+const parsed = JSON.parse(Buffer.from(secret, 'base64').toString('utf8'));
+const fields = ['caCertPem', 'jwtPublicKey', 'nodeCertPem', 'nodeKeyPem'];
+if (!parsed || typeof parsed !== 'object' || fields.some((key) => typeof parsed[key] !== 'string')) {
+    throw new Error('invalid SECRET_KEY payload structure');
+}
+const ca = new X509Certificate(normalizePem(parsed.caCertPem));
+const node = new X509Certificate(normalizePem(parsed.nodeCertPem));
+const now = new Date();
+if (new Date(ca.validFrom) > now || new Date(ca.validTo) < now) throw new Error('CA is not valid now');
+if (!ca.verify(ca.publicKey)) throw new Error('CA self-signature mismatch');
+if (!node.verify(ca.publicKey)) throw new Error('node certificate is not signed by CA');
+const certKey = node.publicKey.export({ type: 'spki', format: 'der' });
+const privateKey = createPublicKey(normalizePem(parsed.nodeKeyPem)).export({ type: 'spki', format: 'der' });
+if (!certKey.equals(privateKey)) throw new Error('node key does not match certificate');
+createPublicKey(normalizePem(parsed.jwtPublicKey));
+"""
+
 
 def wait_container(
     runner: Runner,
@@ -483,6 +513,47 @@ def wait_node_runtime(
                     f"Node не стала готова за {timeout} секунд: {error}"
                 ) from error
             time.sleep(interval)
+
+
+def validate_node_secret(runner: Runner, image: str, secret: str) -> None:
+    """Validate the 3.3.2 SECRET_KEY contract without persisting the secret."""
+    if (
+        not isinstance(secret, str)
+        or not secret
+        or len(secret) > 64 * 1024
+        or any(ord(character) < 32 or ord(character) == 127 for character in secret)
+    ):
+        raise ValidationError("SECRET_KEY Node пуст или имеет небезопасный формат.")
+    result = runner.run(
+        [
+            "docker",
+            "run",
+            "--rm",
+            "--network",
+            "none",
+            "--read-only",
+            "--cap-drop",
+            "ALL",
+            "--security-opt",
+            "no-new-privileges",
+            "--entrypoint",
+            "node",
+            image,
+            "--input-type=module",
+            "--eval",
+            _NODE_SECRET_PROBE,
+        ],
+        input_text=secret,
+        check=False,
+        sensitive=True,
+        timeout=60,
+    )
+    if result.returncode != 0:
+        raise ValidationError(
+            "SECRET_KEY не прошёл строгую проверку Node 3.3.2: проверьте CA, "
+            "срок действия и соответствие сертификата приватному ключу. "
+            "Образ Node не переключён."
+        )
 
 
 def _missing_unix_sockets(paths: list[str]) -> list[str]:

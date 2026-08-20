@@ -18,6 +18,7 @@ from .errors import TransactionError, ValidationError
 from .health import (
     check_subscription_api_scopes,
     check_subscription_http,
+    validate_node_secret,
     wait_container,
     wait_for_paths,
     wait_node_runtime,
@@ -602,6 +603,7 @@ def _preflight_node_config(
     *,
     accept_reality_client_risk: bool,
 ) -> None:
+    validate_node_secret(runner, image, _node_secret(runner, inventory))
     config, path = _dump_node_config(runner, inventory)
     primary_error: BaseException | None = None
     try:
@@ -610,7 +612,7 @@ def _preflight_node_config(
             raise ValidationError(
                 "Reality inbound без явного minClientVer: "
                 + ", ".join(risky)
-                + ". Node 3.3.0 по умолчанию требует клиент 26.3.27. "
+                + ". Node 3.3.2 по умолчанию требует клиент 26.3.27. "
                 "Проверьте версии клиентов и повторите с --accept-reality-client-risk. "
                 "Менеджер не будет автоматически ставить небезопасное 0.0.0."
             )
@@ -639,6 +641,42 @@ def _preflight_node_config(
         ) from cleanup_error
     if primary_error is not None:
         raise primary_error
+
+
+def _node_secret(runner: Runner, inventory: Inventory) -> str:
+    if inventory.env_file:
+        secret = EnvDocument.load(Path(inventory.env_file)).effective_value("SECRET_KEY")
+        if secret:
+            return secret
+
+    node = inventory.components["node"]
+    container = node.container or node.service
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", container):
+        raise ValidationError("Не удалось безопасно определить контейнер Node.")
+    inspected = runner.run(
+        ["docker", "inspect", "--format", "{{json .Config.Env}}", container],
+        check=False,
+        sensitive=True,
+        timeout=30,
+    )
+    try:
+        environment = json.loads(inspected.stdout) if inspected.returncode == 0 else None
+    except json.JSONDecodeError:
+        environment = None
+    candidates = []
+    if isinstance(environment, list) and all(
+        isinstance(item, str) for item in environment
+    ):
+        candidates = [
+            item.removeprefix("SECRET_KEY=")
+            for item in environment
+            if item.startswith("SECRET_KEY=")
+        ]
+    if len(candidates) != 1 or not candidates[0]:
+        raise ValidationError(
+            "Не удалось безопасно получить SECRET_KEY текущей Node для preflight 3.3.2."
+        )
+    return candidates[0]
 
 
 def _validate_xray_image(
@@ -710,9 +748,9 @@ def update_node(
         inventory.components["node"],
         accept_unknown=accept_unknown_source,
     )
-    if source_version != "3.3.0" and not panel_3_3_ready:
+    if source_version not in {"3.3.0", "3.3.1", "3.3.2"} and not panel_3_3_ready:
         raise ValidationError(
-            "Node 3.3.0 требует Panel 3.3.0: новый Node API принимает соединения только "
+            "Node 3.3.2 требует Panel не ниже 3.3.0: Node API принимает соединения только "
             "с производным SNI. Сначала обновите Panel, убедитесь, что она работает, затем "
             "повторите update Node с --panel-3-3-ready."
         )

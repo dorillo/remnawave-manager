@@ -20,6 +20,7 @@ from remnawave_manager.runner import Result
 from remnawave_manager.state import StateStore
 from remnawave_manager.update import (
     _dump_node_config,
+    _node_secret,
     _reality_without_min_version,
     _reconcile_running_services,
     _require_private_permissions,
@@ -682,6 +683,72 @@ class LegacyPanelMigrationTests(unittest.TestCase):
 
 
 class LegacyNodeMigrationTests(unittest.TestCase):
+    def test_node_secret_prefers_protected_env_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            env_path = Path(temporary) / ".env"
+            env_path.write_text("SECRET_KEY='env-secret'\n", encoding="utf-8")
+            inventory = Inventory(
+                schema_version=1,
+                role="node",
+                install_dir=temporary,
+                compose_file=str(Path(temporary) / "docker-compose.yml"),
+                env_file=str(env_path),
+                webserver="nginx",
+                components={"node": Component("node", "remnanode", "remnanode")},
+            )
+            runner = mock.Mock()
+
+            self.assertEqual(_node_secret(runner, inventory), "env-secret")
+            runner.run.assert_not_called()
+
+    def test_node_secret_falls_back_to_single_runtime_value(self) -> None:
+        inventory = Inventory(
+            schema_version=1,
+            role="node",
+            install_dir="/opt/remnanode",
+            compose_file="/opt/remnanode/docker-compose.yml",
+            env_file=None,
+            webserver="nginx",
+            components={"node": Component("node", "remnanode", "remnanode")},
+        )
+        runner = mock.Mock()
+        runner.run.return_value = Result(
+            ("docker", "inspect"),
+            0,
+            json.dumps(["NODE_PORT=2222", "SECRET_KEY=runtime-secret"]),
+            "",
+        )
+
+        self.assertEqual(_node_secret(runner, inventory), "runtime-secret")
+        self.assertTrue(runner.run.call_args.kwargs["sensitive"])
+
+    def test_node_secret_rejects_malformed_duplicate_or_missing_runtime_values(
+        self,
+    ) -> None:
+        inventory = Inventory(
+            schema_version=1,
+            role="node",
+            install_dir="/opt/remnanode",
+            compose_file="/opt/remnanode/docker-compose.yml",
+            env_file=None,
+            webserver="nginx",
+            components={"node": Component("node", "remnanode", "remnanode")},
+        )
+        outputs = (
+            "not-json",
+            json.dumps(["SECRET_KEY=one", "SECRET_KEY=two"]),
+            json.dumps(["NODE_PORT=2222"]),
+            json.dumps(["SECRET_KEY="]),
+        )
+        for output in outputs:
+            with self.subTest(output=output):
+                runner = mock.Mock()
+                runner.run.return_value = Result(
+                    ("docker", "inspect"), 0, output, ""
+                )
+                with self.assertRaisesRegex(ValidationError, "SECRET_KEY"):
+                    _node_secret(runner, inventory)
+
     def test_node_3_3_update_requires_panel_to_be_updated_first(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             _, runner, store, _ = adopt_fixture(temporary, "legacy_node_2_8_0")
@@ -694,6 +761,48 @@ class LegacyNodeMigrationTests(unittest.TestCase):
 
             backup.assert_not_called()
             pull.assert_not_called()
+
+    def test_secret_preflight_failure_stops_before_compose_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            _install_dir, runner, store, inventory = adopt_fixture(
+                temporary, "legacy_node_2_8_0"
+            )
+            compose_path = Path(inventory.compose_file)
+            original_compose = compose_path.read_bytes()
+            backup = BackupResult(Path(temporary) / "pre-node.tar.gz", {})
+            calls_before_update = len(runner.calls)
+
+            with (
+                mock.patch(
+                    "remnawave_manager.update.create_backup", return_value=backup
+                ),
+                mock.patch(
+                    "remnawave_manager.update.pull_verified", side_effect=fake_pull
+                ),
+                mock.patch(
+                    "remnawave_manager.update.validate_node_secret",
+                    side_effect=ValidationError("invalid SECRET_KEY"),
+                ) as validate_secret,
+                mock.patch("remnawave_manager.update._dump_node_config") as dump,
+                mock.patch("remnawave_manager.update.restore_backup") as restore,
+                self.assertRaisesRegex(ValidationError, "SECRET_KEY"),
+            ):
+                update_node(runner, store, panel_3_3_ready=True)
+
+            validate_secret.assert_called_once_with(
+                runner, TARGET_IMAGES["node"], "legacy.node.secret.must.stay.opaque"
+            )
+            dump.assert_not_called()
+            restore.assert_not_called()
+            self.assertEqual(compose_path.read_bytes(), original_compose)
+            update_calls = runner.calls[calls_before_update:]
+            self.assertFalse(
+                any(
+                    command[:2] == ("docker", "compose") and "up" in command
+                    for command in update_calls
+                )
+            )
+            self.assertFalse((store.paths.state / "active-transaction.json").exists())
 
     def test_operator_edit_after_manager_write_blocks_automatic_restore(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -924,7 +1033,21 @@ class LegacyNodeMigrationTests(unittest.TestCase):
             ]
             self.assertEqual(len(recreate), 1)
             self.assertEqual(recreate[0][-1], inventory.components["node"].service)
-            preflight = next(command for command in update_calls if command[:2] == ("docker", "run"))
+            secret_preflight = next(
+                command
+                for command in update_calls
+                if command[:2] == ("docker", "run") and "node" in command
+            )
+            self.assertIn(TARGET_IMAGES["node"], secret_preflight)
+            self.assertIn("--read-only", secret_preflight)
+            self.assertEqual(
+                secret_preflight[secret_preflight.index("--network") + 1], "none"
+            )
+            preflight = next(
+                command
+                for command in update_calls
+                if command[:2] == ("docker", "run") and "rw-core" in command
+            )
             self.assertIn(TARGET_IMAGES["node"], preflight)
             self.assertIn("rw-core", preflight)
             self.assertIn("--read-only", preflight)
