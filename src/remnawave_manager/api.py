@@ -83,7 +83,7 @@ def _validated_base_url(value: str) -> str:
         or not hostname
         or parsed.username is not None
         or parsed.password is not None
-        or parsed.path
+        or parsed.path.rstrip("/") not in {"", "/api"}
         or parsed.query
         or parsed.fragment
         or parsed.netloc.endswith(":")
@@ -114,7 +114,7 @@ def _validated_base_url(value: str) -> str:
                 "Незашифрованный Panel API разрешён только через loopback; "
                 "для удалённого адреса используйте HTTPS."
             )
-    return selected
+    return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
 
 
 def _reject_json_constant(value: str) -> None:

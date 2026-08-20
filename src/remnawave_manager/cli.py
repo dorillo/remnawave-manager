@@ -1210,7 +1210,7 @@ def dispatch(args: argparse.Namespace, context: CliContext) -> int:
                         raise
                     base_url = _ask(
                         context,
-                        "URL Panel API (например https://panel.example.com)",
+                        "URL Panel API (https://panel.example.com или /api)",
                     )
                     token = _required_secret(
                         context,

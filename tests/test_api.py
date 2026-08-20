@@ -600,13 +600,21 @@ class RemnawaveApiHttpTests(unittest.TestCase):
         self.assertEqual(
             RemnawaveApi("http://[::1]:3000").base_url, "http://[::1]:3000"
         )
+        self.assertEqual(
+            RemnawaveApi("https://panel.example.test/api").base_url,
+            "https://panel.example.test",
+        )
+        self.assertEqual(
+            RemnawaveApi("https://panel.example.test/api/").base_url,
+            "https://panel.example.test",
+        )
         with self.assertRaisesRegex(ValidationError, "используйте HTTPS"):
             RemnawaveApi("http://panel.example.test")
 
-    def test_base_url_rejects_credentials_path_query_and_fragment(self) -> None:
+    def test_base_url_rejects_credentials_non_api_path_query_and_fragment(self) -> None:
         for value in (
             "https://user:secret@panel.example.test",
-            "https://panel.example.test/api",
+            "https://panel.example.test/admin",
             "https://panel.example.test?target=other",
             "https://panel.example.test#fragment",
             "https://panel.example.test:",
