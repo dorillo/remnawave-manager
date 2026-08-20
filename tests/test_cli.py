@@ -688,7 +688,7 @@ class CliDispatchTests(unittest.TestCase):
 
         rendered = terminal.getvalue()
         self.assertEqual(code, 0)
-        self.assertTrue(rendered.startswith("\033[2J\033[H"))
+        self.assertTrue(rendered.startswith("\033[H\033[2J\033[3J"))
         self.assertIn("Remnawave Manager", rendered)
         self.assertIn("Главное меню", rendered)
 
@@ -722,7 +722,7 @@ class CliDispatchTests(unittest.TestCase):
             )
 
         self.assertEqual(code, 0, self.stderr.getvalue())
-        self.assertEqual(terminal.getvalue().count("\033[2J\033[H"), 2)
+        self.assertEqual(terminal.getvalue().count("\033[H\033[2J\033[3J"), 2)
         self.assertIn("Нажмите Enter, чтобы продолжить", prompts[1])
 
     def test_interactive_firewall_auto_panel_does_not_request_panel_ip(self) -> None:

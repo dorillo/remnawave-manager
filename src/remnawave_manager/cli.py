@@ -108,6 +108,7 @@ SecretFunction = Callable[[str], str]
 MAX_SECRET_LENGTH = 16 * 1024
 MAX_TERMINAL_MESSAGE_LENGTH = 16 * 1024
 DISGUISE_IDS = tuple(item["id"] for item in template_catalog())
+_TERMINAL_CLEAR_SEQUENCE = "\033[H\033[2J\033[3J"
 
 
 class RussianArgumentParser(argparse.ArgumentParser):
@@ -188,7 +189,7 @@ class CliContext:
     def clear_screen(self) -> None:
         if not self.interactive_ui():
             return
-        self.stdout.write("\033[2J\033[H")
+        self.stdout.write(_TERMINAL_CLEAR_SEQUENCE)
         self.stdout.flush()
 
     def pause(self) -> None:
