@@ -1185,12 +1185,45 @@ def dispatch(args: argparse.Namespace, context: CliContext) -> int:
                         "RWM_NODE_SECRET_KEY",
                         "Новый SECRET_KEY Node: ",
                     )
-                result = update_node(
-                    context.runner,
-                    context.store,
-                    replacement_secret=replacement_secret,
-                    **update_options,
-                )
+                try:
+                    result = update_node(
+                        context.runner,
+                        context.store,
+                        replacement_secret=replacement_secret,
+                        **update_options,
+                    )
+                except NodeSecretValidationError:
+                    if context.json_output:
+                        raise ValidationError(
+                            "Новый SECRET_KEY также отклонён Node 3.3.2. Проверьте "
+                            "RWM_NODE_SECRET_KEY или получите ключ через Panel /api/keygen."
+                        )
+                    context.write(
+                        "Введённый ключ не содержит payload Node, ожидаемый Node 3.3.2. "
+                        "Его не удалось сохранить."
+                    )
+                    if not _yes_no(
+                        context,
+                        "Получить новый SECRET_KEY напрямую из Panel API",
+                        default=True,
+                    ):
+                        raise
+                    base_url = _ask(
+                        context,
+                        "URL Panel API (например https://panel.example.com)",
+                    )
+                    token = _required_secret(
+                        context,
+                        "RWM_API_TOKEN",
+                        "Admin API token Panel: ",
+                    )
+                    replacement_secret = RemnawaveApi(base_url).keygen(token)
+                    result = update_node(
+                        context.runner,
+                        context.store,
+                        replacement_secret=replacement_secret,
+                        **update_options,
+                    )
         if context.json_output:
             context.emit(result)
         else:

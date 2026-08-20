@@ -671,6 +671,42 @@ class CliDispatchTests(unittest.TestCase):
         self.assertNotIn("RWM_NODE_SECRET_KEY", os.environ)
         self.assertNotIn("replacement-node-secret", self.stdout.getvalue())
 
+    def test_node_update_can_fetch_replacement_secret_from_panel_api(self) -> None:
+        backup = BackupResult(Path(self.temporary.name) / "pre-node.tar.gz", {})
+        api = mock.Mock()
+        api.keygen.return_value = "api-node-secret"
+        with (
+            mock.patch(
+                "remnawave_manager.cli.StateStore.load_inventory",
+                return_value=inventory("node"),
+            ),
+            mock.patch("remnawave_manager.cli.assert_no_active_certbot_renewal"),
+            mock.patch("remnawave_manager.cli.RemnawaveApi", return_value=api) as api_type,
+            mock.patch(
+                "remnawave_manager.cli.update_node",
+                side_effect=[
+                    NodeSecretValidationError("old key rejected"),
+                    NodeSecretValidationError("copied key rejected"),
+                    backup,
+                ],
+            ) as update,
+        ):
+            code = self.run_main(
+                ["update", "--yes"],
+                answers=["y", "https://panel.example.com"],
+                secrets=["copied-node-secret", "admin-api-token"],
+            )
+
+        self.assertEqual(code, 0, self.stderr.getvalue())
+        api_type.assert_called_once_with("https://panel.example.com")
+        api.keygen.assert_called_once_with("admin-api-token")
+        self.assertEqual(update.call_count, 3)
+        self.assertEqual(update.call_args.kwargs["replacement_secret"], "api-node-secret")
+        output = self.stdout.getvalue() + self.stderr.getvalue()
+        self.assertNotIn("copied-node-secret", output)
+        self.assertNotIn("admin-api-token", output)
+        self.assertNotIn("api-node-secret", output)
+
     def test_warp_plus_key_comes_only_from_environment(self) -> None:
         with (
             mock.patch.dict(
