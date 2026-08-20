@@ -18,6 +18,7 @@ from remnawave_manager.health import (
     check_panel_http,
     check_subscription_api_scopes,
     check_subscription_http,
+    normalize_node_secret,
     validate_node_secret,
     wait_container,
     wait_node_runtime,
@@ -123,6 +124,31 @@ class NodeSecretValidationTests(unittest.TestCase):
             validate_node_secret(runner, "remnawave/node:3.3.2", "secret\n")
 
         runner.run.assert_not_called()
+
+    def test_normalizes_compose_assignment_and_api_response(self) -> None:
+        payload = "eyJjYUNlcnRQZW0iOiJzZW5zaXRpdmUifQ=="
+
+        self.assertEqual(
+            normalize_node_secret(f'  - SECRET_KEY="{payload}"  '),
+            payload,
+        )
+        self.assertEqual(
+            normalize_node_secret(json.dumps({"response": {"secretKey": payload}})),
+            payload,
+        )
+
+    def test_validation_passes_normalized_payload_to_isolated_image(self) -> None:
+        payload = "eyJjYUNlcnRQZW0iOiJzZW5zaXRpdmUifQ=="
+        runner = mock.Mock()
+        runner.run.return_value = Result(("docker", "run"), 0, "", "")
+
+        validate_node_secret(
+            runner,
+            "remnawave/node:3.3.2",
+            f"SECRET_KEY={payload}",
+        )
+
+        self.assertEqual(runner.run.call_args.kwargs["input_text"], payload)
 
 
 class SubscriptionHealthTests(unittest.TestCase):

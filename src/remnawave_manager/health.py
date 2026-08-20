@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import stat
 import time
 from pathlib import Path
@@ -63,6 +64,57 @@ _NODE_SECRET_FAILURES = {
     "node-key": "приватный ключ Node не соответствует сертификату",
     "jwt-key": "публичный JWT-ключ некорректен",
 }
+
+_NODE_SECRET_ASSIGNMENT = re.compile(
+    r"^(?:-\s*)?(?:export\s+)?SECRET_KEY\s*(?:=|:)\s*(?P<value>.+)$"
+)
+
+
+def normalize_node_secret(secret: str) -> str:
+    """Extract a Node payload when it was copied with a safe UI/Compose wrapper."""
+    if not isinstance(secret, str) or any(
+        ord(character) < 32 or ord(character) == 127 for character in secret
+    ):
+        raise ValidationError("SECRET_KEY Node пуст или имеет небезопасный формат.")
+    value = secret.strip()
+    assignment = _NODE_SECRET_ASSIGNMENT.fullmatch(value)
+    if assignment is not None:
+        value = assignment.group("value").strip()
+
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        if value[0] == '"':
+            try:
+                decoded = json.loads(value)
+            except json.JSONDecodeError as error:
+                raise ValidationError("SECRET_KEY Node содержит некорректные кавычки.") from error
+            if not isinstance(decoded, str):
+                raise ValidationError("SECRET_KEY Node имеет небезопасный формат.")
+            value = decoded
+        else:
+            value = value[1:-1]
+
+    try:
+        response = json.loads(value)
+    except json.JSONDecodeError:
+        response = None
+    if isinstance(response, dict):
+        payload = response.get("secretKey")
+        nested = response.get("response")
+        if not isinstance(payload, str) and isinstance(nested, dict):
+            payload = nested.get("secretKey")
+        if not isinstance(payload, str):
+            raise ValidationError(
+                "JSON с SECRET_KEY должен содержать строковое поле secretKey."
+            )
+        value = payload
+
+    if (
+        not value
+        or len(value) > 64 * 1024
+        or any(ord(character) < 32 or ord(character) == 127 for character in value)
+    ):
+        raise ValidationError("SECRET_KEY Node пуст или имеет небезопасный формат.")
+    return value
 
 
 def wait_container(
@@ -542,13 +594,7 @@ def wait_node_runtime(
 
 def validate_node_secret(runner: Runner, image: str, secret: str) -> None:
     """Validate the 3.3.2 SECRET_KEY contract without persisting the secret."""
-    if (
-        not isinstance(secret, str)
-        or not secret
-        or len(secret) > 64 * 1024
-        or any(ord(character) < 32 or ord(character) == 127 for character in secret)
-    ):
-        raise ValidationError("SECRET_KEY Node пуст или имеет небезопасный формат.")
+    secret = normalize_node_secret(secret)
     result = runner.run(
         [
             "docker",

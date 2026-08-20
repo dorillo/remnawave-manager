@@ -884,7 +884,7 @@ class LegacyNodeMigrationTests(unittest.TestCase):
                     runner,
                     store,
                     panel_3_3_ready=True,
-                    replacement_secret="replacement-node-secret",
+                    replacement_secret="SECRET_KEY=replacement-node-secret",
                 )
 
             self.assertEqual(result, backup)

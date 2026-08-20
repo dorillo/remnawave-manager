@@ -1178,7 +1178,7 @@ def dispatch(args: argparse.Namespace, context: CliContext) -> int:
                     context.write(
                         "Текущий SECRET_KEY не совместим с Node 3.3.2. Получите новый "
                         "ключ в Panel через API /api/keygen или в настройках Node, затем "
-                        "введите его ниже."
+                        "введите его ниже. Можно вставить и строку SECRET_KEY=… из Compose."
                     )
                     replacement_secret = _required_secret(
                         context,

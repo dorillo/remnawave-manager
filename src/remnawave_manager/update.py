@@ -18,6 +18,7 @@ from .errors import TransactionError, ValidationError
 from .health import (
     check_subscription_api_scopes,
     check_subscription_http,
+    normalize_node_secret,
     validate_node_secret,
     wait_container,
     wait_for_paths,
@@ -761,7 +762,7 @@ def update_node(
     compose_path = Path(inventory.compose_file)
     env_path = Path(inventory.env_file) if inventory.env_file else None
     current_secret = _node_secret(runner, inventory)
-    selected_secret = (
+    selected_secret = normalize_node_secret(
         replacement_secret if replacement_secret is not None else current_secret
     )
     replace_secret = replacement_secret is not None and replacement_secret != current_secret
