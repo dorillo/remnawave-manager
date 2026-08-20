@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import re
 import stat
@@ -68,6 +69,7 @@ _NODE_SECRET_FAILURES = {
 _NODE_SECRET_ASSIGNMENT = re.compile(
     r"^(?:-\s*)?(?:export\s+)?SECRET_KEY\s*(?:=|:)\s*(?P<value>.+)$"
 )
+_NODE_SECRET_FIELDS = ("caCertPem", "jwtPublicKey", "nodeCertPem", "nodeKeyPem")
 
 
 def normalize_node_secret(secret: str) -> str:
@@ -114,6 +116,32 @@ def normalize_node_secret(secret: str) -> str:
         or any(ord(character) < 32 or ord(character) == 127 for character in value)
     ):
         raise ValidationError("SECRET_KEY Node пуст или имеет небезопасный формат.")
+    return value
+
+
+def validate_node_secret_payload(secret: str) -> str:
+    """Normalize and validate the non-secret envelope before starting Docker."""
+    value = normalize_node_secret(secret)
+    encoded = value.replace("-", "+").replace("_", "/")
+    encoded += "=" * (-len(encoded) % 4)
+    try:
+        decoded = base64.b64decode(encoded, validate=True)
+        payload = json.loads(decoded.decode("utf-8"))
+    except (ValueError, UnicodeError, json.JSONDecodeError) as error:
+        raise NodeSecretValidationError(
+            "Введённое значение не является SECRET_KEY Node 3.3.2. "
+            "Скопируйте полный SECRET_KEY именно из конфигурации нужной Node в Panel; "
+            "API-токен, UUID, Public Key и X25519-ключ для этого не подходят."
+        ) from error
+    if not isinstance(payload, dict) or any(
+        not isinstance(payload.get(field), str) or not payload[field].strip()
+        for field in _NODE_SECRET_FIELDS
+    ):
+        raise NodeSecretValidationError(
+            "В SECRET_KEY отсутствует полный payload Node 3.3.2 "
+            "(caCertPem, jwtPublicKey, nodeCertPem и nodeKeyPem). "
+            "Скопируйте SECRET_KEY из конфигурации нужной Node в Panel."
+        )
     return value
 
 
@@ -594,7 +622,7 @@ def wait_node_runtime(
 
 def validate_node_secret(runner: Runner, image: str, secret: str) -> None:
     """Validate the 3.3.2 SECRET_KEY contract without persisting the secret."""
-    secret = normalize_node_secret(secret)
+    secret = validate_node_secret_payload(secret)
     result = runner.run(
         [
             "docker",
@@ -632,10 +660,11 @@ def validate_node_secret(runner: Runner, image: str, secret: str) -> None:
         raise NodeSecretValidationError(
             "SECRET_KEY отклонён валидатором Node 3.3.2: "
             + _NODE_SECRET_FAILURES[failure_code]
-            + ". Получите новый SECRET_KEY в обновлённой Panel через /api/keygen. "
+            + ". Скопируйте новый SECRET_KEY из конфигурации нужной Node "
+            "в обновлённой Panel. "
             "Текущий образ Node не переключён."
         )
-    if result.returncode != 0:
+    if result.returncode != 0 or result.stdout.strip() != "RWM_NODE_SECRET_OK":
         raise TransactionError(
             "Не удалось выполнить изолированный валидатор SECRET_KEY в образе Node 3.3.2. "
             "Это ошибка запуска preflight, а не подтверждение повреждения ключа; "

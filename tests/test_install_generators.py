@@ -1431,6 +1431,7 @@ class InstallGeneratorTests(unittest.TestCase):
 
             with (
                 mock.patch("remnawave_manager.install._preflight"),
+                mock.patch("remnawave_manager.install.validate_node_secret"),
                 mock.patch("remnawave_manager.install._ensure_container_names_available"),
                 mock.patch(
                     "remnawave_manager.install._pull_component_image",
@@ -1644,6 +1645,7 @@ class InstallGeneratorTests(unittest.TestCase):
 
             with (
                 mock.patch("remnawave_manager.install._preflight"),
+                mock.patch("remnawave_manager.install.validate_node_secret"),
                 mock.patch("remnawave_manager.install._ensure_container_names_available"),
                 mock.patch(
                     "remnawave_manager.install._pull_component_image",
@@ -1720,6 +1722,7 @@ class InstallGeneratorTests(unittest.TestCase):
 
             with (
                 mock.patch("remnawave_manager.install._preflight"),
+                mock.patch("remnawave_manager.install.validate_node_secret"),
                 mock.patch("remnawave_manager.install._ensure_container_names_available"),
                 mock.patch(
                     "remnawave_manager.install._pull_component_image",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import tempfile
 import unittest
@@ -76,8 +77,18 @@ class ContainerWaitTests(unittest.TestCase):
 
 
 class NodeSecretValidationTests(unittest.TestCase):
+    @staticmethod
+    def payload() -> str:
+        value = {
+            "caCertPem": "sensitive-ca",
+            "jwtPublicKey": "sensitive-jwt",
+            "nodeCertPem": "sensitive-cert",
+            "nodeKeyPem": "sensitive-key",
+        }
+        return base64.b64encode(json.dumps(value).encode()).decode()
+
     def test_secret_is_base64_decoded_from_stdin_in_isolated_image(self) -> None:
-        secret = "eyJjYUNlcnRQZW0iOiJzZW5zaXRpdmUifQ=="
+        secret = self.payload()
         runner = mock.Mock()
         runner.run.return_value = Result(
             ("docker", "run"), 0, "RWM_NODE_SECRET_OK\n", ""
@@ -108,20 +119,32 @@ class NodeSecretValidationTests(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(NodeSecretValidationError, "приватный ключ"):
-            validate_node_secret(runner, "remnawave/node:3.3.2", "dmFsaWQ=")
+            validate_node_secret(runner, "remnawave/node:3.3.2", self.payload())
 
     def test_preflight_launch_failure_is_not_reported_as_invalid_key(self) -> None:
         runner = mock.Mock()
         runner.run.return_value = Result(("docker", "run"), 125, "", "docker unavailable")
 
         with self.assertRaisesRegex(TransactionError, "ошибка запуска preflight"):
-            validate_node_secret(runner, "remnawave/node:3.3.2", "dmFsaWQ=")
+            validate_node_secret(runner, "remnawave/node:3.3.2", self.payload())
 
     def test_rejects_control_characters_without_running_image(self) -> None:
         runner = mock.Mock()
 
         with self.assertRaisesRegex(ValidationError, "небезопасный формат"):
             validate_node_secret(runner, "remnawave/node:3.3.2", "secret\n")
+
+        runner.run.assert_not_called()
+
+    def test_rejects_a_non_node_key_without_running_image(self) -> None:
+        runner = mock.Mock()
+
+        with self.assertRaisesRegex(NodeSecretValidationError, "не является SECRET_KEY"):
+            validate_node_secret(
+                runner,
+                "remnawave/node:3.3.2",
+                "ordinary-api-token",
+            )
 
         runner.run.assert_not_called()
 
@@ -138,9 +161,11 @@ class NodeSecretValidationTests(unittest.TestCase):
         )
 
     def test_validation_passes_normalized_payload_to_isolated_image(self) -> None:
-        payload = "eyJjYUNlcnRQZW0iOiJzZW5zaXRpdmUifQ=="
+        payload = self.payload()
         runner = mock.Mock()
-        runner.run.return_value = Result(("docker", "run"), 0, "", "")
+        runner.run.return_value = Result(
+            ("docker", "run"), 0, "RWM_NODE_SECRET_OK\n", ""
+        )
 
         validate_node_secret(
             runner,

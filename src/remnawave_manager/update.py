@@ -822,7 +822,7 @@ def update_node(
             journal.phase("replacing-node-secret")
             if env_path is not None:
                 replacement_env = EnvDocument.load(env_path)
-                replacement_env.set("SECRET_KEY", json.dumps(selected_secret))
+                replacement_env.set("SECRET_KEY", selected_secret)
                 replacement_env.save(env_path, before_write=mark_env_write)
             else:
                 compose.set_service_environment(node.service, "SECRET_KEY", selected_secret)

@@ -20,7 +20,6 @@ from .api import (
     RemnawaveApi,
     complete_reality_credentials_handoff,
     configure_warp_routing,
-    parse_panel_cookies,
     provision_reality_node,
     validate_reality_inputs,
     validate_warp_routing_inputs,
@@ -443,7 +442,7 @@ def build_parser() -> RussianArgumentParser:
     )
     update.epilog = (
         "Если текущий SECRET_KEY несовместим с Node 3.3.2, менеджер запросит новый "
-        "ключ из Panel API. Для автоматизации задайте его через RWM_NODE_SECRET_KEY."
+        "ключ для ручной вставки. Для автоматизации задайте его через RWM_NODE_SECRET_KEY."
     )
     _add_yes(update)
     update.set_defaults(handler="update")
@@ -1166,10 +1165,11 @@ def dispatch(args: argparse.Namespace, context: CliContext) -> int:
                     context.store,
                     **update_options,
                 )
-            except NodeSecretValidationError:
+            except NodeSecretValidationError as current_secret_error:
                 replacement_secret = _optional_environment_secret(
                     "RWM_NODE_SECRET_KEY"
                 )
+                replacement_from_environment = replacement_secret is not None
                 if replacement_secret is None:
                     if context.json_output:
                         raise ValidationError(
@@ -1177,60 +1177,51 @@ def dispatch(args: argparse.Namespace, context: CliContext) -> int:
                             "Задайте новый ключ через RWM_NODE_SECRET_KEY и повторите команду."
                         )
                     context.write(
-                        "Текущий SECRET_KEY не совместим с Node 3.3.2. Получите новый "
-                        "ключ в Panel через API /api/keygen или в настройках Node, затем "
-                        "введите его ниже. Можно вставить и строку SECRET_KEY=… из Compose."
+                        f"Текущий SECRET_KEY не совместим с Node 3.3.2: "
+                        f"{current_secret_error}"
+                    )
+                    context.write(
+                        "Откройте нужную Node в обновлённой Panel и скопируйте полный "
+                        "SECRET_KEY из её конфигурации. Можно вставить само значение или "
+                        "строку SECRET_KEY=... из Compose."
                     )
                     replacement_secret = _required_secret(
                         context,
                         "RWM_NODE_SECRET_KEY",
                         "Новый SECRET_KEY Node: ",
                     )
-                try:
-                    result = update_node(
-                        context.runner,
-                        context.store,
-                        replacement_secret=replacement_secret,
-                        **update_options,
-                    )
-                except NodeSecretValidationError:
-                    if context.json_output:
-                        raise ValidationError(
-                            "Новый SECRET_KEY также отклонён Node 3.3.2. Проверьте "
-                            "RWM_NODE_SECRET_KEY или получите ключ через Panel /api/keygen."
+                while True:
+                    try:
+                        result = update_node(
+                            context.runner,
+                            context.store,
+                            replacement_secret=replacement_secret,
+                            **update_options,
                         )
-                    context.write(
-                        "Введённый ключ не содержит payload Node, ожидаемый Node 3.3.2. "
-                        "Его не удалось сохранить."
-                    )
-                    if not _yes_no(
-                        context,
-                        "Получить новый SECRET_KEY напрямую из Panel API",
-                        default=True,
-                    ):
-                        raise
-                    base_url = _ask(
-                        context,
-                        "URL Panel API (https://panel.example.com или /api)",
-                    )
-                    token = _required_secret(
-                        context,
-                        "RWM_API_TOKEN",
-                        "Admin API token Panel: ",
-                    )
-                    cookies = parse_panel_cookies(
-                        context.secret_fn(
-                            "Cookie Panel (name=value или JSON; Enter, если cookie-gate не используется): "
+                        break
+                    except NodeSecretValidationError as replacement_error:
+                        if context.json_output or replacement_from_environment:
+                            raise ValidationError(
+                                "Новый SECRET_KEY также отклонён Node 3.3.2. "
+                                "Проверьте значение RWM_NODE_SECRET_KEY."
+                            ) from replacement_error
+                        context.error(
+                            "Введённый SECRET_KEY не принят: "
+                            + sanitize_external_text(str(replacement_error))
                         )
-                    )
-                    api_options = {"cookies": cookies} if cookies else {}
-                    replacement_secret = RemnawaveApi(base_url, **api_options).keygen(token)
-                    result = update_node(
-                        context.runner,
-                        context.store,
-                        replacement_secret=replacement_secret,
-                        **update_options,
-                    )
+                        if not _yes_no(
+                            context,
+                            "Ввести другой SECRET_KEY вручную",
+                            default=True,
+                        ):
+                            raise ValidationError(
+                                "Обновление Node отменено; текущий образ и конфигурация не изменены."
+                            ) from replacement_error
+                        replacement_secret = _required_secret(
+                            context,
+                            "RWM_NODE_SECRET_KEY",
+                            "Новый SECRET_KEY Node: ",
+                        )
         if context.json_output:
             context.emit(result)
         else:

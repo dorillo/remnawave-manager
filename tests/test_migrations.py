@@ -49,6 +49,10 @@ LEGACY_VALKEY_IMAGE_ID = "sha256:" + "3" * 64
 LEGACY_SUBSCRIPTION_IMAGE_ID = "sha256:" + "4" * 64
 LEGACY_NGINX_IMAGE_ID = "sha256:" + "5" * 64
 LEGACY_NODE_IMAGE_ID = "sha256:" + "6" * 64
+NODE_SECRET_PAYLOAD = (
+    "eyJjYUNlcnRQZW0iOiJmaXh0dXJlLWNhIiwiand0UHVibGljS2V5IjoiZml4dHVyZS1qd3Qi"
+    "LCJub2RlQ2VydFBlbSI6ImZpeHR1cmUtY2VydCIsIm5vZGVLZXlQZW0iOiJmaXh0dXJlLWtleSJ9"
+)
 
 
 def target_image(component: str, registry: str = "docker-hub") -> str:
@@ -141,6 +145,8 @@ class LegacyRunner:
         if command[:4] == ("docker", "exec", "remnanode", "cli"):
             payload = (self.install_dir / "xray.json").read_text(encoding="utf-8")
             return Result(command, 0, payload, "")
+        if command[:2] == ("docker", "run") and "RWM_NODE_SECRET_OK" in command[-1]:
+            return Result(command, 0, "RWM_NODE_SECRET_OK\n", "")
         return Result(command, 0, "", "")
 
 
@@ -790,7 +796,7 @@ class LegacyNodeMigrationTests(unittest.TestCase):
                 update_node(runner, store, panel_3_3_ready=True)
 
             validate_secret.assert_called_once_with(
-                runner, TARGET_IMAGES["node"], "legacy.node.secret.must.stay.opaque"
+                runner, TARGET_IMAGES["node"], NODE_SECRET_PAYLOAD
             )
             dump.assert_not_called()
             restore.assert_not_called()
@@ -838,6 +844,86 @@ class LegacyNodeMigrationTests(unittest.TestCase):
             )
             self.assertEqual(env_path.read_bytes(), original_env)
             self.assertFalse((store.paths.state / "active-transaction.json").exists())
+
+    def test_replacement_secret_is_persisted_in_env_without_extra_quotes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            install_dir, runner, store, _inventory = adopt_fixture(
+                temporary, "legacy_node_2_8_0"
+            )
+            env_path = install_dir / ".env"
+            backup = BackupResult(Path(temporary) / "pre-node.tar.gz", {})
+
+            with (
+                mock.patch("remnawave_manager.update.create_backup", return_value=backup),
+                mock.patch("remnawave_manager.update.pull_verified", side_effect=fake_pull),
+                mock.patch("remnawave_manager.update.validate_node_secret"),
+                mock.patch("remnawave_manager.update.validate_rendered_compose"),
+                mock.patch("remnawave_manager.update.wait_container"),
+                mock.patch("remnawave_manager.update.wait_node_runtime"),
+                mock.patch("remnawave_manager.update.wait_for_paths"),
+                mock.patch("remnawave_manager.update.adopt"),
+                mock.patch(
+                    "remnawave_manager.update._existing_warp_interfaces",
+                    return_value=set(),
+                ),
+            ):
+                result = update_node(
+                    runner,
+                    store,
+                    panel_3_3_ready=True,
+                    replacement_secret="SECRET_KEY=replacement-node-secret",
+                )
+
+            self.assertEqual(result, backup)
+            self.assertEqual(
+                EnvDocument.load(env_path).effective_value("SECRET_KEY"),
+                "replacement-node-secret",
+            )
+            self.assertIn(
+                "SECRET_KEY=replacement-node-secret\n",
+                env_path.read_text(encoding="utf-8"),
+            )
+
+    def test_failed_update_restores_env_after_secret_replacement(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            _install_dir, runner, store, inventory = adopt_fixture(
+                temporary, "legacy_node_2_8_0"
+            )
+            originals = managed_payloads(inventory)
+            backup = BackupResult(Path(temporary) / "pre-node.tar.gz", {})
+
+            def restore(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+                restore_payloads(originals)
+
+            with (
+                mock.patch("remnawave_manager.update.create_backup", return_value=backup),
+                mock.patch("remnawave_manager.update.pull_verified", side_effect=fake_pull),
+                mock.patch("remnawave_manager.update.validate_node_secret"),
+                mock.patch("remnawave_manager.update.validate_rendered_compose"),
+                mock.patch("remnawave_manager.update.wait_container"),
+                mock.patch(
+                    "remnawave_manager.update.wait_node_runtime",
+                    side_effect=TransactionError("node runtime failure"),
+                ),
+                mock.patch(
+                    "remnawave_manager.update.restore_backup",
+                    side_effect=restore,
+                ) as rollback,
+                mock.patch(
+                    "remnawave_manager.update._existing_warp_interfaces",
+                    return_value=set(),
+                ),
+                self.assertRaisesRegex(TransactionError, "предыдущая конфигурация восстановлена"),
+            ):
+                update_node(
+                    runner,
+                    store,
+                    panel_3_3_ready=True,
+                    replacement_secret="replacement-node-secret",
+                )
+
+            rollback.assert_called_once()
+            self.assertEqual(managed_payloads(inventory), originals)
 
     def test_replacement_secret_updates_direct_compose_environment_without_env_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
