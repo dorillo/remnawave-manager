@@ -28,6 +28,7 @@ from remnawave_manager.api import (
     complete_reality_credentials_handoff,
     configure_warp_routing,
     provision_reality_node,
+    parse_panel_cookies,
     validate_admin_password,
 )
 from remnawave_manager.errors import TransactionError, ValidationError
@@ -253,6 +254,31 @@ class RemnawaveApiHttpTests(unittest.TestCase):
         self.assertIsNone(request.get_header("X-forwarded-for"))
         self.assertIsNone(request.get_header("X-forwarded-proto"))
         self.assertEqual(json.loads(request.data), {"name": "node"})
+
+    def test_sends_validated_reverse_proxy_cookies(self) -> None:
+        api = RemnawaveApi(
+            "https://panel.example.test",
+            cookies={"rwm_access": "cookie-value"},
+        )
+        with mock.patch(
+            "remnawave_manager.api._open_api_request",
+            return_value=FakeResponse(200, {"response": {}}),
+        ) as open_request:
+            api.request("GET", "/api/example", token="admin-token")
+
+        request = open_request.call_args.args[0]
+        self.assertEqual(request.get_header("Cookie"), "rwm_access=cookie-value")
+
+    def test_rejects_invalid_reverse_proxy_cookie_json(self) -> None:
+        for value in (
+            "[]",
+            "{}",
+            '{"rwm_access": 1}',
+            '{"bad;name": "value"}',
+            '{"rwm_access": "value;injection"}',
+        ):
+            with self.subTest(value=value), self.assertRaises(ValidationError):
+                parse_panel_cookies(value)
 
     def test_global_opener_disables_environment_proxies_and_redirects(self) -> None:
         proxy_environment = {

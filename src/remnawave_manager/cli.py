@@ -20,6 +20,7 @@ from .api import (
     RemnawaveApi,
     complete_reality_credentials_handoff,
     configure_warp_routing,
+    parse_panel_cookies,
     provision_reality_node,
     validate_reality_inputs,
     validate_warp_routing_inputs,
@@ -1217,7 +1218,11 @@ def dispatch(args: argparse.Namespace, context: CliContext) -> int:
                         "RWM_API_TOKEN",
                         "Admin API token Panel: ",
                     )
-                    replacement_secret = RemnawaveApi(base_url).keygen(token)
+                    cookies = parse_panel_cookies(
+                        _optional_environment_secret("RWM_PANEL_COOKIES_JSON")
+                    )
+                    api_options = {"cookies": cookies} if cookies else {}
+                    replacement_secret = RemnawaveApi(base_url, **api_options).keygen(token)
                     result = update_node(
                         context.runner,
                         context.store,

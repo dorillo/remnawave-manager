@@ -11,7 +11,7 @@ import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
@@ -36,6 +36,8 @@ REALITY_RECOVERY_NAME = "api-reality-credentials.json"
 _MAX_API_BODY_SIZE = 8 * 1024 * 1024
 _MAX_REALITY_RECOVERY_SIZE = 64 * 1024
 _SENSITIVE_API_KEY_PARTS = ("password", "privatekey", "secret", "token")
+_COOKIE_NAME = re.compile(r"[!#$%&'*+\-.^_`|~0-9A-Za-z]+")
+_COOKIE_VALUE = re.compile(r"[\x21-\x2b\x2d-\x3a\x3c-\x7e]*")
 
 
 class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -117,6 +119,35 @@ def _validated_base_url(value: str) -> str:
     return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
 
 
+def parse_panel_cookies(value: str | None) -> dict[str, str]:
+    """Validate an optional JSON object for the Panel reverse-proxy Cookie header."""
+    if value is None or value == "":
+        return {}
+    if not isinstance(value, str) or len(value) > 16_384:
+        raise ValidationError("RWM_PANEL_COOKIES_JSON имеет небезопасный формат.")
+    try:
+        parsed = json.loads(value, parse_constant=_reject_json_constant)
+    except (TypeError, ValueError, json.JSONDecodeError) as error:
+        raise ValidationError(
+            "RWM_PANEL_COOKIES_JSON должен быть JSON-объектом cookie name/value."
+        ) from error
+    if not isinstance(parsed, dict) or not parsed:
+        raise ValidationError(
+            "RWM_PANEL_COOKIES_JSON должен быть непустым JSON-объектом cookie name/value."
+        )
+    cookies: dict[str, str] = {}
+    for name, cookie_value in parsed.items():
+        if (
+            not isinstance(name, str)
+            or not isinstance(cookie_value, str)
+            or not _COOKIE_NAME.fullmatch(name)
+            or not _COOKIE_VALUE.fullmatch(cookie_value)
+        ):
+            raise ValidationError("RWM_PANEL_COOKIES_JSON содержит недопустимую cookie.")
+        cookies[name] = cookie_value
+    return cookies
+
+
 def _reject_json_constant(value: str) -> None:
     raise ValueError(f"Недопустимая JSON-константа: {value}")
 
@@ -188,7 +219,11 @@ class ProvisionedReality:
 
 class RemnawaveApi:
     def __init__(
-        self, base_url: str = "http://127.0.0.1:3000", *, timeout: int = 30
+        self,
+        base_url: str = "http://127.0.0.1:3000",
+        *,
+        timeout: int = 30,
+        cookies: Mapping[str, str] | None = None,
     ) -> None:
         if (
             isinstance(timeout, bool)
@@ -200,6 +235,12 @@ class RemnawaveApi:
             )
         self.base_url = _validated_base_url(base_url)
         self.timeout = timeout
+        if cookies is None:
+            self._cookies = {}
+        elif not isinstance(cookies, Mapping):
+            raise ValidationError("Cookie Panel API имеет небезопасный формат.")
+        else:
+            self._cookies = parse_panel_cookies(json.dumps(dict(cookies)))
         hostname = urllib.parse.urlsplit(self.base_url).hostname
         normalized_hostname = hostname.rstrip(".").lower() if hostname else ""
         self._loopback = normalized_hostname == "localhost"
@@ -259,6 +300,10 @@ class RemnawaveApi:
             "Accept": "application/json",
             "X-Remnawave-Client-Type": "browser",
         }
+        if self._cookies:
+            headers["Cookie"] = "; ".join(
+                f"{name}={value}" for name, value in self._cookies.items()
+            )
         if self._loopback:
             headers.update(
                 {
@@ -279,7 +324,9 @@ class RemnawaveApi:
             headers["Authorization"] = "Bearer " + token
         if data is not None and not isinstance(data, dict):
             raise ValidationError("Тело запроса Panel API должно быть JSON-объектом.")
-        secrets_to_redact = _request_secret_values(token, data)
+        secrets_to_redact = _request_secret_values(token, data) + tuple(
+            self._cookies.values()
+        )
         payload: bytes | None = None
         if data is not None:
             try:
