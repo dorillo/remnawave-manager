@@ -405,9 +405,9 @@ def build_parser() -> RussianArgumentParser:
         "--panel-ip", required=True, help="IPv4-адрес Panel для доступа к порту 2222."
     )
     node.add_argument(
-        "--panel-3-3-ready",
+        "--panel-3-4-ready",
         action="store_true",
-        help="Подтвердить, что Panel уже работает на версии не ниже 3.3.0.",
+        help="Подтвердить, что Panel уже работает на версии 3.4.1.",
     )
     source = node.add_mutually_exclusive_group(required=True)
     source.add_argument("--template", choices=DISGUISE_IDS)
@@ -426,9 +426,9 @@ def build_parser() -> RussianArgumentParser:
         "update", help="Обновить компоненты согласно роли сервера."
     )
     update.add_argument(
-        "--panel-3-3-ready",
+        "--panel-3-4-ready",
         action="store_true",
-        help="Подтвердить, что Panel уже обновлена как минимум до 3.3.0 перед обновлением Node.",
+        help="Подтвердить, что Panel уже обновлена до 3.4.1 перед обновлением Node.",
     )
     update.add_argument(
         "--accept-reality-client-risk",
@@ -441,7 +441,7 @@ def build_parser() -> RussianArgumentParser:
         help="Разрешить обновление, если digest исходного релиза не удалось определить.",
     )
     update.epilog = (
-        "Если текущий SECRET_KEY несовместим с Node 3.3.2, менеджер запросит новый "
+        "Если текущий SECRET_KEY несовместим с Node 3.4.0, менеджер запросит новый "
         "ключ для ручной вставки. Для автоматизации задайте его через RWM_NODE_SECRET_KEY."
     )
     _add_yes(update)
@@ -1125,7 +1125,7 @@ def dispatch(args: argparse.Namespace, context: CliContext) -> int:
                 ),
                 certificate=_certificate_spec(args, context),
                 site_source=Path(source),
-                panel_3_3_ready=args.panel_3_3_ready,
+                panel_3_4_ready=args.panel_3_4_ready,
                 configure_ufw=not args.no_ufw,
                 ssh_ports=tuple(args.ssh_port) if args.ssh_port else None,
             ),
@@ -1144,7 +1144,8 @@ def dispatch(args: argparse.Namespace, context: CliContext) -> int:
             "Миграции PostgreSQL откатываются только восстановлением dump."
             if inventory.role == "panel"
             else "Будет создан backup и протестирован текущий Xray-конфиг новым образом Node. "
-            "Перед обновлением Node 3.3.2 сначала обновите Panel как минимум до 3.3.0: эта версия Node принимает API-соединения только с производным SNI, которое отправляет Panel 3.3.x."
+            "Перед обновлением Node 3.4.0 сначала обновите и проверьте Panel 3.4.1: "
+            "компоненты должны использовать один актуальный Node API-контракт."
         )
         _confirm(context, warning, assume_yes=args.yes)
         if inventory.role == "panel":
@@ -1155,7 +1156,7 @@ def dispatch(args: argparse.Namespace, context: CliContext) -> int:
             )
         else:
             update_options = {
-                "panel_3_3_ready": args.panel_3_3_ready,
+                "panel_3_4_ready": args.panel_3_4_ready,
                 "accept_reality_client_risk": args.accept_reality_client_risk,
                 "accept_unknown_source": args.accept_unknown_source,
             }
@@ -1173,11 +1174,11 @@ def dispatch(args: argparse.Namespace, context: CliContext) -> int:
                 if replacement_secret is None:
                     if context.json_output:
                         raise ValidationError(
-                            "Текущий SECRET_KEY несовместим с Node 3.3.2. "
+                            "Текущий SECRET_KEY несовместим с Node 3.4.0. "
                             "Задайте новый ключ через RWM_NODE_SECRET_KEY и повторите команду."
                         )
                     context.write(
-                        f"Текущий SECRET_KEY не совместим с Node 3.3.2: "
+                        f"Текущий SECRET_KEY не совместим с Node 3.4.0: "
                         f"{current_secret_error}"
                     )
                     context.write(
@@ -1202,7 +1203,7 @@ def dispatch(args: argparse.Namespace, context: CliContext) -> int:
                     except NodeSecretValidationError as replacement_error:
                         if context.json_output or replacement_from_environment:
                             raise ValidationError(
-                                "Новый SECRET_KEY также отклонён Node 3.3.2. "
+                                "Новый SECRET_KEY также отклонён Node 3.4.0. "
                                 "Проверьте значение RWM_NODE_SECRET_KEY."
                             ) from replacement_error
                         context.error(
@@ -2223,18 +2224,18 @@ def _interactive_arguments(context: CliContext, section: int) -> list[str] | Non
             catalog[template - 1]["id"],
         ]
         if _yes_no(
-            context, "Panel уже установлена или обновлена как минимум до 3.3.0", default=False
+            context, "Panel уже установлена или обновлена до 3.4.1", default=False
         ):
-            result.append("--panel-3-3-ready")
+            result.append("--panel-3-4-ready")
         if not _yes_no(context, "Настроить UFW", default=True):
             result.append("--no-ufw")
         return result + _interactive_certificate(context)
     if section == 3:
         result = ["update"]
         if _yes_no(
-            context, "Panel уже обновлена как минимум до 3.3.0 и прошла проверку", default=False
+            context, "Panel уже обновлена до 3.4.1 и прошла проверку", default=False
         ):
-            result.append("--panel-3-3-ready")
+            result.append("--panel-3-4-ready")
         if _yes_no(
             context, "Все Reality-клиенты имеют версию не ниже 26.3.27", default=False
         ):

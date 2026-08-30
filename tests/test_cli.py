@@ -72,7 +72,7 @@ class CliParserTests(unittest.TestCase):
                     "node.example.com",
                     "--panel-ip",
                     "192.0.2.10",
-                    "--panel-3-3-ready",
+                    "--panel-3-4-ready",
                     "--certificate-method",
                     "http-01",
                     "--email",
@@ -243,7 +243,7 @@ class CliDispatchTests(unittest.TestCase):
                     "node.example.com",
                     "--panel-ip",
                     "192.0.2.10",
-                    "--panel-3-3-ready",
+                    "--panel-3-4-ready",
                     "--template",
                     "01-northline",
                     "--certificate-method",
@@ -256,7 +256,7 @@ class CliDispatchTests(unittest.TestCase):
         self.assertEqual(code, 0, self.stderr.getvalue())
         options = install.call_args.args[2]
         self.assertEqual(options.secret_key, "node-secret-from-env")
-        self.assertTrue(options.panel_3_3_ready)
+        self.assertTrue(options.panel_3_4_ready)
         self.assertNotIn("RWM_NODE_SECRET_KEY", os.environ)
         self.assertNotIn("node-secret-from-env", self.stdout.getvalue())
         self.assertNotIn("node-secret-from-env", self.stderr.getvalue())
@@ -609,7 +609,7 @@ class CliDispatchTests(unittest.TestCase):
             ) as update,
         ):
             code = self.run_main(
-                ["update", "--yes", "--panel-3-3-ready"],
+                ["update", "--yes", "--panel-3-4-ready"],
                 secrets=["replacement-node-secret"],
             )
 

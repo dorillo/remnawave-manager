@@ -129,7 +129,7 @@ def validate_node_secret_payload(secret: str) -> str:
         payload = json.loads(decoded.decode("utf-8"))
     except (ValueError, UnicodeError, json.JSONDecodeError) as error:
         raise NodeSecretValidationError(
-            "Введённое значение не является SECRET_KEY Node 3.3.2. "
+            "Введённое значение не является SECRET_KEY Node 3.4.0. "
             "Скопируйте полный SECRET_KEY именно из конфигурации нужной Node в Panel; "
             "API-токен, UUID, Public Key и X25519-ключ для этого не подходят."
         ) from error
@@ -138,7 +138,7 @@ def validate_node_secret_payload(secret: str) -> str:
         for field in _NODE_SECRET_FIELDS
     ):
         raise NodeSecretValidationError(
-            "В SECRET_KEY отсутствует полный payload Node 3.3.2 "
+            "В SECRET_KEY отсутствует полный payload Node 3.4.0 "
             "(caCertPem, jwtPublicKey, nodeCertPem и nodeKeyPem). "
             "Скопируйте SECRET_KEY из конфигурации нужной Node в Panel."
         )
@@ -621,7 +621,7 @@ def wait_node_runtime(
 
 
 def validate_node_secret(runner: Runner, image: str, secret: str) -> None:
-    """Validate the 3.3.2 SECRET_KEY contract without persisting the secret."""
+    """Validate the Node 3.4.0 SECRET_KEY contract without persisting the secret."""
     secret = validate_node_secret_payload(secret)
     result = runner.run(
         [
@@ -659,7 +659,7 @@ def validate_node_secret(runner: Runner, image: str, secret: str) -> None:
     )
     if result.returncode != 0 and failure_code in _NODE_SECRET_FAILURES:
         raise NodeSecretValidationError(
-            "SECRET_KEY отклонён валидатором Node 3.3.2: "
+            "SECRET_KEY отклонён валидатором Node 3.4.0: "
             + _NODE_SECRET_FAILURES[failure_code]
             + ". Скопируйте новый SECRET_KEY из конфигурации нужной Node "
             "в обновлённой Panel. "
@@ -667,7 +667,7 @@ def validate_node_secret(runner: Runner, image: str, secret: str) -> None:
         )
     if result.returncode != 0 or result.stdout.strip() != "RWM_NODE_SECRET_OK":
         raise TransactionError(
-            "Не удалось выполнить изолированный валидатор SECRET_KEY в образе Node 3.3.2. "
+            "Не удалось выполнить изолированный валидатор SECRET_KEY в образе Node 3.4.0. "
             "Это ошибка запуска preflight, а не подтверждение повреждения ключа; "
             "текущий образ Node не переключён."
         )

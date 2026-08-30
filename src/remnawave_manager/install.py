@@ -87,7 +87,7 @@ class NodeInstallOptions:
     secret_key: str
     certificate: CertificateSpec
     site_source: Path
-    panel_3_3_ready: bool = False
+    panel_3_4_ready: bool = False
     install_dir: Path = Path("/opt/remnanode")
     configure_ufw: bool = True
     ssh_ports: tuple[int, ...] | None = None
@@ -133,7 +133,7 @@ def render_panel_env(environment: PanelEnvironment) -> str:
         + "@remnawave-db:5432/remnawave"
     )
     return (
-        "# Remnawave Panel 3.3.2. Файл содержит секреты.\n"
+        "# Remnawave Panel 3.4.1. Файл содержит секреты.\n"
         "APP_PORT=3000\n"
         "METRICS_PORT=3001\n"
         "API_INSTANCES=1\n"
@@ -163,6 +163,8 @@ def render_panel_env(environment: PanelEnvironment) -> str:
         "EXPIRATION_NOTIFICATIONS=[-72,-48,-24,24]\n"
         "EXPORT_TO_STREAM_ENABLED=false\n"
         "EXPORT_TO_STREAM_MAXLEN=3000\n"
+        "SHORT_UUID_METHOD=nanoid\n"
+        "SHORT_UUID_LENGTH=16\n"
         "POSTGRES_USER=remnawave\n"
         f"POSTGRES_PASSWORD={environment.postgres_password}\n"
         "POSTGRES_DB=remnawave\n"
@@ -184,9 +186,12 @@ def render_subscription_env(api_token: str) -> str:
 def render_node_env(secret_key: str) -> str:
     selected = _secret_value(secret_key, "SECRET_KEY ноды")
     return (
-        "# Remnawave Node 3.3.2. Файл содержит секрет.\n"
+        "# Remnawave Node 3.4.0. Файл содержит секрет.\n"
         "NODE_PORT=2222\n"
         f"SECRET_KEY={_dotenv_value(selected)}\n"
+        "NFTABLES_LOGGING=true\n"
+        "NFTABLES_ACCEPT_REPLY_TRAFFIC=false\n"
+        "SNI_VERIFICATION=false\n"
     )
 
 
@@ -1002,10 +1007,10 @@ def install_node(
     store: StateStore,
     options: NodeInstallOptions,
 ) -> NodeInstallResult:
-    if not options.panel_3_3_ready:
+    if not options.panel_3_4_ready:
         raise ValidationError(
-            "Node 3.3.2 требует Panel не ниже 3.3.0. Сначала обновите Panel и подтвердите "
-            "совместимость параметром --panel-3-3-ready."
+            "Node 3.4.0 требует Panel 3.4.1. Сначала обновите и проверьте Panel, затем "
+            "подтвердите совместимость параметром --panel-3-4-ready."
         )
     _preflight(
         runner,

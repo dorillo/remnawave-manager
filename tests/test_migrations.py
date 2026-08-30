@@ -755,13 +755,13 @@ class LegacyNodeMigrationTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValidationError, "SECRET_KEY"):
                     _node_secret(runner, inventory)
 
-    def test_node_3_3_update_requires_panel_to_be_updated_first(self) -> None:
+    def test_node_3_4_update_requires_panel_to_be_updated_first(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             _, runner, store, _ = adopt_fixture(temporary, "legacy_node_2_8_0")
             with (
                 mock.patch("remnawave_manager.update.create_backup") as backup,
                 mock.patch("remnawave_manager.update.pull_verified") as pull,
-                self.assertRaisesRegex(ValidationError, "--panel-3-3-ready"),
+                self.assertRaisesRegex(ValidationError, "--panel-3-4-ready"),
             ):
                 update_node(runner, store)
 
@@ -793,7 +793,7 @@ class LegacyNodeMigrationTests(unittest.TestCase):
                 mock.patch("remnawave_manager.update.restore_backup") as restore,
                 self.assertRaisesRegex(ValidationError, "SECRET_KEY"),
             ):
-                update_node(runner, store, panel_3_3_ready=True)
+                update_node(runner, store, panel_3_4_ready=True)
 
             validate_secret.assert_called_once_with(
                 runner, TARGET_IMAGES["node"], NODE_SECRET_PAYLOAD
@@ -835,7 +835,7 @@ class LegacyNodeMigrationTests(unittest.TestCase):
                 update_node(
                     runner,
                     store,
-                    panel_3_3_ready=True,
+                    panel_3_4_ready=True,
                     replacement_secret="replacement-node-secret",
                 )
 
@@ -870,7 +870,7 @@ class LegacyNodeMigrationTests(unittest.TestCase):
                 result = update_node(
                     runner,
                     store,
-                    panel_3_3_ready=True,
+                    panel_3_4_ready=True,
                     replacement_secret="SECRET_KEY=replacement-node-secret",
                 )
 
@@ -918,7 +918,7 @@ class LegacyNodeMigrationTests(unittest.TestCase):
                 update_node(
                     runner,
                     store,
-                    panel_3_3_ready=True,
+                    panel_3_4_ready=True,
                     replacement_secret="replacement-node-secret",
                 )
 
@@ -969,7 +969,7 @@ class LegacyNodeMigrationTests(unittest.TestCase):
                 result = update_node(
                     runner,
                     store,
-                    panel_3_3_ready=True,
+                    panel_3_4_ready=True,
                     replacement_secret="SECRET_KEY=replacement-node-secret",
                 )
 
@@ -1012,7 +1012,7 @@ class LegacyNodeMigrationTests(unittest.TestCase):
                 mock.patch("remnawave_manager.update.restore_backup") as restore,
                 self.assertRaisesRegex(TransactionError, "внешнего изменения managed-файлов"),
             ):
-                update_node(runner, store, panel_3_3_ready=True)
+                update_node(runner, store, panel_3_4_ready=True)
 
             restore.assert_not_called()
             self.assertIsNotNone(operator_edit)
@@ -1042,7 +1042,7 @@ class LegacyNodeMigrationTests(unittest.TestCase):
                 mock.patch("remnawave_manager.update.restore_backup") as restore,
                 self.assertRaisesRegex(ValidationError, "изменился после загрузки"),
             ):
-                update_node(runner, store, panel_3_3_ready=True)
+                update_node(runner, store, panel_3_4_ready=True)
 
             restore.assert_not_called()
             self.assertEqual(compose_path.read_text(encoding="utf-8"), operator_edit)
@@ -1070,7 +1070,7 @@ class LegacyNodeMigrationTests(unittest.TestCase):
                 mock.patch.object(Path, "unlink", new=reject_xray_cleanup),
                 self.assertRaisesRegex(TransactionError, "временный Xray-конфиг"),
             ):
-                update_node(runner, store, panel_3_3_ready=True)
+                update_node(runner, store, panel_3_4_ready=True)
 
             self.assertEqual(compose_path.read_bytes(), original_compose)
             self.assertFalse((store.paths.state / "active-transaction.json").exists())
@@ -1187,7 +1187,7 @@ class LegacyNodeMigrationTests(unittest.TestCase):
                     side_effect=[{"warp"}, {"warp"}],
                 ) as warp_interfaces,
             ):
-                result = update_node(runner, store, panel_3_3_ready=True)
+                result = update_node(runner, store, panel_3_4_ready=True)
 
             self.assertEqual(result, backup)
             updated_compose = (install_dir / "docker-compose.yml").read_text(encoding="utf-8")
@@ -1288,7 +1288,7 @@ class LegacyNodeMigrationTests(unittest.TestCase):
                 ),
                 self.assertRaises(TransactionError),
             ):
-                update_node(runner, store, panel_3_3_ready=True)
+                update_node(runner, store, panel_3_4_ready=True)
 
             rollback.assert_called_once_with(
                 runner,
@@ -1344,7 +1344,7 @@ class LegacyNodeMigrationTests(unittest.TestCase):
                 ),
                 self.assertRaisesRegex(TransactionError, "обновление journal"),
             ):
-                update_node(runner, store, panel_3_3_ready=True)
+                update_node(runner, store, panel_3_4_ready=True)
 
             rollback.assert_called_once_with(
                 runner,

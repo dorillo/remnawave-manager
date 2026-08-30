@@ -76,15 +76,19 @@ class InstallGeneratorTests(unittest.TestCase):
             )
         )
 
-        self.assertTrue(panel.startswith("# Remnawave Panel 3.3.2."))
+        self.assertTrue(panel.startswith("# Remnawave Panel 3.4.1."))
+        self.assertIn("SHORT_UUID_METHOD=nanoid\n", panel)
+        self.assertIn("SHORT_UUID_LENGTH=16\n", panel)
         self.assertTrue(
-            render_node_env("node-secret").startswith("# Remnawave Node 3.3.2.")
+            render_node_env("node-secret").startswith("# Remnawave Node 3.4.0.")
         )
+        self.assertIn("NFTABLES_LOGGING=true\n", render_node_env("node-secret"))
+        self.assertIn("SNI_VERIFICATION=false\n", render_node_env("node-secret"))
 
-    def test_node_install_requires_panel_3_3_confirmation_before_preflight(self) -> None:
+    def test_node_install_requires_panel_3_4_confirmation_before_preflight(self) -> None:
         with (
             mock.patch("remnawave_manager.install._preflight") as preflight,
-            self.assertRaisesRegex(ValidationError, "--panel-3-3-ready"),
+            self.assertRaisesRegex(ValidationError, "--panel-3-4-ready"),
         ):
             install_node(
                 mock.Mock(spec=Runner),
@@ -1470,7 +1474,7 @@ class InstallGeneratorTests(unittest.TestCase):
                             method="http-01", email="admin@example.com"
                         ),
                         site_source=site,
-                        panel_3_3_ready=True,
+                        panel_3_4_ready=True,
                         install_dir=install_dir,
                     ),
                 )
@@ -1686,7 +1690,7 @@ class InstallGeneratorTests(unittest.TestCase):
                             method="http-01", email="admin@example.com"
                         ),
                         site_source=site,
-                        panel_3_3_ready=True,
+                        panel_3_4_ready=True,
                         install_dir=install_dir,
                     ),
                 )
@@ -1766,7 +1770,7 @@ class InstallGeneratorTests(unittest.TestCase):
                             method="http-01", email="admin@example.com"
                         ),
                         site_source=site,
-                        panel_3_3_ready=True,
+                        panel_3_4_ready=True,
                         install_dir=install_dir,
                     ),
                 )

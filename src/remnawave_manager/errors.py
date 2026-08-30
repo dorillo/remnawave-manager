@@ -7,7 +7,7 @@ class ValidationError(ManagerError):
 
 
 class NodeSecretValidationError(ValidationError):
-    """Node 3.3.2 отклонила содержимое SECRET_KEY."""
+    """Node 3.4.0 отклонила содержимое SECRET_KEY."""
 
 
 class CommandError(ManagerError):

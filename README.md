@@ -10,15 +10,15 @@
 
 Менеджер никогда не следует плавающему тегу `latest` и не повышает версии только потому, что upstream опубликовал новый релиз. Новая версия становится поддерживаемой после отдельной проверки release notes, миграций, API-контрактов и digest образов, затем явно добавляется в compatibility manifest. Перед production-обновлением новая связка дополнительно проверяется на отдельной Ubuntu 24.04 с копией реальных данных.
 
-Для Panel 3.3.2 проверены официальные release notes и diff backend с 3.3.0: обязательные `.env`, Compose и API-контракты не изменились, multiarch manifest digest закреплён в Docker Hub/GHCR. Изменения 3.3.1-3.3.2 относятся к Torrent Blocker, сортировке Node Plugins и ссылкам UI; отдельная ручная миграция конфигурации или схемы базы не требуется.
+Для Panel 3.4.1 проверены официальные release notes и полный diff backend с 3.3.2. Релиз добавляет штатные Prisma-миграции для режимов привязки Host к Internal Squads и тегов сущностей, а также необязательные `SHORT_UUID_METHOD` и `SHORT_UUID_CUSTOM_PATTERN`. Старый `.env` остаётся валидным благодаря upstream defaults; при чистой установке менеджер явно выбирает совместимые `nanoid` и длину 16. Multiarch manifest digest закреплён в Docker Hub/GHCR.
 
-Node 3.3.2 сохраняет API за производным SNI, введённым в 3.3.0. Panel не ниже 3.3.0 вычисляет и отправляет этот SNI, поэтому Node обновляется только после Panel; CLI требует явное `--panel-3-3-ready` при переходе со старой Node. Перед переключением менеджер новым образом проверяет строгий контракт `SECRET_KEY` 3.3.2 и текущий Xray JSON. Если старый ключ несовместим, интерактивное обновление запросит вручную вставить полный `SECRET_KEY` из конфигурации нужной Node в Panel и проверит его до изменения `.env` или Compose.
+Node 3.4.0 сохраняет Xray Core `v26.7.28`, runtime-команды и Unix-сокеты XHTTP, но обновляет Node API-контракт и добавляет необязательные настройки nftables/SNI. Поэтому Node обновляется только после Panel 3.4.1; CLI требует явное `--panel-3-4-ready` при переходе со старой Node. Перед переключением менеджер проверяет строгий контракт `SECRET_KEY` 3.4.0 и текущий Xray JSON. Если старый ключ несовместим, интерактивное обновление запросит полный `SECRET_KEY` из конфигурации нужной Node в Panel и проверит его до изменения `.env` или Compose.
 
 | Компонент | Проверенная исходная версия | Целевая версия |
 | --- | --- | --- |
-| Remnawave Panel | 2.8.1, 3.0.0, 3.1.0, 3.2.0, 3.2.1, 3.2.2, 3.2.3, 3.3.0, 3.3.1, 3.3.2 | 3.3.2 |
+| Remnawave Panel | 2.8.1, 3.0.0, 3.1.0, 3.2.0, 3.2.1, 3.2.2, 3.2.3, 3.3.0, 3.3.1, 3.3.2, 3.4.0, 3.4.1 | 3.4.1 |
 | Subscription Page | 7.2.6, 8.0.0 | 8.0.0 |
-| Remnawave Node | 2.8.0, 3.0.0, 3.1.0, 3.1.1, 3.2.0, 3.2.1, 3.2.2, 3.3.0, 3.3.1, 3.3.2 | 3.3.2 |
+| Remnawave Node | 2.8.0, 3.0.0, 3.1.0, 3.1.1, 3.2.0, 3.2.1, 3.2.2, 3.3.0, 3.3.1, 3.3.2, 3.4.0 | 3.4.0 |
 | PostgreSQL | 18.3, 18.4 | 18.4 |
 | `wgcf` | не применяется | 2.2.32 с фиксированным SHA-256 |
 
@@ -135,7 +135,7 @@ sudo rwm install panel \
   --email admin@example.com
 ```
 
-Менеджер установит Panel 3.3.2 и Subscription Page 8.0.0 на одном сервере, настроит nginx, UFW, TLS и защитный URL с cookie. Node при этом не устанавливается.
+Менеджер установит Panel 3.4.1 и Subscription Page 8.0.0 на одном сервере, настроит nginx, UFW, TLS и защитный URL с cookie. Node при этом не устанавливается.
 
 Имя и стойкий пароль администратора генерируются автоматически и показываются один раз. Можно указать `--admin-username` и запросить собственный пароль через `--ask-admin-password`. Передача пароля значением аргумента командной строки не поддерживается.
 
@@ -169,7 +169,7 @@ export RWM_NODE_SECRET_KEY='полученный-secret-key'
 sudo --preserve-env=RWM_NODE_SECRET_KEY rwm install node \
   --domain node.example.com \
   --panel-ip 192.0.2.10 \
-  --panel-3-3-ready \
+  --panel-3-4-ready \
   --template 01-northline \
   --certificate-method http-01 \
   --email admin@example.com
@@ -201,8 +201,8 @@ sudo rwm backup verify /var/backups/remnawave-manager/ИМЯ_BACKUP.tar.gz
 
 Подробные инструкции:
 
-- [обновление Panel до 3.3.2 и Subscription Page 8.0.0](docs/migration-panel-3.2.1-to-3.2.3.md);
-- [обновление Node до 3.3.2](docs/update-node-3.0.0-to-3.1.1.md);
+- [обновление Panel до 3.4.1 и Subscription Page 8.0.0](docs/migration-panel-3.2.1-to-3.2.3.md);
+- [обновление Node до 3.4.0](docs/update-node-3.0.0-to-3.1.1.md);
 - [XHTTP через nginx: уникальный путь и снижение шаблонности](docs/xhttp-nginx-hardening.md);
 - [сохранение XHTTP, stream separation, Яндекс CDN и Beeline CDN](docs/xhttp-yandex-preservation.md);
 - [rollback и аварийное восстановление](docs/rollback-recovery.md).
