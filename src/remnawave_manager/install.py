@@ -133,7 +133,7 @@ def render_panel_env(environment: PanelEnvironment) -> str:
         + "@remnawave-db:5432/remnawave"
     )
     return (
-        "# Remnawave Panel 3.4.1. Файл содержит секреты.\n"
+        "# Remnawave Panel 3.4.3. Файл содержит секреты.\n"
         "APP_PORT=3000\n"
         "METRICS_PORT=3001\n"
         "API_INSTANCES=1\n"
@@ -186,7 +186,7 @@ def render_subscription_env(api_token: str) -> str:
 def render_node_env(secret_key: str) -> str:
     selected = _secret_value(secret_key, "SECRET_KEY ноды")
     return (
-        "# Remnawave Node 3.4.0. Файл содержит секрет.\n"
+        "# Remnawave Node 3.4.1. Файл содержит секрет.\n"
         "NODE_PORT=2222\n"
         f"SECRET_KEY={_dotenv_value(selected)}\n"
         "NFTABLES_LOGGING=true\n"
@@ -1009,7 +1009,7 @@ def install_node(
 ) -> NodeInstallResult:
     if not options.panel_3_4_ready:
         raise ValidationError(
-            "Node 3.4.0 требует Panel 3.4.1. Сначала обновите и проверьте Panel, затем "
+            "Node 3.4.1 требует Panel 3.4.3. Сначала обновите и проверьте Panel, затем "
             "подтвердите совместимость параметром --panel-3-4-ready."
         )
     _preflight(

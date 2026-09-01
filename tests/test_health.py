@@ -94,7 +94,7 @@ class NodeSecretValidationTests(unittest.TestCase):
             ("docker", "run"), 0, "RWM_NODE_SECRET_OK\n", ""
         )
 
-        validate_node_secret(runner, "remnawave/node:3.4.0@sha256:verified", secret)
+        validate_node_secret(runner, "remnawave/node:3.4.1@sha256:verified", secret)
 
         command = runner.run.call_args.args[0]
         options = runner.run.call_args.kwargs
@@ -120,20 +120,20 @@ class NodeSecretValidationTests(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(NodeSecretValidationError, "приватный ключ"):
-            validate_node_secret(runner, "remnawave/node:3.4.0", self.payload())
+            validate_node_secret(runner, "remnawave/node:3.4.1", self.payload())
 
     def test_preflight_launch_failure_is_not_reported_as_invalid_key(self) -> None:
         runner = mock.Mock()
         runner.run.return_value = Result(("docker", "run"), 125, "", "docker unavailable")
 
         with self.assertRaisesRegex(TransactionError, "ошибка запуска preflight"):
-            validate_node_secret(runner, "remnawave/node:3.4.0", self.payload())
+            validate_node_secret(runner, "remnawave/node:3.4.1", self.payload())
 
     def test_rejects_control_characters_without_running_image(self) -> None:
         runner = mock.Mock()
 
         with self.assertRaisesRegex(ValidationError, "небезопасный формат"):
-            validate_node_secret(runner, "remnawave/node:3.4.0", "secret\n")
+            validate_node_secret(runner, "remnawave/node:3.4.1", "secret\n")
 
         runner.run.assert_not_called()
 
@@ -143,7 +143,7 @@ class NodeSecretValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(NodeSecretValidationError, "не является SECRET_KEY"):
             validate_node_secret(
                 runner,
-                "remnawave/node:3.4.0",
+                "remnawave/node:3.4.1",
                 "ordinary-api-token",
             )
 
@@ -170,7 +170,7 @@ class NodeSecretValidationTests(unittest.TestCase):
 
         validate_node_secret(
             runner,
-            "remnawave/node:3.4.0",
+            "remnawave/node:3.4.1",
             f"SECRET_KEY={payload}",
         )
 

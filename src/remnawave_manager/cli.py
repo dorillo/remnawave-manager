@@ -407,7 +407,7 @@ def build_parser() -> RussianArgumentParser:
     node.add_argument(
         "--panel-3-4-ready",
         action="store_true",
-        help="Подтвердить, что Panel уже работает на версии 3.4.1.",
+        help="Подтвердить, что Panel уже работает на версии 3.4.3.",
     )
     source = node.add_mutually_exclusive_group(required=True)
     source.add_argument("--template", choices=DISGUISE_IDS)
@@ -428,7 +428,7 @@ def build_parser() -> RussianArgumentParser:
     update.add_argument(
         "--panel-3-4-ready",
         action="store_true",
-        help="Подтвердить, что Panel уже обновлена до 3.4.1 перед обновлением Node.",
+        help="Подтвердить, что Panel уже обновлена до 3.4.3 перед обновлением Node.",
     )
     update.add_argument(
         "--accept-reality-client-risk",
@@ -441,7 +441,7 @@ def build_parser() -> RussianArgumentParser:
         help="Разрешить обновление, если digest исходного релиза не удалось определить.",
     )
     update.epilog = (
-        "Если текущий SECRET_KEY несовместим с Node 3.4.0, менеджер запросит новый "
+        "Если текущий SECRET_KEY несовместим с Node 3.4.1, менеджер запросит новый "
         "ключ для ручной вставки. Для автоматизации задайте его через RWM_NODE_SECRET_KEY."
     )
     _add_yes(update)
@@ -1144,7 +1144,7 @@ def dispatch(args: argparse.Namespace, context: CliContext) -> int:
             "Миграции PostgreSQL откатываются только восстановлением dump."
             if inventory.role == "panel"
             else "Будет создан backup и протестирован текущий Xray-конфиг новым образом Node. "
-            "Перед обновлением Node 3.4.0 сначала обновите и проверьте Panel 3.4.1: "
+            "Перед обновлением Node 3.4.1 сначала обновите и проверьте Panel 3.4.3: "
             "компоненты должны использовать один актуальный Node API-контракт."
         )
         _confirm(context, warning, assume_yes=args.yes)
@@ -1174,11 +1174,11 @@ def dispatch(args: argparse.Namespace, context: CliContext) -> int:
                 if replacement_secret is None:
                     if context.json_output:
                         raise ValidationError(
-                            "Текущий SECRET_KEY несовместим с Node 3.4.0. "
+                            "Текущий SECRET_KEY несовместим с Node 3.4.1. "
                             "Задайте новый ключ через RWM_NODE_SECRET_KEY и повторите команду."
                         )
                     context.write(
-                        f"Текущий SECRET_KEY не совместим с Node 3.4.0: "
+                        f"Текущий SECRET_KEY не совместим с Node 3.4.1: "
                         f"{current_secret_error}"
                     )
                     context.write(
@@ -1203,7 +1203,7 @@ def dispatch(args: argparse.Namespace, context: CliContext) -> int:
                     except NodeSecretValidationError as replacement_error:
                         if context.json_output or replacement_from_environment:
                             raise ValidationError(
-                                "Новый SECRET_KEY также отклонён Node 3.4.0. "
+                                "Новый SECRET_KEY также отклонён Node 3.4.1. "
                                 "Проверьте значение RWM_NODE_SECRET_KEY."
                             ) from replacement_error
                         context.error(
@@ -2224,7 +2224,7 @@ def _interactive_arguments(context: CliContext, section: int) -> list[str] | Non
             catalog[template - 1]["id"],
         ]
         if _yes_no(
-            context, "Panel уже установлена или обновлена до 3.4.1", default=False
+            context, "Panel уже установлена или обновлена до 3.4.3", default=False
         ):
             result.append("--panel-3-4-ready")
         if not _yes_no(context, "Настроить UFW", default=True):
@@ -2233,7 +2233,7 @@ def _interactive_arguments(context: CliContext, section: int) -> list[str] | Non
     if section == 3:
         result = ["update"]
         if _yes_no(
-            context, "Panel уже обновлена до 3.4.1 и прошла проверку", default=False
+            context, "Panel уже обновлена до 3.4.3 и прошла проверку", default=False
         ):
             result.append("--panel-3-4-ready")
         if _yes_no(

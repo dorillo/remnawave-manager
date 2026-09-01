@@ -614,7 +614,7 @@ def _preflight_node_config(
             raise ValidationError(
                 "Reality inbound без явного minClientVer: "
                 + ", ".join(risky)
-                + ". Xray Core в Node 3.4.0 по умолчанию требует клиент 26.3.27. "
+                + ". Xray Core в Node 3.4.1 по умолчанию требует клиент 26.3.27. "
                 "Проверьте версии клиентов и повторите с --accept-reality-client-risk. "
                 "Менеджер не будет автоматически ставить небезопасное 0.0.0."
             )
@@ -676,7 +676,7 @@ def _node_secret(runner: Runner, inventory: Inventory) -> str:
         ]
     if len(candidates) != 1 or not candidates[0]:
         raise ValidationError(
-            "Не удалось безопасно получить SECRET_KEY текущей Node для preflight 3.4.0."
+            "Не удалось безопасно получить SECRET_KEY текущей Node для preflight 3.4.1."
         )
     return candidates[0]
 
@@ -751,9 +751,9 @@ def update_node(
         inventory.components["node"],
         accept_unknown=accept_unknown_source,
     )
-    if source_version != "3.4.0" and not panel_3_4_ready:
+    if source_version != "3.4.1" and not panel_3_4_ready:
         raise ValidationError(
-            "Node 3.4.0 требует Panel 3.4.1 с актуальным Node API-контрактом. Сначала "
+            "Node 3.4.1 требует Panel 3.4.3 с актуальным Node API-контрактом. Сначала "
             "обновите Panel, убедитесь, что она работает, затем повторите update Node "
             "с --panel-3-4-ready."
         )
