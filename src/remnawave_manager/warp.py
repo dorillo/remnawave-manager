@@ -36,7 +36,7 @@ from .runner import (
     sha256_file,
 )
 from .state import StateStore, utc_now
-from .warp_config import WarpProfile, load_warp_profile
+from .warp_config import WARP_IPV4_ROUTE_METRIC, WarpProfile, load_warp_profile
 from .warp_download import install_wgcf, wgcf_contract, wgcf_notice_path
 
 _UNIT_MARKER = "X-Remnawave-Manager=true"
@@ -392,6 +392,27 @@ def _normalized_json(result: str) -> str:
     return json.dumps(clean(value), sort_keys=True, separators=(",", ":"))
 
 
+def _normalized_ipv4_default_routes(result: str) -> str:
+    try:
+        routes = json.loads(result)
+    except json.JSONDecodeError:
+        return _normalized_json(result)
+    if not isinstance(routes, list):
+        return _normalized_json(result)
+    filtered = [
+        route
+        for route in routes
+        if not (
+            isinstance(route, dict)
+            and route.get("dst") == "default"
+            and route.get("dev") == "warp"
+            and route.get("metric") == WARP_IPV4_ROUTE_METRIC
+            and "gateway" not in route
+        )
+    ]
+    return _normalized_json(json.dumps(filtered))
+
+
 def _invariants(runner: Runner, runtime: RuntimePaths) -> dict[str, str]:
     commands = {
         "route4": ["ip", "-j", "route", "show", "default"],
@@ -407,7 +428,11 @@ def _invariants(runner: Runner, runtime: RuntimePaths) -> dict[str, str]:
             raise TransactionError(
                 f"Не удалось получить системный invariant {key}; WARP-операция остановлена."
             )
-        values[key] = _normalized_json(result.stdout)
+        values[key] = (
+            _normalized_ipv4_default_routes(result.stdout)
+            if key == "route4"
+            else _normalized_json(result.stdout)
+        )
     for name in ("etc/resolv.conf", "etc/ufw/user.rules", "etc/ufw/user6.rules"):
         path = runtime.root / name
         values[name] = _invariant_file(path, allow_symlink=name == "etc/resolv.conf")
@@ -690,9 +715,16 @@ def _trace_via_warp(timeout: float = 8.0) -> str:
     context = ssl.create_default_context()
     errors: list[str] = []
     try:
-        addresses = socket.getaddrinfo("www.cloudflare.com", 443, type=socket.SOCK_STREAM)
+        addresses = socket.getaddrinfo(
+            "www.cloudflare.com",
+            443,
+            family=socket.AF_INET,
+            type=socket.SOCK_STREAM,
+        )
     except OSError as error:
-        raise TransactionError(f"Не удалось разрешить www.cloudflare.com: {error}") from error
+        raise TransactionError(
+            f"Не удалось разрешить IPv4-адрес www.cloudflare.com: {error}"
+        ) from error
     for family, socktype, proto, _, address in addresses:
         raw = socket.socket(family, socktype, proto)
         raw.settimeout(timeout)

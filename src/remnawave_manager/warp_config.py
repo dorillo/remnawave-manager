@@ -13,6 +13,14 @@ from pathlib import Path
 from .errors import ValidationError
 
 _MAX_PROFILE_SIZE = 64 * 1024
+WARP_IPV4_ROUTE_METRIC = 42760
+WARP_IPV4_ROUTE_UP = (
+    f"ip -4 route replace default dev %i metric {WARP_IPV4_ROUTE_METRIC}"
+)
+WARP_IPV4_ROUTE_DOWN = (
+    f"ip -4 route del default dev %i metric {WARP_IPV4_ROUTE_METRIC} "
+    "2>/dev/null || true"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +40,8 @@ class WarpProfile:
             f"Address = {', '.join(self.addresses)}\n"
             f"MTU = {self.mtu}\n"
             "Table = off\n"
+            f"PostUp = {WARP_IPV4_ROUTE_UP}\n"
+            f"PreDown = {WARP_IPV4_ROUTE_DOWN}\n"
             "\n"
             "[Peer]\n"
             f"PublicKey = {self.public_key}\n"
@@ -41,12 +51,18 @@ class WarpProfile:
         )
 
 
-_INTERFACE_KEYS = {"privatekey", "address", "mtu", "table", "dns"}
+_INTERFACE_KEYS = {
+    "privatekey",
+    "address",
+    "mtu",
+    "table",
+    "dns",
+    "postup",
+    "predown",
+}
 _PEER_KEYS = {"publickey", "allowedips", "endpoint", "persistentkeepalive"}
 _FORBIDDEN = {
     "preup",
-    "postup",
-    "predown",
     "postdown",
     "saveconfig",
 }
@@ -138,6 +154,18 @@ def parse_warp_profile(
         raise ValidationError(
             "WARP-конфиг содержит неизвестные параметры: "
             + ", ".join(sorted(unknown_interface | unknown_peer))
+        )
+    managed_hooks = {
+        "postup": WARP_IPV4_ROUTE_UP,
+        "predown": WARP_IPV4_ROUTE_DOWN,
+    }
+    present_hooks = {key for key in managed_hooks if key in interface}
+    if present_hooks and (
+        present_hooks != set(managed_hooks)
+        or any(interface[key].strip() != value for key, value in managed_hooks.items())
+    ):
+        raise ValidationError(
+            "WARP-конфиг содержит изменённые или неполные manager-owned hooks."
         )
     if "dns" in interface and not generated_profile:
         raise ValidationError("Безопасный takeover запрещён: в WARP-конфиге указан DNS.")

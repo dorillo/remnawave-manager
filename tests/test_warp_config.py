@@ -10,7 +10,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from remnawave_manager.errors import ValidationError
-from remnawave_manager.warp_config import load_warp_profile, parse_warp_profile
+from remnawave_manager.warp_config import (
+    WARP_IPV4_ROUTE_DOWN,
+    WARP_IPV4_ROUTE_UP,
+    load_warp_profile,
+    parse_warp_profile,
+)
 
 PRIVATE_KEY = base64.b64encode(bytes(range(32))).decode("ascii")
 PUBLIC_KEY = base64.b64encode(bytes(range(32, 64))).decode("ascii")
@@ -47,6 +52,8 @@ class WarpConfigTests(unittest.TestCase):
         canonical = parsed.render()
 
         self.assertIn("Table = off\n", canonical)
+        self.assertIn(f"PostUp = {WARP_IPV4_ROUTE_UP}\n", canonical)
+        self.assertIn(f"PreDown = {WARP_IPV4_ROUTE_DOWN}\n", canonical)
         self.assertNotIn("DNS", canonical)
         self.assertEqual(parse_warp_profile(canonical), parsed)
 
@@ -56,6 +63,26 @@ class WarpConfigTests(unittest.TestCase):
         self.assertEqual(parsed.mtu, 1280)
         self.assertEqual(parsed.keepalive, 25)
         self.assertEqual(parsed.allowed_ips, ("0.0.0.0/0", "::/0"))
+
+    def test_accepts_only_exact_manager_owned_route_hooks(self) -> None:
+        managed = profile_text(
+            interface_extra=(
+                "Table = off\n"
+                f"PostUp = {WARP_IPV4_ROUTE_UP}\n"
+                f"PreDown = {WARP_IPV4_ROUTE_DOWN}\n"
+            )
+        )
+
+        self.assertEqual(parse_warp_profile(managed).render(), managed)
+
+        for incomplete in (
+            profile_text(interface_extra=f"Table = off\nPostUp = {WARP_IPV4_ROUTE_UP}\n"),
+            profile_text(interface_extra=f"Table = off\nPreDown = {WARP_IPV4_ROUTE_DOWN}\n"),
+        ):
+            with self.subTest(incomplete=incomplete), self.assertRaisesRegex(
+                ValidationError, "manager-owned hooks"
+            ):
+                parse_warp_profile(incomplete)
 
     def test_requires_ipv4_default_for_bound_interface_routing(self) -> None:
         ipv6_only = profile_text().replace(

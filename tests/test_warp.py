@@ -26,6 +26,7 @@ from remnawave_manager.warp import (
     _install_units,
     _is_active,
     _is_enabled,
+    _normalized_ipv4_default_routes,
     _RejectRedirect,
     _restore_snapshot,
     _restore_unit_state,
@@ -89,6 +90,33 @@ def _private(path: Path, mode: int) -> None:
 
 
 class WarpLifecycleTests(unittest.TestCase):
+    def test_invariants_ignore_only_exact_manager_owned_warp_route(self) -> None:
+        routes = json.dumps(
+            [
+                {
+                    "dst": "default",
+                    "gateway": "192.0.2.1",
+                    "dev": "ens3",
+                },
+                {"dst": "default", "dev": "warp", "metric": 42760},
+                {"dst": "default", "dev": "warp", "metric": 123},
+            ]
+        )
+
+        normalized = json.loads(_normalized_ipv4_default_routes(routes))
+
+        self.assertEqual(
+            normalized,
+            [
+                {
+                    "dev": "ens3",
+                    "dst": "default",
+                    "gateway": "192.0.2.1",
+                },
+                {"dev": "warp", "dst": "default", "metric": 123},
+            ],
+        )
+
     def _write_action_state(
         self,
         store: StateStore,
