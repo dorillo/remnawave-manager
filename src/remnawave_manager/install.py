@@ -46,6 +46,7 @@ from .runner import (
     sha256_file,
 )
 from .state import StateStore
+from .site_policy import NODE_CSP
 
 POSTGRES_IMAGE = (
     "postgres:18.4@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636"
@@ -613,7 +614,7 @@ server {{
     add_header X-Content-Type-Options nosniff always;
     add_header X-Frame-Options SAMEORIGIN always;
     add_header Referrer-Policy strict-origin-when-cross-origin always;
-    add_header Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'" always;
+    add_header Content-Security-Policy "{NODE_CSP}" always;
     add_header Cross-Origin-Opener-Policy same-origin always;
     add_header Cross-Origin-Resource-Policy same-origin always;
 

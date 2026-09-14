@@ -1,3 +1,5 @@
+﻿import { formatDate, formatDateTime, relativeTime, ago, dateRange } from '../shared/date-utils.js';
+import { storage } from '../shared/storage.js';
 const searchModal = document.querySelector('.search-modal');
 const versionMenu = document.querySelector('.version-menu');
 const tryModal = document.querySelector('.try-modal');
@@ -111,7 +113,7 @@ document.querySelectorAll('.nav-group').forEach((button) => button.addEventListe
 const sectionInfo = {
   API: '<p>Справочник REST API содержит методы коллекций, документов, событий и управления токенами. Все ответы используют JSON и единый формат ошибок.</p>',
   SDK: '<p>Официальные клиентские библиотеки поддерживают JavaScript, Python, Go и Kotlin. Пакеты публикуются вместе со спецификацией API.</p>',
-  Изменения: '<p><b>v2.4.0 · 24 июля</b><br>Добавлены курсорная пагинация событий и новые коды ошибок песочницы.</p><p><b>v2.3.4 · 2 июля</b><br>Уточнена проверка подписей вебхуков.</p>',
+  Изменения: `<p><b>v2.4.0 · ${formatDate(ago(4 * 86400000))}</b><br>Добавлены курсорная пагинация событий и новые коды ошибок песочницы.</p><p><b>v2.3.4 · ${formatDate(ago(18 * 86400000))}</b><br>Уточнена проверка подписей вебхуков.</p>`,
   Репозиторий: '<p>Зеркало примеров содержит стартовые проекты, схемы OpenAPI и сценарии миграции. Запись доступна только сопровождающим, чтение открыто.</p>',
   'Изменить страницу': '<p>Правки документации принимаются из подтверждённых организаций. После входа редактор создаёт ветку и отправляет изменение на техническую проверку.</p>'
 };

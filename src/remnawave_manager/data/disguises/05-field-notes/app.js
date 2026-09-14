@@ -1,3 +1,5 @@
+﻿import { formatDate, formatDateTime, relativeTime, ago, dateRange } from '../shared/date-utils.js';
+import { storage } from '../shared/storage.js';
 const panel = document.querySelector('.search-panel');
 const authModal = document.querySelector('.auth-modal');
 const infoModal = document.querySelector('.info-modal');
@@ -22,7 +24,7 @@ function openAuth() {
 
 const info = {
   discussion: ['Обсуждение статьи', '<p><b>12 реплик в 3 темах</b></p><p>Редакторы уточняют терминологию раздела о паводках и проверяют новый источник по возрасту Большого каньона.</p><p>Писать в обсуждении могут подтверждённые участники редакции.</p>'],
-  history: ['История правок', '<p><b>28 июля · Анна Суворова</b><br>Уточнены данные о глубине и добавлена ссылка на геологическую съёмку.</p><p><b>21 июля · Илья Петров</b><br>Переработан раздел о вертикальной эрозии.</p><p><b>4 июля · редакторская проверка</b><br>Статья получила статус рекомендованной.</p>']
+  history: ['История правок', `<p><b>${formatDate(ago(2 * 86400000))} · Анна Суворова</b><br>Уточнены данные о глубине и добавлена ссылка на геологическую съёмку.</p><p><b>${formatDate(ago(9 * 86400000))} · Илья Петров</b><br>Переработан раздел о вертикальной эрозии.</p><p><b>${formatDate(ago(21 * 86400000))} · редакторская проверка</b><br>Статья получила статус рекомендованной.</p>`]
 };
 
 function openInfo(title, body) {
@@ -45,7 +47,7 @@ document.querySelector('.menu').addEventListener('click', () => document.querySe
 document.querySelectorAll('.contents a').forEach((link) => link.addEventListener('click', () => document.querySelector('.contents').classList.remove('open')));
 document.querySelector('.save').addEventListener('click', openAuth);
 document.querySelector('.print').addEventListener('click', () => window.print());
-document.querySelector('.listen').addEventListener('click', () => showToast('Аудиоверсия проходит редакторскую проверку и станет доступна 6 августа.'));
+document.querySelector('.listen').addEventListener('click', () => showToast('Аудиоверсия проходит редакторскую проверку и станет доступна в ближайшем обновлении.'));
 document.querySelectorAll('[data-auth]').forEach((button) => button.addEventListener('click', openAuth));
 document.querySelectorAll('[data-info]').forEach((button) => button.addEventListener('click', () => openInfo(...info[button.dataset.info])));
 document.querySelectorAll('.result').forEach((button) => button.addEventListener('click', () => {
@@ -71,7 +73,7 @@ authModal.querySelector('[data-back]').addEventListener('click', () => {
 });
 authModal.querySelector('[data-request]').addEventListener('click', () => {
   closeModal(authModal);
-  showToast('Заявки на осенний набор откроются 15 сентября. Напоминание сохранено только в этой вкладке.');
+  showToast('Заявки на осенний набор откроются в ближайшем обновлении. Напоминание сохранено только в этой вкладке.');
 });
 
 document.querySelectorAll('.modal').forEach((modal) => {

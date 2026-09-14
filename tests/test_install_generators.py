@@ -894,7 +894,9 @@ class InstallGeneratorTests(unittest.TestCase):
         self.assertIn("server_name node.example.com;", redirect_http)
         self.assertIn("return 308 https://$host$request_uri;", redirect_http)
         self.assertIn("script-src 'self'", rendered)
-        self.assertIn("connect-src 'none'", rendered)
+        self.assertIn("connect-src 'self' https://mastodon.social", rendered)
+        self.assertIn("https://rutube.ru; frame-src https://rutube.ru", rendered)
+        self.assertIn("img-src 'self' data: blob: https:; media-src 'self' data: blob: https:", rendered)
         self.assertNotIn("script-src 'none'", rendered)
 
     def test_http01_certbot_command_is_noninteractive_and_has_all_domains(self) -> None:

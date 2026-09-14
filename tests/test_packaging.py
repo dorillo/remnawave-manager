@@ -116,6 +116,7 @@ class PackagingTests(unittest.TestCase):
                 "data/disguises/*/*.html",
                 "data/disguises/*/*.css",
                 "data/disguises/*/*.js",
+                "data/disguises/*/*/*.json",
                 "data/disguises/*/*.jpg",
                 "data/disguises/*/*.svg",
             },
@@ -140,7 +141,7 @@ class PackagingTests(unittest.TestCase):
         templates = sorted(
             item.name
             for item in package.joinpath("data/disguises").iterdir()
-            if item.is_dir()
+            if item.is_dir() and item.name != "shared"
         )
         self.assertEqual(
             templates,

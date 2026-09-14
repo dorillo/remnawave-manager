@@ -1,3 +1,5 @@
+﻿import { formatDate, formatDateTime, relativeTime, ago, dateRange } from '../shared/date-utils.js';
+import { storage } from '../shared/storage.js';
 const login = document.querySelector('.login');
 const threadModal = document.querySelector('.thread-modal');
 const infoModal = document.querySelector('.info-modal');
@@ -53,12 +55,12 @@ login.querySelector('.login-main form').addEventListener('submit', (event) => {
 login.querySelector('.login-invite form').addEventListener('submit', (event) => {
   event.preventDefault();
   const error = login.querySelector('.login-error');
-  error.textContent = 'Код отсутствует в реестре участников, подтверждённых до 1 августа. Вход пока недоступен.';
+  error.textContent = `Код отсутствует в реестре участников, подтверждённых до ${formatDate(ago(14 * 86400000))}. Вход пока недоступен.`;
   error.hidden = false;
 });
 login.querySelector('[data-register]').addEventListener('click', () => {
   login.hidden = true;
-  showToast('Новые приглашения начнут выдавать после завершения переноса репутации. Окно заявок откроется 12 августа.');
+  showToast('Новые приглашения начнут выдавать после завершения переноса репутации. Окно заявок откроется в ближайшем обновлении.');
 });
 login.querySelector('[data-back]').addEventListener('click', () => {
   login.querySelector('.login-invite').hidden = true;
@@ -131,7 +133,7 @@ document.querySelectorAll('.events article').forEach((card) => card.addEventList
 const info = {
   Статьи: '<p>Редакционные статьи, технические разборы и отчёты команд собраны в общей ленте. Материалы проходят проверку примеров и источников.</p>',
   Команды: '<p>Публичные страницы инженерных команд рассказывают о стеке, процессах и открытых проектах. Создать страницу можно после подтверждения организации.</p>',
-  События: '<p><b>7 августа · онлайн</b> — открытый разбор архитектуры.<br><b>12 августа · Казань</b> — Frontend-митап.<br><b>20 августа · онлайн</b> — клуб технических авторов.</p>',
+  События: `<p><b>${formatDate(ago(-3 * 86400000))} · онлайн</b> — открытый разбор архитектуры.<br><b>${formatDate(ago(-10 * 86400000))} · Казань</b> — Frontend-митап.<br><b>${formatDate(ago(-18 * 86400000))} · онлайн</b> — клуб технических авторов.</p>`,
   Правила: '<p>Публикуйте воспроизводимые примеры, указывайте контекст и критикуйте решения, а не людей. Реклама, сбор персональных данных и ответы без раскрытия конфликта интересов удаляются.</p>',
   Помощь: '<p>Справочный раздел содержит требования к вопросам, руководство по форматированию кода и порядок обжалования модерации.</p>',
   'О проекте': '<p>Код.Круг — независимое инженерное сообщество для подробных вопросов, практических статей и открытых технических встреч.</p>'

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -13,7 +14,16 @@ from .backup import create_backup
 from .errors import ManagerError, TransactionError, ValidationError
 from .models import Inventory, ManagedFile
 from .nginx import activate_nginx_config, nginx_is_running
-from .runner import Runner, atomic_copy, atomic_write_json, ensure_within, sha256_file
+from .runner import (
+    Runner,
+    atomic_copy,
+    atomic_write_json,
+    atomic_write_text,
+    ensure_within,
+    read_stable_regular_file,
+    sha256_file,
+)
+from .site_policy import upgrade_aster_policy
 from .state import StateStore, utc_now
 
 DISGUISE_TEMPLATE_COUNT = 10
@@ -77,16 +87,25 @@ def _template(template_id: str) -> Path:
 
 def copy_template(template_id: str, target: Path) -> None:
     source = _template(template_id)
+    shared = Path(str(files("remnawave_manager").joinpath("data/disguises/shared")))
+    if not shared.is_dir():
+        raise ValidationError("Общие файлы маскировочных шаблонов не найдены.")
     if target.exists() or target.is_symlink():
         raise ValidationError(f"Целевой каталог уже существует: {target}")
     target.mkdir(mode=0o755)
     file_count = 0
     total_size = 0
     try:
-        for item in sorted(source.rglob("*"), key=str):
+        resources = [
+            (item, item.relative_to(source)) for item in sorted(source.rglob("*"), key=str)
+        ]
+        resources.extend(
+            (item, Path("shared") / item.relative_to(shared))
+            for item in sorted(shared.rglob("*"), key=str)
+        )
+        for item, relative in resources:
             if item.is_symlink():
                 raise ValidationError("Шаблон не может содержать символические ссылки.")
-            relative = item.relative_to(source)
             destination = target / relative
             if item.is_dir():
                 destination.mkdir(parents=True, exist_ok=True, mode=0o755)
@@ -201,6 +220,34 @@ def _validate_site_inventory(inventory: Inventory, target: Path) -> None:
         )
 
 
+def _aster_policy_changes(inventory: Inventory) -> list[tuple[Path, str, str, int]]:
+    """Prepare only known CSP upgrades, and only for unchanged managed nginx files."""
+    changes: list[tuple[Path, str, str, int]] = []
+    nginx_roots = [Path(value).resolve() for value in inventory.nginx_files]
+    install_root = Path(inventory.install_dir).resolve()
+    for item in inventory.managed_files:
+        path = Path(item.path)
+        resolved = path.resolve()
+        if not any(resolved == root or root in resolved.parents for root in nginx_roots):
+            continue
+        if path.suffix != ".conf":
+            continue
+        if install_root not in resolved.parents or path.is_symlink():
+            raise ValidationError(f"Небезопасный путь конфигурации nginx: {path}")
+        _assert_trusted_site_directories(path.parent)
+        snapshot = read_stable_regular_file(
+            path, max_size=4 * 1024 * 1024, label="Конфигурация nginx"
+        )
+        if hashlib.sha256(snapshot.data).hexdigest() != item.sha256:
+            raise ValidationError(f"Конфигурация nginx изменена после adoption: {path}")
+        # Decode bytes directly so rollback preserves CRLF as well as LF.
+        old = snapshot.data.decode("utf-8")
+        new = upgrade_aster_policy(old)
+        if old != new:
+            changes.append((path, old, new, snapshot.mode))
+    return changes
+
+
 def apply_template(
     runner: Runner,
     store: StateStore,
@@ -216,6 +263,11 @@ def apply_template(
     _assert_trusted_site_directories(target)
     _validate_site_inventory(inventory, target)
     _template(template_id)
+    policy_changes = (
+        _aster_policy_changes(inventory)
+        if template_id == "02-aster-observatory"
+        else []
+    )
     create_backup(runner, store, reason=f"pre-disguise-{template_id}", retention=None)
     parent = target.parent
     staging = parent / f".{target.name}.rwm-new-{uuid.uuid4().hex}"
@@ -227,6 +279,7 @@ def apply_template(
     previous_created = False
     replacement_installed = False
     inventory_may_have_changed = False
+    changed_policies: list[tuple[Path, str, str, int]] = []
     try:
         copy_template(template_id, staging)
         # Backup can take long enough for an operator or another process to edit
@@ -234,16 +287,34 @@ def apply_template(
         # the destructive directory rename so such changes are never discarded.
         _assert_trusted_site_directories(target)
         _validate_site_inventory(inventory, target)
+        current_policy_changes = (
+            _aster_policy_changes(inventory)
+            if template_id == "02-aster-observatory"
+            else []
+        )
+        if policy_changes != current_policy_changes:
+            raise ValidationError("Конфигурация nginx изменилась во время подготовки шаблона.")
         was_running = nginx_is_running(runner, inventory)
         os.replace(target, previous)
         previous_created = True
         os.replace(staging, target)
         replacement_installed = True
+        for path, old, new, mode in policy_changes:
+            changed_policies.append((path, old, new, mode))
+            atomic_write_text(path, new, mode=mode)
         activate_nginx_config(runner, inventory, was_running=was_running)
         inventory_may_have_changed = True
+        for item in inventory.managed_files:
+            if any(Path(item.path) == change[0] for change in changed_policies):
+                item.sha256 = sha256_file(Path(item.path))
         _refresh_inventory(store, inventory, target)
     except BaseException as error:
         rollback_errors: list[str] = []
+        for path, old, _new, mode in reversed(changed_policies):
+            try:
+                atomic_write_text(path, old, mode=mode)
+            except BaseException as rollback_error:
+                rollback_errors.append(f"восстановление CSP nginx: {rollback_error}")
         failed: Path | None = None
         if previous_created:
             if replacement_installed and (target.exists() or target.is_symlink()):

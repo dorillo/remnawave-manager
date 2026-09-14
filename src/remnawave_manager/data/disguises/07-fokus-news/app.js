@@ -1,3 +1,5 @@
+﻿import { formatDate, formatDateTime, relativeTime, ago, dateRange } from '../shared/date-utils.js';
+import { storage } from '../shared/storage.js';
 const searchModal = document.querySelector('.search-modal');
 const articleModal = document.querySelector('.article-modal');
 const authModal = document.querySelector('.auth-modal');
@@ -86,7 +88,7 @@ authModal.querySelector('.auth-code form').addEventListener('submit', (event) =>
 });
 authModal.querySelector('[data-register]').addEventListener('click', () => {
   authModal.hidden = true;
-  showToast('Новые аккаунты подключаются партиями. Заявка откроется после завершения переноса архива 10 августа.');
+  showToast('Новые аккаунты подключаются партиями. Заявка откроется после завершения переноса архива в ближайшем обновлении.');
 });
 authModal.querySelector('[data-back]').addEventListener('click', () => {
   authModal.querySelector('.auth-code').hidden = true;

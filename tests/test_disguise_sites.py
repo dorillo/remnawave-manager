@@ -54,7 +54,9 @@ class DisguiseSiteTests(unittest.TestCase):
     def test_catalog_and_directories_define_exactly_ten_sites(self) -> None:
         catalog = json.loads((SITES_ROOT / "catalog.json").read_text(encoding="utf-8"))
         ids = tuple(item["id"] for item in catalog["templates"])
-        directories = tuple(sorted(item.name for item in SITES_ROOT.iterdir() if item.is_dir()))
+        directories = tuple(
+            sorted(item.name for item in SITES_ROOT.iterdir() if item.is_dir() and item.name != "shared")
+        )
 
         self.assertEqual(ids, EXPECTED_IDS)
         self.assertEqual(directories, EXPECTED_IDS)
@@ -72,11 +74,25 @@ class DisguiseSiteTests(unittest.TestCase):
                 parser = SiteParser()
                 parser.feed(html)
 
-                self.assertIn('<html lang="ru">', html)
+                self.assertIn(
+                    '<html lang="en">' if template_id == "01-northline" else '<html lang="ru">',
+                    html,
+                )
                 self.assertIn('name="viewport"', html)
                 self.assertIn('name="referrer" content="no-referrer"', html)
                 self.assertIn('http-equiv="Content-Security-Policy"', html)
-                self.assertIn("connect-src 'none'", html)
+                if template_id == "07-fokus-news":
+                    self.assertIn("connect-src 'self' https://api.gdeltproject.org", html)
+                elif template_id == "01-northline":
+                    self.assertIn("connect-src 'self' https://mastodon.social", html)
+                    self.assertIn('rel="icon" href="favicon.svg"', html)
+                    self.assertTrue((site / "favicon.svg").is_file())
+                elif template_id == "02-aster-observatory":
+                    self.assertIn("connect-src 'self' https://rutube.ru", html)
+                    self.assertIn("frame-src https://rutube.ru", html)
+                    self.assertNotIn("site-runtime.js", html)
+                else:
+                    self.assertIn("connect-src 'none'", html)
                 self.assertEqual(parser.inline_scripts, 0)
                 self.assertEqual(parser.assets.count("styles.css"), 1)
                 self.assertEqual(parser.assets.count("app.js"), 1)
@@ -89,7 +105,7 @@ class DisguiseSiteTests(unittest.TestCase):
                     self.assertFalse(asset.startswith(("http://", "https://", "//")), asset)
                     if asset.startswith(("#", "data:")):
                         continue
-                    self.assertTrue((site / asset.split("?", 1)[0]).is_file(), asset)
+                    self.assertTrue((site / asset.split("?", 1)[0]).resolve().is_file(), asset)
 
                 title = "".join(parser.titles)
                 self.assertTrue(title)
@@ -101,6 +117,10 @@ class DisguiseSiteTests(unittest.TestCase):
         tags = ("aside", "article", "section", "table", "figure", "form", "nav")
         for template_id in EXPECTED_IDS:
             html = (SITES_ROOT / template_id / "index.html").read_text(encoding="utf-8")
+            if template_id in {"01-northline", "02-aster-observatory"}:
+                # App shells render their distinct structures in browser tests.
+                self.assertIn('data-app="', html)
+                continue
             fingerprint = tuple(len(re.findall(fr"<{tag}(?:\s|>)", html)) for tag in tags)
             self.assertNotIn(fingerprint, fingerprints, template_id)
             fingerprints.add(fingerprint)
@@ -119,10 +139,15 @@ class DisguiseSiteTests(unittest.TestCase):
             with self.subTest(template=template_id):
                 html = (SITES_ROOT / template_id / "index.html").read_text(encoding="utf-8")
 
-                self.assertIn("data-auth", html)
-                self.assertIn('type="email"', html)
-                self.assertIn('type="password"', html)
-                self.assertIn("Войти", html)
+                if template_id == "01-northline":
+                    self.assertIn('data-app="northline"', html)
+                elif template_id == "02-aster-observatory":
+                    self.assertIn('data-app="aster"', html)
+                else:
+                    self.assertIn("data-auth", html)
+                    self.assertIn('type="email"', html)
+                    self.assertIn('type="password"', html)
+                    self.assertIn("Войти", html)
                 for marker in authenticated_state_markers:
                     self.assertNotIn(marker, html)
 
