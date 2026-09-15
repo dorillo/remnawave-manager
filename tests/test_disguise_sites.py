@@ -91,6 +91,9 @@ class DisguiseSiteTests(unittest.TestCase):
                     self.assertIn("connect-src 'self' https://rutube.ru", html)
                     self.assertIn("frame-src https://rutube.ru", html)
                     self.assertNotIn("site-runtime.js", html)
+                elif template_id == "03-morrow-coffee":
+                    self.assertIn("connect-src 'self' https://prexzyapis.com", html)
+                    self.assertNotIn("site-runtime.js", html)
                 else:
                     self.assertIn("connect-src 'none'", html)
                 self.assertEqual(parser.inline_scripts, 0)
@@ -117,7 +120,7 @@ class DisguiseSiteTests(unittest.TestCase):
         tags = ("aside", "article", "section", "table", "figure", "form", "nav")
         for template_id in EXPECTED_IDS:
             html = (SITES_ROOT / template_id / "index.html").read_text(encoding="utf-8")
-            if template_id in {"01-northline", "02-aster-observatory"}:
+            if template_id in {"01-northline", "02-aster-observatory", "03-morrow-coffee"}:
                 # App shells render their distinct structures in browser tests.
                 self.assertIn('data-app="', html)
                 continue
@@ -143,6 +146,8 @@ class DisguiseSiteTests(unittest.TestCase):
                     self.assertIn('data-app="northline"', html)
                 elif template_id == "02-aster-observatory":
                     self.assertIn('data-app="aster"', html)
+                elif template_id == "03-morrow-coffee":
+                    self.assertIn('data-app="morrow"', html)
                 else:
                     self.assertIn("data-auth", html)
                     self.assertIn('type="email"', html)
