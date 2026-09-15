@@ -895,7 +895,7 @@ class InstallGeneratorTests(unittest.TestCase):
         self.assertIn("return 308 https://$host$request_uri;", redirect_http)
         self.assertIn("script-src 'self'", rendered)
         self.assertIn("connect-src 'self' https://mastodon.social", rendered)
-        self.assertIn("https://rutube.ru https://prexzyapis.com; frame-src https://rutube.ru", rendered)
+        self.assertIn("https://rutube.ru; frame-src https://rutube.ru", rendered)
         self.assertIn("img-src 'self' data: blob: https:; media-src 'self' data: blob: https:", rendered)
         self.assertNotIn("script-src 'none'", rendered)
 

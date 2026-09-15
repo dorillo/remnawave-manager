@@ -1,1303 +1,1155 @@
-import {
-  WorkspaceStore,
-  newChat,
-  uid,
-  LIMITS,
-  exportWorkspace,
-  parseImport,
-} from './morrow-store.js';
-import {
-  authenticate,
-  restoreSession,
-  logout,
-  removeAccount,
-} from './morrow-auth.js';
-import { PROVIDER, buildContext, generate } from './morrow-ai.js';
-import { readFile, avatar, download } from './morrow-files.js';
-import { t, setLanguage, date } from './morrow-i18n.js';
+import { t, getLanguage, setLanguage, number } from "./morrow-i18n.js";
 import {
   el,
   button,
   field,
   select,
-  notice,
   modal,
   confirmAction,
-  markdown,
+  notice,
   copy,
-} from './morrow-ui.js';
-
-const store = new WorkspaceStore();
-const app = document.getElementById('app');
-let account = null;
-let route = { page: 'chats', id: '' };
-let active = null;
-let selected = new Set();
-let draft = '';
-let draftTimer;
-let query = '';
-let mobileOpen = false;
-let pendingReply = null;
-let sending = false;
-let creatingDraft = null;
-const chat = () => store.data.chats.find((c) => c.id === route.id);
-const run =
-  (fn) =>
-  async (...args) => {
-    try {
-      await fn(...args);
-    } catch (error) {
-      notice(t(error.message));
-    }
-  };
-const action = (key, fn, css = '') => button(t(key), run(fn), css);
-const projectOptions = () => [
-  ['', t('noProject')],
-  ...store.data.projects.map((p) => [p.id, p.name]),
-];
-function locationRoute() {
-  const [page, id = ''] = location.hash.slice(1).split('/');
-  route = {
-    page: ['chats', 'projects', 'files', 'profile', 'settings'].includes(page)
-      ? page
-      : 'chats',
-    id,
-  };
-  draft = chat()?.draft || '';
-  selected.clear();
-}
-async function flushDraft() {
-  clearTimeout(draftTimer);
-  if (creatingDraft) await creatingDraft;
-  if (!chat() && route.page === 'chats' && draft.trim()) {
-    const created = newChat();
-    created.draft = draft;
-    creatingDraft = store.mutate((data) => data.chats.unshift(created));
-    try {
-      await creatingDraft;
-      route.id = created.id;
-      history.replaceState(null, '', `#chats/${created.id}`);
-      renderHistory();
-    } finally {
-      creatingDraft = null;
-    }
-  }
-  const current = chat();
-  if (!current || current.draft === draft) return;
-  const id = current.id,
-    value = draft;
-  await store.mutate((data) => {
-    const target = data.chats.find((c) => c.id === id);
-    if (target) target.draft = value;
-  });
-}
-async function navigate(page, id = '') {
-  const input = document.getElementById('prompt');
-  if (input) input.disabled = true;
+  icon,
+  iconButton,
+  portrait,
+} from "./morrow-ui.js";
+import {
+  authenticate,
+  restoreSession,
+  logout,
+  removeAccount,
+} from "./morrow-auth.js";
+import {
+  ProfileStore,
+  blankProfile,
+  validateProfile,
+  toggle,
+  remember,
+} from "./morrow-store.js";
+import { read } from "./morrow-db.js";
+import { avatar, download } from "./morrow-files.js";
+import * as data from "./morrow-data.js";
+import { validId } from "./morrow-yappy.js";
+import { createFeed } from "./morrow-feed.js";
+import { createPlayer, pauseAll } from "./morrow-player.js";
+import { openComments } from "./morrow-comments.js";
+let account = null,
+  store = null,
+  feed = null,
+  routeController = null,
+  routeVersion = 0,
+  tab = "likes";
+let theme = "dark",
+  economy = false;
+try {
+  const old = JSON.parse(localStorage.getItem("morrow:appearance:v1"));
+  if (["system", "dark", "light"].includes(old?.theme)) theme = old.theme;
+} catch {}
+const themeMedia = matchMedia("(prefers-color-scheme: dark)");
+function applyTheme() {
+  document.documentElement.dataset.theme =
+    theme === "system" ? (themeMedia.matches ? "dark" : "light") : theme;
   try {
-    await flushDraft();
-    route = { page, id };
-    draft = chat()?.draft || '';
-    selected.clear();
-    mobileOpen = false;
-    history.pushState(null, '', `#${page}${id ? '/' + id : ''}`);
-    render();
-  } finally {
-    if (input?.isConnected) input.disabled = false;
-  }
-}
-window.addEventListener(
-  'popstate',
-  run(async () => {
-    await flushDraft();
-    locationRoute();
-    render();
-  }),
-);
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden) run(flushDraft)();
-});
-window.addEventListener('beforeunload', (event) => {
-  if (chat()?.draft !== draft && draft) {
-    event.preventDefault();
-    event.returnValue = '';
-  }
-});
-async function createChat(projectId = '') {
-  const input = document.getElementById('prompt');
-  if (input) input.disabled = true;
-  try {
-    await flushDraft();
-    const created = newChat(projectId);
-    await store.mutate((data) => data.chats.unshift(created));
-    await navigate('chats', created.id);
-    document.getElementById('prompt')?.focus();
-  } finally {
-    if (input?.isConnected) input.disabled = false;
-  }
-}
-function applySettings() {
-  const settings = store.data.settings;
-  setLanguage(settings.language);
-  document.documentElement.dataset.theme = settings.theme;
-  document.title = `${t('brand')} AI`;
-}
-function renderHistory() {
-  const node = document.getElementById('history-list');
-  if (!node) return;
-  const items = store.data.chats
-    .filter((c) =>
-      `${c.title} ${c.messages.map((m) => m.text).join(' ')}`
-        .toLocaleLowerCase()
-        .includes(query.toLocaleLowerCase()),
-    )
-    .sort(
-      (a, b) => Number(b.pinned) - Number(a.pinned) || b.updated - a.updated,
+    localStorage.setItem(
+      "morrow:appearance:v1",
+      JSON.stringify({ language: getLanguage(), theme }),
     );
-  node.replaceChildren(
-    ...items.map((c) =>
-      el(
-        'button',
-        {
-          type: 'button',
-          class: `history-item ${c.id === route.id ? 'current' : ''}`,
-          onclick: run(() => navigate('chats', c.id)),
-        },
-        el('span', {}, `${c.pinned ? '• ' : ''}${c.title || t('newChat')}`),
-        el('small', {}, date(c.updated)),
-      ),
-    ),
-  );
-  if (!items.length) node.append(el('p', { class: 'muted' }, t('empty')));
+  } catch {}
 }
-function render() {
-  const previousMain = document.getElementById('main');
-  const viewKey = `${store.owner || 'guest'}/${route.page}/${route.id}`;
-  const sameView = previousMain?.dataset.view === viewKey;
-  const oldScroll = sameView ? previousMain.scrollTop : 0;
-  const atEnd =
-    !sameView ||
-    previousMain.scrollHeight - previousMain.clientHeight - oldScroll < 100;
-  const focused = document.activeElement;
-  const cursor =
-    focused?.id === 'prompt'
-      ? [focused.selectionStart, focused.selectionEnd]
-      : null;
-  applySettings();
-  const brand = button(
-    'M',
-    run(() => navigate('chats')),
-    'brand-mark',
+themeMedia.addEventListener("change", applyTheme);
+applyTheme();
+const root = document.getElementById("app");
+const nav = el("aside", { class: "sidebar" }),
+  header = el("header", { class: "topbar" }),
+  main = el("main", { id: "main", class: "main" });
+root.append(nav, header, main);
+function link(label, href, name) {
+  return el(
+    "a",
+    { href, class: "nav-link" + (location.hash === href ? " active" : "") },
+    icon(name),
+    el("span", {}, label),
   );
-  brand.setAttribute('aria-label', t('brand'));
-  const rail = el(
-    'aside',
-    { class: 'rail' },
-    brand,
+}
+function go(path) {
+  if (location.hash === path) route();
+  else location.hash = path;
+}
+function renderChrome() {
+  document.title = t("brand") + " — " + t("tagline");
+  const logo = el(
+    "a",
+    { href: "#/feed", class: "brand", "aria-label": t("brand") },
+    el("img", { src: "favicon.svg", alt: "", width: 38, height: 38 }),
+    el("span", {}, t("brand")),
+    el("small", {}, "°"),
+  );
+  nav.replaceChildren(
+    logo,
     el(
-      'nav',
-      { 'aria-label': t('menu') },
-      ['chats', 'projects', 'files'].map((page, index) => {
-        const btn = action(
-          page,
-          () => navigate(page),
-          route.page === page ? 'active' : '',
-        );
-        btn.prepend(
-          el('span', { 'aria-hidden': 'true' }, ['◇', '▦', '▱'][index]),
-        );
-        return btn;
-      }),
+      "nav",
+      { "aria-label": t("brand") },
+      link(t("forYou"), "#/feed", "home"),
+      link(t("following"), "#/following", "users"),
+      link(t("explore"), "#/explore", "compass"),
+      link(t("profile"), "#/profile", "user"),
     ),
     el(
-      'div',
-      { class: 'rail-bottom' },
-      action('settings', () => navigate('settings')),
-      action(account ? 'profile' : 'login', () =>
-        account ? navigate('profile') : authDialog(),
-      ),
+      "div",
+      { class: "sidebar-bottom" },
+      el("p", { class: "tagline" }, t("tagline")),
+      button(t("settings"), () => go("#/settings"), "quiet"),
+      el("small", {}, t("source")),
     ),
   );
-  const historySearch = el('input', {
-    type: 'search',
-    placeholder: t('search'),
-    'aria-label': t('search'),
-    value: query,
-    oninput: (event) => {
-      query = event.target.value;
-      renderHistory();
-    },
-  });
-  const sidebar = el(
-    'aside',
-    { class: `sidebar ${mobileOpen ? 'open' : ''}` },
-    el(
-      'header',
-      {},
-      el('strong', {}, `${t('brand')} AI`),
-      action(
-        'close',
-        () => {
-          mobileOpen = false;
-          render();
-        },
-        'mobile-only',
-      ),
-    ),
-    action('newChat', () => createChat(), 'primary'),
-    historySearch,
-    el('div', { id: 'history-list' }),
-    el(
-      'footer',
-      {},
-      el(
-        'span',
-        {},
-        account ? store.data.profile.name || account.login : t('guest'),
-      ),
-      action(account ? 'profile' : 'login', () =>
-        account ? navigate('profile') : authDialog(),
-      ),
-    ),
-  );
-  const main = el(
-    'main',
-    { id: 'main', 'data-view': viewKey },
-    el(
-      'header',
-      { class: 'mobile-header' },
-      action('menu', () => {
-        mobileOpen = !mobileOpen;
-        render();
-      }),
-      el('strong', {}, `${t('brand')} AI`),
-    ),
-  );
-  app.replaceChildren(rail, sidebar, main);
-  if (route.page === 'chats') renderChat(main);
-  else if (route.page === 'settings') renderSettings(main);
-  else if (!account)
-    main.append(
-      el(
-        'section',
-        { class: 'empty-state' },
-        el('h1', {}, t(route.page)),
-        el('p', {}, t('guestHint')),
-        action('login', authDialog, 'primary'),
-      ),
-    );
-  else if (route.page === 'projects') renderProjects(main);
-  else if (route.page === 'files') renderFiles(main);
-  else renderProfile(main);
-  renderHistory();
-  main.scrollTop =
-    route.page === 'chats' && atEnd ? main.scrollHeight : oldScroll;
-  if (cursor) {
-    const input = document.getElementById('prompt');
-    input?.focus({ preventScroll: true });
-    input?.setSelectionRange(...cursor);
-  }
-}
-function renderChat(main) {
-  const current = chat();
-  const title = current?.title || t('newChat');
-  const toolbar = el('div', { class: 'actions' });
-  if (current)
-    toolbar.append(
-      action('rename', () =>
-        textDialog('rename', current.title, async (value) => {
-          await store.mutate((data) => {
-            data.chats.find((c) => c.id === current.id).title = value;
-          });
-          render();
-        }),
-      ),
-      action(current.pinned ? 'unpin' : 'pin', async () => {
-        await store.mutate((data) => {
-          const c = data.chats.find((c) => c.id === current.id);
-          c.pinned = !c.pinned;
-        });
-        render();
-      }),
-      action('exportChat', () => exportChat(current)),
-      action('delete', () =>
-        confirmAction(t('delete'), t('deleteWarning'), async () => {
-          if (active?.chatId === current.id) cancelGeneration();
-          if (pendingReply?.chatId === current.id) pendingReply = null;
-          await store.mutate((data) => {
-            data.chats = data.chats.filter((c) => c.id !== current.id);
-          });
-          draft = '';
-          await navigate('chats');
-        }),
-      ),
-    );
-  main.append(
-    el(
-      'header',
-      { class: 'page-header' },
-      el(
-        'div',
-        {},
-        el('h1', {}, title),
-        el('small', { class: 'muted' }, PROVIDER.name),
-      ),
-      toolbar,
-    ),
-  );
-  if (current && account)
-    main.append(
-      field(
-        t('project'),
-        select(
-          projectOptions(),
-          current.projectId,
-          run(async (value) => {
-            await store.mutate((data) => {
-              data.chats.find((c) => c.id === current.id).projectId = value;
-            });
-            render();
-          }),
-        ),
-      ),
-    );
-  const conversation = el('section', {
-    class: 'conversation',
-    'aria-label': t('chats'),
-  });
-  if (!current?.messages.length)
-    conversation.append(
-      el(
-        'div',
-        { class: 'empty-state' },
-        el('div', { class: 'hero-mark', 'aria-hidden': 'true' }, 'M'),
-        el('h2', {}, t('welcome')),
-        el('p', {}, t('intro')),
-        el(
-          'div',
-          { class: 'starters' },
-          ['starter1', 'starter2', 'starter3'].map((key) =>
-            action(key, () => {
-              draft = t(key);
-              const input = document.getElementById('prompt');
-              input.value = draft;
-              input.focus();
-            }),
-          ),
-        ),
-      ),
-    );
-  for (const [index, message] of (current?.messages || []).entries()) {
-    const controls = el(
-      'div',
-      { class: 'message-actions' },
-      action('copy', () => copy(message.text)),
-    );
-    if (message.role === 'user' && !active)
-      controls.append(action('edit', () => editPrompt(current, index)));
-    if (
-      message.role === 'assistant' &&
-      index === current.messages.length - 1 &&
-      !active
-    )
-      controls.append(action('retry', () => regenerate(current, index)));
-    conversation.append(
-      el(
-        'article',
-        { class: `message ${message.role}` },
-        el(
-          'header',
-          {},
-          el('strong', {}, message.role === 'user' ? t('you') : t('brand')),
-          el('small', {}, date(message.created)),
-        ),
-        markdown(message.text),
-        message.files.length
-          ? el(
-              'div',
-              { class: 'chips' },
-              message.files.map((file) =>
-                button(file.name, () => previewFile(file)),
-              ),
-            )
-          : null,
-        controls,
-      ),
-    );
-  }
-  if (active && active.chatId === current?.id)
-    conversation.append(
-      el('p', { class: 'thinking', role: 'status' }, t('thinking')),
-    );
-  if (
-    pendingReply &&
-    pendingReply.owner === store.owner &&
-    pendingReply.chatId === current?.id
-  )
-    conversation.append(
-      el(
-        'article',
-        { class: 'message assistant' },
-        markdown(pendingReply.text),
-        el('p', { class: 'error' }, t('storage')),
-        action('copy', () => copy(pendingReply.text)),
-        action('save', savePendingReply),
-      ),
-    );
-  if (
-    current?.messages.at(-1)?.role === 'user' &&
-    !active &&
-    pendingReply?.chatId !== current.id
-  )
-    conversation.append(action('retry', () => requestReply(current.id)));
-  main.append(conversation);
-  const input = el('textarea', {
-    id: 'prompt',
-    rows: 3,
-    maxlength: 12000,
-    placeholder: t('prompt'),
-    'aria-label': t('prompt'),
-    value: draft,
-  });
-  input.addEventListener('input', () => {
-    draft = input.value;
-    clearTimeout(draftTimer);
-    draftTimer = setTimeout(() => run(flushDraft)(), 400);
-  });
-  input.addEventListener('keydown', (event) => {
-    if (
-      event.key === 'Enter' &&
-      !event.shiftKey &&
-      !event.isComposing &&
-      !active
-    ) {
-      event.preventDefault();
-      form.requestSubmit();
-    }
-  });
-  const form = el(
-    'form',
-    {
-      class: 'composer',
-      onsubmit: (event) => {
-        event.preventDefault();
-        run(sendMessage)();
-      },
-    },
-    input,
-    selected.size
-      ? el(
-          'div',
-          { class: 'chips' },
-          [...selected].map((id) => {
-            const file = store.data.files.find((f) => f.id === id);
-            return file
-              ? button(`${file.name} ×`, () => {
-                  draft = input.value;
-                  selected.delete(id);
-                  render();
-                })
-              : null;
-          }),
-        )
-      : null,
-    el(
-      'div',
-      { class: 'composer-tools' },
-      action('attach', () => (account ? attachmentDialog() : authDialog())),
-      field(
-        t('style'),
-        select(
-          ['balanced', 'brief', 'detailed'].map((v) => [v, t(v)]),
-          store.data.settings.style,
-          run(async (value) => {
-            await store.mutate((data) => {
-              data.settings.style = value;
-            });
-          }),
-        ),
-      ),
-      active
-        ? action('stop', cancelGeneration, 'primary')
-        : el('button', { type: 'submit', class: 'primary' }, t('send')),
-    ),
-    el('small', { class: 'muted' }, t('disclosure')),
-    !account ? el('small', { class: 'muted' }, t('guestHint')) : null,
-  );
-  main.append(el('section', { class: 'composer-wrap' }, form));
-}
-async function sendMessage() {
-  if (active || sending || !draft.trim()) return;
-  if (pendingReply) throw new Error('storage');
-  sending = true;
-  try {
-    await flushDraft();
-    if (!chat()) {
-      const value = draft,
-        attached = new Set(selected);
-      await createChat();
-      draft = value;
-      selected = attached;
-    }
-    const current = chat();
-    const files = [...selected]
-      .map((id) => store.data.files.find((f) => f.id === id))
-      .filter(Boolean)
-      .map((f) => ({ name: f.name, text: f.text }));
-    if (files.length > 10) throw new Error('contextLimit');
-    const message = {
-      id: uid(),
-      role: 'user',
-      text: draft.trim(),
-      files,
-      created: Date.now(),
-    };
-    const candidate = structuredClone(current);
-    candidate.messages.push(message);
-    buildContext(
-      candidate,
-      store.data.projects.find((p) => p.id === candidate.projectId),
-      store.data.settings,
-    );
-    await store.mutate((data) => {
-      const target = data.chats.find((c) => c.id === current.id);
-      target.messages.push(message);
-      target.draft = '';
-      target.updated = Date.now();
-      if (!target.title) target.title = message.text.slice(0, 70);
-    });
-    draft = '';
-    selected.clear();
-    pendingReply = null;
-    await requestReply(current.id);
-  } finally {
-    sending = false;
-  }
-}
-async function requestReply(chatId) {
-  if (active) return;
-  if (pendingReply) throw new Error('storage');
-  const current = store.data.chats.find((c) => c.id === chatId);
-  const prompt = buildContext(
-    current,
-    store.data.projects.find((p) => p.id === current.projectId),
-    store.data.settings,
-  );
-  const request = {
-    controller: new AbortController(),
-    chatId,
-    owner: store.owner,
-    lastId: current.messages.at(-1)?.id,
-  };
-  active = request;
-  render();
-  try {
-    const text = await generate({ prompt, signal: request.controller.signal });
-    if (
-      active !== request ||
-      request.controller.signal.aborted ||
-      store.owner !== request.owner
-    )
-      return;
-    pendingReply = {
-      text,
-      chatId,
-      owner: request.owner,
-      lastId: request.lastId,
-    };
-    await savePendingReply();
-  } catch (error) {
-    if (active === request) notice(t(error.message));
-  } finally {
-    if (active === request) {
-      active = null;
-      render();
-    }
-  }
-}
-async function savePendingReply() {
-  const reply = pendingReply;
-  if (!reply || reply.owner !== store.owner) return;
-  await store.mutate((data) => {
-    const target = data.chats.find((c) => c.id === reply.chatId);
-    if (!target || target.messages.at(-1)?.id !== reply.lastId)
-      throw new Error('conflict');
-    target.messages.push({
-      id: uid(),
-      role: 'assistant',
-      text: reply.text,
-      files: [],
-      created: Date.now(),
-    });
-    target.updated = Date.now();
-  });
-  pendingReply = null;
-  render();
-}
-function cancelGeneration() {
-  if (active) {
-    active.controller.abort();
-    active = null;
-    notice(t('cancelled'));
-    render();
-  }
-}
-function editPrompt(current, index) {
-  textDialog(
-    'edit',
-    current.messages[index].text,
-    async (value) => {
-      const candidate = structuredClone(current);
-      candidate.messages = candidate.messages.slice(0, index + 1);
-      candidate.messages[index].text = value;
-      buildContext(
-        candidate,
-        store.data.projects.find((p) => p.id === candidate.projectId),
-        store.data.settings,
-      );
-      await store.mutate((data) => {
-        const c = data.chats.find((c) => c.id === current.id);
-        c.messages = candidate.messages;
-      });
-      pendingReply = null;
-      await requestReply(current.id);
-    },
-    true,
-    t('editWarning'),
-  );
-}
-async function regenerate(current, index) {
-  await store.mutate((data) => {
-    data.chats.find((c) => c.id === current.id).messages.splice(index);
-  });
-  await requestReply(current.id);
-}
-function textDialog(key, value, save, multiline = false, hint = '') {
-  const input = el(multiline ? 'textarea' : 'input', {
-    value,
-    required: true,
-    maxlength: multiline ? 12000 : 120,
-    rows: 8,
-  });
-  const error = el('p', { class: 'error', role: 'alert' });
-  const submit = el('button', { type: 'submit', class: 'primary' }, t('save'));
-  const form = el(
-    'form',
-    {
-      onsubmit: async (event) => {
-        event.preventDefault();
-        if (!input.value.trim()) return;
-        submit.disabled = true;
-        try {
-          await save(input.value.trim());
-          dialog.close();
-        } catch (e) {
-          error.textContent = t(e.message);
-          submit.disabled = false;
-        }
-      },
-    },
-    field(t(key), input),
-    hint ? el('p', {}, hint) : null,
-    error,
-    submit,
-  );
-  const dialog = modal(t(key), form);
-}
-function exportChat(current) {
-  const format = select(
-    [
-      ['md', 'Markdown'],
-      ['txt', 'TXT'],
-    ],
-    'md',
-  );
-  const dialog = modal(
-    t('exportChat'),
-    el(
-      'div',
-      {},
-      field(t('exportChat'), format),
-      action('download', () => {
-        const content = current.messages
-          .map(
-            (m) =>
-              `${format.value === 'md' ? '## ' : ''}${m.role === 'user' ? t('you') : t('brand')}\n\n${m.text}${m.files.map((f) => `\n\n[${f.name}]\n${f.text}`).join('')}`,
-          )
-          .join('\n\n');
-        download(`${current.title || 'morrow'}.${format.value}`, content);
-        dialog.close();
-      }),
-    ),
-  );
-}
-function authDialog(register = false) {
-  register = register === true;
-  const loginInput = el('input', {
-    name: 'login',
-    autocomplete: 'username',
-    required: true,
-    minlength: 3,
-    maxlength: 40,
-  });
-  const password = el('input', {
-    name: 'password',
-    type: 'password',
-    autocomplete: register ? 'new-password' : 'current-password',
-    required: true,
-    minlength: 8,
-    maxlength: 128,
-  });
-  const error = el('p', { class: 'error', role: 'alert' });
-  const submit = el(
-    'button',
-    { type: 'submit', class: 'primary' },
-    t(register ? 'register' : 'login'),
-  );
-  const form = el(
-    'form',
-    {
-      onsubmit: async (event) => {
-        event.preventDefault();
-        submit.disabled = true;
-        try {
-          await flushDraft();
-          cancelGeneration();
-          const guestData = !account ? structuredClone(store.data) : null;
-          const next = await authenticate(
-            loginInput.value,
-            password.value,
-            register,
-          );
-          await store.load(next.id);
-          account = next;
-          query = '';
-          pendingReply = null;
-          if (register && guestData?.chats.length)
-            await store.mutate((data) => {
-              data.chats = guestData.chats;
-              data.settings = guestData.settings;
-            });
-          draft = '';
-          selected.clear();
-          dialog.close();
-          await navigate('chats');
-        } catch (e) {
-          error.textContent = t(e.message);
-          submit.disabled = false;
-        }
-      },
-    },
-    field(t('loginName'), loginInput),
-    el('small', { class: 'muted' }, t('loginHint')),
-    field(t('password'), password),
-    el('small', { class: 'muted' }, t('passwordHint')),
-    error,
-    submit,
-    action(register ? 'login' : 'register', () => {
-      dialog.close();
-      authDialog(!register);
-    }),
-  );
-  const dialog = modal(t(register ? 'register' : 'login'), form);
-}
-function renderProjects(main) {
-  const project = store.data.projects.find((p) => p.id === route.id);
-  main.append(
-    el(
-      'header',
-      { class: 'page-header' },
-      el('h1', {}, project?.name || t('projects')),
-      action('newProject', () => projectDialog(), 'primary'),
-    ),
-  );
-  const body = el('section', { class: 'page-body' });
-  if (project) {
-    body.append(
-      action('back', () => navigate('projects')),
-      el('p', {}, project.description),
-      el('p', { class: 'muted' }, project.instruction),
-      el(
-        'div',
-        { class: 'actions' },
-        action('newChat', () => createChat(project.id), 'primary'),
-        action('editProject', () => projectDialog(project)),
-        action('delete', () => deleteProject(project)),
-      ),
-      el('h2', {}, t('chats')),
-      ...store.data.chats
-        .filter((c) => c.projectId === project.id)
-        .map((c) =>
-          button(
-            c.title || t('newChat'),
-            run(() => navigate('chats', c.id)),
-            'card',
-          ),
-        ),
-      el('h2', {}, t('files')),
-      uploadControl(project.id),
-      ...store.data.files
-        .filter((f) => f.projectId === project.id)
-        .map(fileCard),
-    );
-  } else {
-    body.append(
-      el(
-        'div',
-        { class: 'cards' },
-        store.data.projects.map((p) =>
-          el(
-            'article',
-            { class: 'card' },
-            el('h2', {}, p.name),
-            el('p', {}, p.description),
-            action('openProject', () => navigate('projects', p.id)),
-          ),
-        ),
-      ),
-    );
-    if (!store.data.projects.length)
-      body.append(el('p', { class: 'muted' }, t('empty')));
-  }
-  main.append(body);
-}
-function projectDialog(project) {
-  const name = el('input', {
-    required: true,
+  const query = el("input", {
+    type: "search",
+    placeholder: t("searchPlaceholder"),
+    "aria-label": t("search"),
     maxlength: 120,
-    value: project?.name || '',
   });
-  const description = el('textarea', {
-    maxlength: 1000,
-    value: project?.description || '',
-  });
-  const instruction = el('textarea', {
-    maxlength: 4000,
-    value: project?.instruction || '',
-    rows: 5,
-  });
-  const error = el('p', { role: 'alert', class: 'error' });
-  const submit = el('button', { type: 'submit', class: 'primary' }, t('save'));
-  const dialog = modal(
-    t(project ? 'editProject' : 'newProject'),
+  const searchForm = el(
+    "form",
+    {
+      class: "searchbar",
+      onsubmit: (e) => {
+        e.preventDefault();
+        if (query.value.trim())
+          go("#/search?q=" + encodeURIComponent(query.value.trim()));
+      },
+    },
+    icon("search"),
+    query,
+  );
+  const language = button(
+    getLanguage() === "ru" ? "EN" : "RU",
+    () => {
+      setLanguage(getLanguage() === "ru" ? "en" : "ru");
+      for (const d of document.querySelectorAll("dialog")) d.close();
+      renderChrome();
+      route();
+    },
+    "language-button",
+  );
+  header.replaceChildren(
     el(
-      'form',
+      "a",
+      { href: "#/feed", class: "mobile-brand" },
+      el("img", { src: "favicon.svg", alt: t("brand"), width: 32, height: 32 }),
+    ),
+    searchForm,
+    language,
+    account
+      ? button(
+          store?.data.profile.name || account.login,
+          () => go("#/profile"),
+          "account-chip",
+        )
+      : button(t("login"), () => authDialog(), "primary login-button"),
+  );
+}
+async function mutate(edit) {
+  const owner = store;
+  if (!owner) throw new Error("sessionExpired");
+  await owner.change(edit);
+  if (owner === store) {
+    feed?.refreshActions();
+  }
+  return owner.data;
+}
+function gate(action) {
+  if (store) {
+    action?.();
+    return true;
+  }
+  authDialog(action);
+  return false;
+}
+function authDialog(after) {
+  const login = el("input", {
+      autocomplete: "username",
+      required: true,
+      minlength: 3,
+      maxlength: 40,
+    }),
+    password = el("input", {
+      type: "password",
+      autocomplete: "current-password",
+      required: true,
+      minlength: 8,
+      maxlength: 128,
+    });
+  const error = el("p", { class: "error", role: "alert" });
+  let registering = false;
+  const submit = button(t("login"), () => {}, "primary");
+  submit.type = "submit";
+  const switcher = button(
+    t("register"),
+    () => {
+      registering = !registering;
+      submit.textContent = t(registering ? "register" : "login");
+      switcher.textContent = t(registering ? "login" : "register");
+      password.autocomplete = registering ? "new-password" : "current-password";
+      error.textContent = "";
+    },
+    "text-button",
+  );
+  const form = el(
+    "form",
+    {
+      class: "auth-form",
+      onsubmit: async (e) => {
+        e.preventDefault();
+        submit.disabled = true;
+        switcher.disabled = true;
+        error.textContent = "";
+        try {
+          const signed = await authenticate(
+            login.value,
+            password.value,
+            registering,
+          );
+          const loaded = await new ProfileStore(signed).load();
+          account = signed;
+          store = loaded;
+          economy = store.data.economy;
+          dialog.close();
+          renderChrome();
+          feed?.refreshActions();
+          if (after) after();
+          else if (
+            location.hash.startsWith("#/profile") ||
+            location.hash.startsWith("#/settings") ||
+            location.hash.startsWith("#/following")
+          )
+            route();
+        } catch (e) {
+          error.textContent = t(e.message);
+        } finally {
+          submit.disabled = false;
+          switcher.disabled = false;
+        }
+      },
+    },
+    el("p", { class: "intro" }, t("accountIntro")),
+    field(t("username"), login),
+    field(t("password"), password),
+    error,
+    submit,
+    switcher,
+    el(
+      "details",
+      {},
+      el("summary", {}, t("dataProfile")),
+      el("p", {}, t("localInfo")),
+    ),
+  );
+  const dialog = modal(t("login"), form);
+  dialog.classList.add("auth-dialog");
+  login.focus();
+}
+function empty(title = t("empty")) {
+  return el(
+    "section",
+    { class: "empty-state" },
+    icon("compass"),
+    el("h2", {}, title),
+    el("p", {}, t("emptyHint")),
+    button(t("start"), () => go("#/feed"), "primary"),
+  );
+}
+function errorView(e, retry) {
+  return el(
+    "div",
+    { class: "empty-state" },
+    el("p", { role: "alert" }, t(e.message)),
+    button(t("retry"), retry, "primary"),
+  );
+}
+function openAuthor(id) {
+  go("#/author/yappy/" + id);
+}
+function comments(v) {
+  if (matchMedia("(max-width: 760px)").matches) pauseAll();
+  return openComments(v, {
+    getStore: () => store,
+    mutate: (edit) =>
+      mutate((d) => {
+        remember(d, v);
+        edit(d);
+      }),
+    gate: () => authDialog(),
+    openAuthor,
+  });
+}
+function share(v) {
+  const url = new URL(location.href);
+  url.hash = "/video/yappy/" + v.id;
+  const link = el("input", {
+    readonly: true,
+    value: url.href,
+    "aria-label": t("share"),
+  });
+  modal(
+    t("share"),
+    el(
+      "div",
+      { class: "stack" },
+      link,
+      button(t("share"), () => copy(url.href), "primary"),
+      el(
+        "a",
+        { href: v.sourceUrl, target: "_blank", rel: "noopener noreferrer" },
+        t("original"),
+      ),
+    ),
+  );
+}
+function toggleVideo(v, key) {
+  gate(async () => {
+    try {
+      await mutate((d) => {
+        remember(d, v);
+        toggle(d[key], v.id);
+      });
+    } catch (e) {
+      notice(t(e.message));
+    }
+  });
+}
+function follow(author) {
+  gate(async () => {
+    try {
+      await mutate((d) => {
+        toggle(d.following, author.id);
+        d.authors = [author, ...d.authors.filter((a) => a.id !== author.id)];
+      });
+      renderChrome();
+      document
+        .querySelectorAll('[data-follow="' + author.id + '"]')
+        .forEach((b) => {
+          b.textContent = t(
+            store.data.following.includes(author.id) ? "unfollow" : "follow",
+          );
+        });
+    } catch (e) {
+      notice(t(e.message));
+    }
+  });
+}
+function videoCard(v) {
+  const capturedStore = () => store;
+  let recorded = null;
+  const player = createPlayer(v, {
+    economy,
+    onPlay: () => {
+      const owner = capturedStore();
+      if (!owner || recorded === owner) return;
+      recorded = owner;
+      owner
+        .change((d) => {
+          remember(d, v);
+          d.history = [
+            { id: v.id, at: Date.now() },
+            ...d.history.filter((x) => x.id !== v.id),
+          ].slice(0, 1000);
+        })
+        .catch((e) => {
+          recorded = null;
+          notice(t(e.message));
+        });
+    },
+  });
+  const actions = el("div", { class: "video-actions" });
+  const caption = el("p", { class: "caption" }, v.description);
+  const more = button(
+    t("details"),
+    () => {
+      caption.classList.toggle("expanded");
+      more.textContent = t(
+        caption.classList.contains("expanded") ? "less" : "details",
+      );
+    },
+    "caption-more",
+  );
+  const authorButton = button(
+    "",
+    () => openAuthor(v.author.id),
+    "video-author",
+  );
+  authorButton.append(
+    portrait(v.author),
+    el("strong", {}, "@" + v.author.nickname),
+  );
+  const info = el(
+    "div",
+    { class: "video-info" },
+    authorButton,
+    caption,
+    v.description.length > 120 ? more : null,
+    v.music ? el("p", { class: "music" }, "♫  " + v.music) : null,
+  );
+  const canvas = el("div", { class: "video-canvas" }, player.node, info);
+  const card = el("div", { class: "video-card" }, canvas, actions);
+  function action(name, key, onClick, count, pressed) {
+    const b = iconButton(
+      name,
+      t(key),
+      onClick,
+      "action-button" + (pressed ? " selected" : ""),
+    );
+    if (pressed != null) b.setAttribute("aria-pressed", String(pressed));
+    b.append(el("span", {}, count == null ? t(key) : number(count)));
+    return b;
+  }
+  function refresh() {
+    const d = store?.data;
+    const menuAction = () => {
+      const hide = async (kind) => {
+        try {
+          await mutate((state) => {
+            remember(state, v);
+            const id = kind === "hidden" ? v.id : v.author.id;
+            if (!state[kind].includes(id)) state[kind].push(id);
+          });
+          menu.close();
+          route();
+        } catch (e) {
+          notice(t(e.message));
+        }
+      };
+      const menu = modal(
+        t("details"),
+        el(
+          "div",
+          { class: "stack" },
+          button(t("notInterested"), () => gate(() => hide("hidden"))),
+          button(t("hideAuthor"), () => gate(() => hide("hiddenAuthors"))),
+          el(
+            "a",
+            { href: v.sourceUrl, target: "_blank", rel: "noopener noreferrer" },
+            t("original"),
+          ),
+        ),
+      );
+    };
+    actions.replaceChildren(
+      action(
+        "heart",
+        d?.likes.includes(v.id) ? "unlike" : "like",
+        () => toggleVideo(v, "likes"),
+        v.stats.likes == null
+          ? null
+          : v.stats.likes + (d?.likes.includes(v.id) ? 1 : 0),
+        !!d?.likes.includes(v.id),
+      ),
+      action(
+        "comment",
+        "comments",
+        () => comments(v),
+        v.stats.comments == null
+          ? null
+          : v.stats.comments +
+              (d?.comments.filter((c) => c.videoId === v.id && !c.deleted)
+                .length || 0),
+      ),
+      action(
+        "bookmark",
+        d?.saved.includes(v.id) ? "unsave" : "save",
+        () => toggleVideo(v, "saved"),
+        null,
+        !!d?.saved.includes(v.id),
+      ),
+      action("share", "share", () => share(v)),
+      action("dots", "details", menuAction),
+    );
+  }
+  refresh();
+  return {
+    node: card,
+    activate: player.activate,
+    deactivate: player.deactivate,
+    destroy: player.destroy,
+    toggle: player.toggle,
+    toggleSound: player.toggleSound,
+    refresh,
+  };
+}
+const feedStates = new Map();
+let mountedFeedKey = null;
+function mountFeed(load) {
+  mountedFeedKey = (account?.id || "guest") + location.hash;
+  const previous = feedStates.get(mountedFeedKey);
+  main.className = "main watching";
+  const tabs = el(
+    "div",
+    { class: "feed-tabs" },
+    el(
+      "a",
+      { href: "#/feed", class: location.hash === "#/feed" ? "active" : "" },
+      t("forYou"),
+    ),
+    el(
+      "a",
       {
-        onsubmit: async (event) => {
-          event.preventDefault();
-          if (!name.value.trim()) return;
+        href: "#/following",
+        class: location.hash === "#/following" ? "active" : "",
+      },
+      t("following"),
+    ),
+  );
+  tabs.append(
+    iconButton(
+      "refresh",
+      t("refreshFeed"),
+      () => {
+        feedStates.delete(mountedFeedKey);
+        feed?.destroy();
+        feed = null;
+        route();
+      },
+      "feed-refresh",
+    ),
+  );
+  const status = el("div", {
+    class: "feed-status",
+    role: "status",
+    hidden: true,
+  });
+  feed = createFeed({
+    load: previous?.load || load,
+    initial: previous?.snapshot,
+    onStale: (value) => {
+      status.hidden = !value;
+      status.textContent = t("stale");
+    },
+    renderCard: videoCard,
+    filter: (v) =>
+      !store?.data.hidden.includes(v.id) &&
+      !store?.data.hiddenAuthors.includes(v.author.id),
+  });
+  const arrows = el(
+    "div",
+    { class: "feed-arrows" },
+    iconButton("up", t("previous"), () => feed?.move(-1), "round"),
+    iconButton("down", t("next"), () => feed?.move(1), "round"),
+  );
+  main.replaceChildren(
+    tabs,
+    status,
+    feed.node,
+    arrows,
+    el("div", { class: "shortcut-hint" }, t("shortcuts")),
+  );
+  feed.start();
+}
+function grid(items) {
+  const container = el("div", { class: "video-grid" });
+  for (const v of items) {
+    const a = el(
+      "a",
+      { href: "#/video/yappy/" + v.id, class: "video-tile" },
+      el("img", {
+        src: v.poster || "favicon.svg",
+        alt: "",
+        loading: "lazy",
+        onerror: (e) => {
+          e.target.src = "favicon.svg";
+        },
+      }),
+      el(
+        "div",
+        { class: "tile-shade" },
+        el("small", {}, "▶ " + number(v.stats.views)),
+        el("p", {}, v.description || "@" + v.author.nickname),
+        el("span", {}, "@" + v.author.nickname),
+      ),
+    );
+    container.append(a);
+  }
+  return container;
+}
+async function authorPage(id, signal) {
+  const author = await data.getAuthor(id, signal);
+  if (signal.aborted) return;
+  const followButton = button(
+    t(store?.data.following.includes(id) ? "unfollow" : "follow"),
+    () => follow(author),
+    "primary",
+  );
+  followButton.dataset.follow = id;
+  const head = el(
+    "header",
+    { class: "profile-header" },
+    portrait(author, "large"),
+    el(
+      "div",
+      {},
+      el("h1", {}, author.name),
+      el("p", {}, "@" + author.nickname),
+      el("p", {}, author.about),
+      author.followers == null
+        ? null
+        : el("p", {}, number(author.followers) + " " + t("followers")),
+      followButton,
+    ),
+  );
+  const results = el("div"),
+    more = button(t("more"), load, "load-button");
+  let cursor = null,
+    busy = false,
+    done = false;
+  const seen = new Set();
+  main.replaceChildren(
+    el("div", { class: "page-container" }, head, results, more),
+  );
+  async function load() {
+    if (busy || done || signal.aborted) return;
+    busy = true;
+    more.disabled = true;
+    try {
+      const result = await data.getAuthorVideos(id, cursor, signal);
+      if (signal.aborted) return;
+      const fresh = result.items.filter(
+        (v) => !seen.has(v.id) && (seen.add(v.id), true),
+      );
+      results.append(grid(fresh));
+      done = !result.next || result.next === cursor || !fresh.length;
+      cursor = result.next;
+      more.hidden = done;
+      if (!seen.size) results.replaceChildren(empty());
+    } catch (e) {
+      if (!signal.aborted) notice(t(e.message));
+    } finally {
+      busy = false;
+      more.disabled = false;
+    }
+  }
+  await load();
+}
+async function searchPage(query, signal) {
+  const heading = el(
+    "h1",
+    {},
+    query ? t("searchResults") + " · " + query : t("explore"),
+  );
+  const intro = el(
+    "section",
+    { class: "discover-banner" },
+    el("small", {}, "MORROW / DISCOVER"),
+    el("h1", {}, t("discover")),
+    el("p", {}, t("discoverText")),
+    button(t("start"), () => go("#/feed"), "primary"),
+  );
+  const results = el("div"),
+    status = el("p", { role: "status" }),
+    more = button(t("more"), load, "load-button");
+  let page = 1,
+    busy = false,
+    done = false;
+  const known = new Set();
+  main.replaceChildren(
+    el(
+      "div",
+      { class: "page-container" },
+      query ? heading : intro,
+      status,
+      results,
+      more,
+    ),
+  );
+  async function load() {
+    if (busy || done || signal.aborted) return;
+    busy = true;
+    more.disabled = true;
+    try {
+      const result = query
+        ? await data.search(query, page, signal)
+        : await data.getFeed(page, signal);
+      if (signal.aborted) return;
+      const fresh = result.items.filter(
+        (v) => !known.has(v.id) && (known.add(v.id), true),
+      );
+      results.append(grid(fresh));
+      page++;
+      done = !result.next || !fresh.length;
+      more.hidden = done;
+      if (!known.size) results.replaceChildren(empty());
+    } catch (e) {
+      if (signal.aborted) return;
+      const local = data
+        .cachedVideos()
+        .filter(
+          (v) =>
+            !query ||
+            (v.description + " " + v.author.nickname)
+              .toLowerCase()
+              .includes(query.toLowerCase()),
+        );
+      status.textContent = t(local.length ? "localSearch" : e.message);
+      if (local.length) {
+        results.replaceChildren(grid(local));
+        more.hidden = true;
+      } else more.textContent = t("retry");
+    } finally {
+      busy = false;
+      more.disabled = false;
+    }
+  }
+  await load();
+}
+function profilePage() {
+  if (!store) {
+    main.replaceChildren(
+      el(
+        "div",
+        { class: "page-container" },
+        empty(t("profile")),
+        button(t("login"), () => authDialog(), "primary"),
+      ),
+    );
+    return;
+  }
+  const d = store.data;
+  const head = el(
+    "header",
+    { class: "profile-header" },
+    portrait(d.profile, "large"),
+    el(
+      "div",
+      {},
+      el("h1", {}, d.profile.name),
+      el("p", {}, "@" + account.login),
+      el("p", {}, d.profile.about),
+      el(
+        "div",
+        { class: "actions" },
+        button(t("editProfile"), editProfile, "primary"),
+        button(t("settings"), () => go("#/settings")),
+      ),
+    ),
+  );
+  const tabs = el("div", { class: "profile-tabs", role: "tablist" });
+  const content = el("div", { role: "tabpanel" });
+  for (const key of ["likes", "saved", "history", "myComments", "following"]) {
+    const b = button(
+      t(key),
+      () => {
+        tab = key;
+        profilePage();
+      },
+      tab === key ? "active" : "",
+    );
+    b.setAttribute("role", "tab");
+    b.setAttribute("aria-selected", String(tab === key));
+    tabs.append(b);
+  }
+  if (tab === "myComments") {
+    for (const c of d.comments.filter((x) => !x.deleted).toReversed())
+      content.append(
+        el(
+          "a",
+          { class: "comment-summary", href: "#/video/yappy/" + c.videoId },
+          el("p", {}, c.text),
+          el("small", {}, t("comments")),
+        ),
+      );
+  } else if (tab === "following") {
+    for (const id of d.following) {
+      const a = d.authors.find((x) => x.id === id) || {
+        id,
+        name: t("unknownAuthor"),
+      };
+      content.append(
+        el(
+          "a",
+          { class: "author-row", href: "#/author/yappy/" + id },
+          portrait(a),
+          el("strong", {}, a.name),
+        ),
+      );
+    }
+  } else {
+    const ids =
+      tab === "history" ? d.history.map((x) => x.id) : d[tab].toReversed();
+    const videos = ids
+      .map((id) => d.videos.find((v) => v.id === id))
+      .filter(Boolean);
+    content.append(grid(videos));
+    if (!videos.length) content.replaceChildren(empty());
+  }
+  if (!content.children.length) content.append(empty());
+  main.replaceChildren(
+    el("div", { class: "page-container" }, head, tabs, content),
+  );
+}
+function editProfile() {
+  const owner = store;
+  const name = el("input", {
+      value: owner.data.profile.name,
+      maxlength: 80,
+      required: true,
+    }),
+    about = el(
+      "textarea",
+      { maxlength: 2000, rows: 3 },
+      owner.data.profile.about,
+    );
+  let photo = owner.data.profile.avatar;
+  const preview = el("div", {}, portrait(owner.data.profile, "large")),
+    file = el("input", {
+      type: "file",
+      accept: "image/png,image/jpeg,image/webp",
+    }),
+    error = el("p", { class: "error", role: "alert" });
+  let processing = false;
+  file.onchange = async () => {
+    if (!file.files[0]) return;
+    processing = true;
+    try {
+      photo = await avatar(file.files[0]);
+      preview.replaceChildren(
+        portrait({ name: name.value, avatar: photo }, "large"),
+      );
+    } catch (e) {
+      error.textContent = t(e.message);
+    } finally {
+      processing = false;
+    }
+  };
+  const submit = button(t("save"), () => {}, "primary");
+  submit.type = "submit";
+  const dialog = modal(
+    t("editProfile"),
+    el(
+      "form",
+      {
+        class: "stack",
+        onsubmit: async (e) => {
+          e.preventDefault();
+          if (processing || submit.disabled) return;
           submit.disabled = true;
           try {
-            await store.mutate((data) => {
-              const item = {
-                id: project?.id || uid(),
-                name: name.value.trim(),
-                description: description.value,
-                instruction: instruction.value,
+            if (store !== owner) throw new Error("sessionExpired");
+            await mutate((d) => {
+              d.profile = {
+                name: name.value.trim() || account.login,
+                about: about.value,
+                avatar: photo,
               };
-              if (project)
-                data.projects[
-                  data.projects.findIndex((p) => p.id === project.id)
-                ] = item;
-              else data.projects.push(item);
             });
             dialog.close();
-            render();
+            renderChrome();
+            profilePage();
           } catch (e) {
             error.textContent = t(e.message);
+          } finally {
             submit.disabled = false;
           }
         },
       },
-      field(t('name'), name),
-      field(t('description'), description),
-      field(t('instruction'), instruction),
+      preview,
+      field(t("avatar"), file),
+      button(t("removeAvatar"), () => {
+        photo = "";
+        preview.replaceChildren(portrait({ name: name.value }, "large"));
+      }),
+      field(t("name"), name),
+      field(t("about"), about),
       error,
       submit,
     ),
   );
 }
-function deleteProject(project) {
-  confirmAction(t('delete'), t('deleteProjectWarning'), async () => {
-    await store.mutate((data) => {
-      data.projects = data.projects.filter((p) => p.id !== project.id);
-      for (const item of [...data.chats, ...data.files])
-        if (item.projectId === project.id) item.projectId = '';
-    });
-    await navigate('projects');
-  });
-}
-function uploadControl(projectId = '') {
-  const input = el('input', {
-    type: 'file',
-    accept: '.txt,.md,.csv',
-    multiple: true,
-    'aria-label': t('upload'),
-    onchange: run(async (event) => {
-      const owner = store.owner;
-      const files = [...event.target.files];
-      try {
-        if (files.length + store.data.files.length > LIMITS.files)
-          throw new Error('invalidData');
-        const uploaded = await Promise.all(
-          files.map((file) => readFile(file, projectId)),
-        );
-        if (store.owner !== owner) return;
-        await store.mutate((data) => data.files.push(...uploaded));
-        render();
-      } finally {
-        input.value = '';
-      }
-    }),
-  });
-  return el(
-    'div',
-    { class: 'upload' },
-    field(t('upload'), input),
-    el('small', { class: 'muted' }, t('fileHint')),
-  );
-}
-function previewFile(file) {
-  modal(
-    file.name,
-    el(
-      'div',
-      {},
-      el('pre', { class: 'file-preview' }, file.text),
-      action('download', () => download(file.name, file.text)),
-    ),
-  );
-}
-function fileCard(file) {
-  return el(
-    'article',
-    { class: 'card file-card' },
-    el('h3', {}, file.name),
-    el(
-      'small',
-      { class: 'muted' },
-      `${new Blob([file.text]).size} B · ${date(file.created)}`,
+function settingsPage() {
+  const content = el(
+    "div",
+    { class: "settings-content" },
+    el("h1", {}, t("settings")),
+    field(
+      t("language"),
+      select(
+        [
+          ["ru", "Русский"],
+          ["en", "English"],
+        ],
+        getLanguage(),
+        (v) => {
+          setLanguage(v);
+          renderChrome();
+          settingsPage();
+        },
+      ),
     ),
     field(
-      t('project'),
+      t("theme"),
       select(
-        projectOptions(),
-        file.projectId,
-        run(async (value) => {
-          await store.mutate((data) => {
-            data.files.find((f) => f.id === file.id).projectId = value;
-          });
-          render();
-        }),
+        ["system", "dark", "light"].map((v) => [v, t(v)]),
+        theme,
+        (v) => {
+          theme = v;
+          applyTheme();
+        },
       ),
     ),
-    el(
-      'div',
-      { class: 'actions' },
-      action('preview', () => previewFile(file)),
-      action('download', () => download(file.name, file.text)),
-      action('delete', () =>
-        confirmAction(t('delete'), t('deleteWarning'), async () => {
-          await store.mutate((data) => {
-            data.files = data.files.filter((f) => f.id !== file.id);
-          });
-          selected.delete(file.id);
-          render();
-        }),
-      ),
+    field(
+      t("economy"),
+      el("input", {
+        type: "checkbox",
+        checked: economy,
+        onchange: async (e) => {
+          const value = e.target.checked;
+          try {
+            if (store)
+              await mutate((d) => {
+                d.economy = value;
+              });
+            economy = value;
+          } catch (err) {
+            e.target.checked = !value;
+            notice(t(err.message));
+          }
+        },
+      }),
     ),
+    button(t("clearCache"), () => {
+      data.clearCache();
+      notice(t("updated"));
+    }),
   );
-}
-function renderFiles(main) {
-  main.append(
-    el('header', { class: 'page-header' }, el('h1', {}, t('files'))),
-    el(
-      'section',
-      { class: 'page-body' },
-      uploadControl(),
-      el('div', { class: 'cards' }, store.data.files.map(fileCard)),
-      !store.data.files.length ? el('p', {}, t('empty')) : null,
-    ),
-  );
-}
-function attachmentDialog() {
-  const chosen = new Set(selected);
-  const dialog = modal(
-    t('attach'),
-    el(
-      'div',
-      {},
-      el('p', {}, t('fileContext')),
-      store.data.files.map((f) =>
-        field(
-          f.name,
-          el('input', {
-            type: 'checkbox',
-            checked: chosen.has(f.id),
-            onchange: (event) => {
-              if (event.target.checked) chosen.add(f.id);
-              else chosen.delete(f.id);
+  if (store) {
+    const owner = store;
+    const importFile = el("input", {
+      type: "file",
+      accept: "application/json,.json",
+      "aria-label": t("import"),
+      onchange: async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        try {
+          if (file.size > 8000000) throw new Error("invalidData");
+          const raw = JSON.parse(await file.text());
+          if (raw.format !== "morrow-video-profile")
+            throw new Error("invalidData");
+          const checked = validateProfile(raw.data);
+          confirmAction(
+            t("import"),
+            t("importText"),
+            async () => {
+              if (store !== owner) throw new Error("sessionExpired");
+              await mutate((d) => Object.assign(d, checked));
+              economy = store.data.economy;
+              renderChrome();
+              settingsPage();
             },
+            "import",
+          );
+        } catch (err) {
+          notice(t("invalidData"));
+        } finally {
+          e.target.value = "";
+        }
+      },
+    });
+    content.append(
+      el("hr"),
+      el("h2", {}, t("dataProfile")),
+      el("p", { class: "muted-text" }, t("localInfo")),
+      button(t("export"), () =>
+        download(
+          "morrow-profile.json",
+          JSON.stringify(
+            { format: "morrow-video-profile", data: owner.data },
+            null,
+            2,
+          ),
+          "application/json",
+        ),
+      ),
+      field(t("import"), importFile),
+      button(t("archive"), async () => {
+        try {
+          const old = await read("workspaces", owner.account.id);
+          if (!old) {
+            notice(t("noArchive"));
+            return;
+          }
+          download(
+            "morrow-ai-archive.json",
+            JSON.stringify(old.data, null, 2),
+            "application/json",
+          );
+        } catch (e) {
+          notice(t(e.message));
+        }
+      }),
+      button(t("clearHistory"), () =>
+        confirmAction(t("clearHistory"), t("clearText"), () =>
+          mutate((d) => {
+            d.history = [];
           }),
         ),
       ),
-      !store.data.files.length ? el('p', {}, t('empty')) : null,
-      action('files', () => {
-        dialog.close();
-        return navigate('files');
+      button(t("resetHidden"), async () => {
+        try {
+          await mutate((d) => {
+            d.hidden = [];
+            d.hiddenAuthors = [];
+          });
+          notice(t("updated"));
+        } catch (e) {
+          notice(t(e.message));
+        }
       }),
-      action(
-        'save',
-        () => {
-          if (chosen.size > 10) throw new Error('contextLimit');
-          selected = chosen;
-          dialog.close();
-          render();
-        },
-        'primary',
-      ),
-    ),
-  );
-}
-function renderSettings(main) {
-  const settings = store.data.settings;
-  const change = (key) =>
-    run(async (value) => {
-      await flushDraft();
-      await store.mutate((data) => {
-        data.settings[key] = value;
-      });
-      render();
-    });
-  main.append(
-    el('header', { class: 'page-header' }, el('h1', {}, t('settings'))),
-    el(
-      'section',
-      { class: 'page-body settings' },
-      field(
-        t('language'),
-        select(
-          [
-            ['ru', 'Русский'],
-            ['en', 'English'],
-          ],
-          settings.language,
-          change('language'),
-        ),
-      ),
-      field(
-        t('answerLanguage'),
-        select(
-          [
-            ['auto', t('auto')],
-            ['ru', 'Русский'],
-            ['en', 'English'],
-          ],
-          settings.answerLanguage,
-          change('answerLanguage'),
-        ),
-      ),
-      field(
-        t('theme'),
-        select(
-          ['system', 'light', 'dark'].map((v) => [v, t(v)]),
-          settings.theme,
-          change('theme'),
-        ),
-      ),
-      field(
-        t('style'),
-        select(
-          ['balanced', 'brief', 'detailed'].map((v) => [v, t(v)]),
-          settings.style,
-          change('style'),
-        ),
-      ),
-      el('h2', {}, t('provider')),
-      el('p', {}, PROVIDER.name),
-      el('p', { class: 'muted' }, t('disclosure')),
-    ),
-  );
-}
-function renderProfile(main) {
-  const profile = store.data.profile;
-  const name = el('input', {
-    required: true,
-    maxlength: 80,
-    value: profile.name,
-  });
-  const avatarInput = el('input', {
-    type: 'file',
-    accept: 'image/png,image/jpeg,image/webp',
-    'aria-label': t('avatar'),
-    onchange: run(async (event) => {
-      const file = event.target.files[0];
-      if (!file) return;
-      const owner = store.owner,
-        image = await avatar(file);
-      if (owner !== store.owner) return;
-      await store.mutate((data) => {
-        data.profile.avatar = image;
-      });
-      render();
-    }),
-  });
-  const importInput = el('input', {
-    type: 'file',
-    accept: '.json,application/json',
-    'aria-label': t('importData'),
-    onchange: run(async (event) => {
-      const file = event.target.files[0];
-      if (!file) return;
-      try {
-        if (file.size > LIMITS.bytes) throw new Error('storageFull');
-        const owner = store.owner,
-          imported = parseImport(await file.text());
-        if (owner !== store.owner) return;
-        const accept = action(
-          'importData',
-          async () => {
-            if (store.owner !== owner) throw new Error('sessionExpired');
-            cancelGeneration();
-            clearTimeout(draftTimer);
-            draft = '';
-            await store.mutate((data) => {
-              Object.assign(data, imported);
-            });
-            pendingReply = null;
-            dialog.close();
-            await navigate('profile');
-            notice(t('importDone'));
-          },
-          'primary',
-        );
-        const dialog = modal(
-          t('importData'),
-          el('div', {}, el('p', {}, t('importWarning')), accept),
-        );
-      } finally {
-        importInput.value = '';
-      }
-    }),
-  });
-  main.append(
-    el(
-      'header',
-      { class: 'page-header' },
-      el('h1', {}, t('profile')),
-      action('logout', () =>
+      button(t("logout"), () =>
         confirmAction(
-          t('logout'),
-          t('logout'),
+          t("logout"),
+          t("logoutText"),
           async () => {
-            await flushDraft();
-            cancelGeneration();
+            await owner.queue;
             logout();
-            await store.load(null);
             account = null;
-            query = '';
-            pendingReply = null;
-            draft = '';
-            await navigate('chats');
+            store = null;
+            for (const d of document.querySelectorAll("dialog")) d.close();
+            renderChrome();
+            go("#/feed");
           },
-          'logout',
+          "logout",
         ),
       ),
-    ),
-    el(
-      'section',
-      { class: 'page-body settings' },
-      profile.avatar
-        ? el('img', {
-            class: 'avatar',
-            src: profile.avatar,
-            alt: profile.name,
-            width: 80,
-            height: 80,
-          })
-        : el(
-            'div',
-            { class: 'hero-mark' },
-            (profile.name || account.login).slice(0, 1).toUpperCase(),
-          ),
-      el('p', {}, `@${account.login}`),
-      el(
-        'form',
-        {
-          onsubmit: (event) => {
-            event.preventDefault();
-            run(async () => {
-              if (!name.value.trim()) return;
-              await store.mutate((data) => {
-                data.profile.name = name.value.trim();
-              });
-              render();
-              notice(t('saved'));
-            })();
-          },
-        },
-        field(t('displayName'), name),
-        el('button', { type: 'submit' }, t('save')),
-      ),
-      field(t('avatar'), avatarInput),
-      profile.avatar
-        ? action('removeAvatar', async () => {
-            await store.mutate((data) => {
-              data.profile.avatar = '';
-            });
-            render();
-          })
-        : null,
-      el('h2', {}, t('exportData')),
-      el('p', { class: 'muted' }, t('backupHint')),
-      el(
-        'p',
-        {},
-        `${t('storageUsage')}: ${(new Blob([JSON.stringify(store.data)]).size / 1048576).toFixed(2)} / 16 MB`,
-      ),
-      action('exportData', async () => {
-        await flushDraft();
-        download(
-          'morrow-backup.json',
-          exportWorkspace(store.data),
-          'application/json',
-        );
-      }),
-      field(t('importData'), importInput),
-      action(
-        'deleteAccount',
+      button(
+        t("deleteAccount"),
         () =>
-          textDialog(
-            'deleteAccount',
-            '',
-            async (value) => {
-              if (value !== account.login) throw new Error('credentials');
-              cancelGeneration();
-              clearTimeout(draftTimer);
-              await store.queue;
-              await removeAccount(account.id);
+          confirmAction(
+            t("deleteAccount"),
+            t("deleteAccountText"),
+            async () => {
+              await owner.queue;
+              await removeAccount(owner.account.id);
               account = null;
-              query = '';
-              pendingReply = null;
-              await store.load(null);
-              draft = '';
-              await navigate('chats');
+              store = null;
+              for (const d of document.querySelectorAll("dialog")) d.close();
+              renderChrome();
+              go("#/feed");
             },
-            false,
-            t('deleteAccountWarning'),
           ),
-        'danger',
+        "danger",
       ),
-    ),
+    );
+  } else content.append(button(t("login"), () => authDialog(), "primary"));
+  main.replaceChildren(
+    el("div", { class: "page-container settings-page" }, content),
   );
 }
+async function route() {
+  const version = ++routeVersion;
+  routeController?.abort();
+  routeController = new AbortController();
+  const signal = routeController.signal;
+  if (feed && mountedFeedKey) {
+    feedStates.set(mountedFeedKey, {
+      snapshot: feed.snapshot(),
+      load: feed.loader,
+    });
+    while (feedStates.size > 4)
+      feedStates.delete(feedStates.keys().next().value);
+  }
+  feed?.destroy();
+  feed = null;
+  pauseAll();
+  for (const d of document.querySelectorAll("dialog")) d.close();
+  main.className = "main";
+  main.replaceChildren(el("div", { class: "empty-state" }, t("loading")));
+  renderChrome();
+  const hash = location.hash.slice(1) || "/feed";
+  const [path, queryString] = hash.split("?");
+  const parts = path.split("/").filter(Boolean);
+  try {
+    if (parts[0] === "feed" || !parts.length) {
+      let page = 1;
+      mountFeed(async (s) => {
+        const result = await data.getFeed(page, s, page === 1);
+        page++;
+        return result;
+      });
+    } else if (
+      parts[0] === "video" &&
+      parts[1] === "yappy" &&
+      validId(parts[2])
+    ) {
+      const v = await data.getVideo(parts[2], signal);
+      if (signal.aborted) return;
+      let first = true,
+        page = 1;
+      mountFeed(async (s) => {
+        if (first) {
+          first = false;
+          return { items: [v], next: true };
+        }
+        const result = await data.getFeed(page, s);
+        page++;
+        return result;
+      });
+    } else if (
+      parts[0] === "author" &&
+      parts[1] === "yappy" &&
+      validId(parts[2])
+    )
+      await authorPage(parts[2], signal);
+    else if (parts[0] === "following") {
+      if (!store || !store.data.following.length) {
+        main.replaceChildren(
+          el(
+            "div",
+            { class: "page-container" },
+            empty(t("noFollowing")),
+            !store
+              ? button(t("login"), () => authDialog(), "primary")
+              : el("span"),
+          ),
+        );
+        return;
+      }
+      const authors = store.data.following.slice(),
+        cursors = new Map();
+      let turn = 0;
+      mountFeed(async (s) => {
+        if (!authors.length) return { items: [], next: null };
+        const id = authors[turn % authors.length];
+        const result = await data.getAuthorVideos(id, cursors.get(id), s);
+        if (!result.next || result.next === cursors.get(id))
+          authors.splice(turn % authors.length, 1);
+        else {
+          cursors.set(id, result.next);
+          turn++;
+        }
+        return { ...result, next: authors.length > 0 };
+      });
+    } else if (parts[0] === "profile") profilePage();
+    else if (parts[0] === "settings") settingsPage();
+    else if (parts[0] === "explore" || parts[0] === "search")
+      await searchPage(
+        new URLSearchParams(queryString).get("q")?.slice(0, 120) || "",
+        signal,
+      );
+    else main.replaceChildren(empty());
+  } catch (e) {
+    if (version === routeVersion && !signal.aborted)
+      main.replaceChildren(errorView(e, route));
+  }
+}
+window.addEventListener("hashchange", route);
+window.addEventListener("pagehide", () => pauseAll());
+renderChrome();
 try {
   account = await restoreSession();
-  await store.load(account?.id || null);
-} catch (error) {
+  if (account) {
+    store = await new ProfileStore(account).load();
+    economy = store.data.economy;
+  }
+} catch (e) {
   account = null;
-  logout();
-  notice(t(error.message));
+  store = null;
+  notice(t(e.message));
 }
-locationRoute();
-render();
+if (!location.hash) history.replaceState(null, "", "#/feed");
+route();

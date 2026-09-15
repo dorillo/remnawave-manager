@@ -1,588 +1,541 @@
-/* In-memory static origin, no preview server. MORROW_LIVE=1 probes Prexzy. */
-const assert = require('node:assert/strict');
-const fs = require('node:fs/promises');
-const path = require('node:path');
-const { execFileSync } = require('node:child_process');
-const { chromium } = require('./.tmp/node_modules/playwright-core');
+/* Deterministic browser integration tests. Live CDN/nginx checks are separate. */
+const assert = require("node:assert/strict");
+const fs = require("node:fs/promises");
+const path = require("node:path");
+const { execFileSync } = require("node:child_process");
+const { chromium } = require("./.tmp/node_modules/playwright-core");
 const root = path.resolve(
   __dirname,
-  '../src/remnawave_manager/data/disguises/03-morrow-coffee',
+  "../src/remnawave_manager/data/disguises/03-morrow-coffee",
 );
-const origin = 'https://morrow.test';
+const origin = "https://morrow.test";
 const policy = execFileSync(
-  'python',
-  ['-c', 'from remnawave_manager.site_policy import NODE_CSP; print(NODE_CSP)'],
+  process.env.PYTHON || "python3",
+  ["-c", "from remnawave_manager.site_policy import NODE_CSP; print(NODE_CSP)"],
   {
-    env: { ...process.env, PYTHONPATH: path.resolve(__dirname, '../src') },
-    encoding: 'utf8',
+    env: { ...process.env, PYTHONPATH: path.resolve(__dirname, "../src") },
+    encoding: "utf8",
   },
 ).trim();
+const id = (n) => n.toString(16).padStart(32, "0");
+const creator = {
+  uuid: id(900),
+  nickname: "morning.stories",
+  firstName: "Утренние истории",
+  about: "Маленькие моменты большого города",
+  avatar: "https://cdn-st.rutubelist.ru/avatar.jpg",
+  subscribers: 12400,
+};
+const rawVideo = (n) => ({
+  uuid: id(n),
+  creator,
+  description: "Город просыпается. Поймай этот момент 🌿 #утро #город",
+  link: `https://vb-rtb.uma.media/vod/${n}.mp4`,
+  thumbnail: "https://cdn-st.rutubelist.ru/poster.jpg",
+  videoLinks: {
+    sd: `https://vb-rtb.uma.media/vod/${n}.mp4`,
+    hd: `https://vb-rtb.uma.media/vod/${n}.mp4`,
+  },
+  publishedAt: "2026-09-14T10:00:00Z",
+  likesCount: 1234,
+  commentsCount: 12,
+  viewsCount: 45000,
+  audio: { title: "Morning light" },
+});
 let browser;
 (async () => {
   browser = await chromium.launch({
     executablePath:
       process.env.MORROW_BROWSER ||
-      'C:/Program Files/Google/Chrome/Application/chrome.exe',
+      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     headless: true,
   });
   const context = await browser.newContext({
-    locale: 'ru-RU',
+    locale: "ru-RU",
     viewport: { width: 1440, height: 1000 },
-    acceptDownloads: true,
   });
-  await context.route(`${origin}/**`, async (route) => {
-    const url = new URL(route.request().url());
-    const name = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
-    const resolved = path.resolve(root, name);
-    if (!resolved.startsWith(root + path.sep)) return route.abort();
-    try {
-      await route.fulfill({
-        body: await fs.readFile(resolved),
-        contentType: name.endsWith('.js')
-          ? 'text/javascript'
-          : name.endsWith('.css')
-            ? 'text/css'
-            : 'text/html',
-        headers: { 'Content-Security-Policy': policy },
-      });
-    } catch {
-      await route.fulfill({ status: 404, body: 'Not found' });
+  const errors = [],
+    csp = [],
+    writes = [];
+  let networkFail = false;
+  // Produce a tiny playable test movie with browser-native APIs; no downloaded fixture.
+  const seed = await context.newPage();
+  const bytes = await seed.evaluate(async () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 360;
+    canvas.height = 640;
+    const c = canvas.getContext("2d");
+    const stream = canvas.captureStream(12);
+    const rec = new MediaRecorder(stream, { mimeType: "video/webm" }),
+      chunks = [];
+    rec.ondataavailable = (e) => chunks.push(e.data);
+    const done = new Promise((r) => (rec.onstop = r));
+    rec.start();
+    for (let i = 0; i < 12; i++) {
+      c.fillStyle = "#65897b";
+      c.fillRect(0, 0, 360, 640);
+      c.fillStyle = "#c4dbb1";
+      c.beginPath();
+      c.arc(250, 150, 90, 0, 7);
+      c.fill();
+      c.fillStyle = "#324641";
+      c.fillRect(0, 350 + i, 200, 290);
+      await new Promise((r) => setTimeout(r, 90));
     }
+    rec.stop();
+    await done;
+    stream.getTracks().forEach((t) => t.stop());
+    return [...new Uint8Array(await new Blob(chunks).arrayBuffer())];
   });
-  let mode = 'ok';
-  let calls = [];
-  if (!process.env.MORROW_LIVE)
-    await context.route('https://prexzyapis.com/**', async (route) => {
-      if (route.request().method() === 'OPTIONS')
+  await seed.close();
+  const movie = Buffer.from(bytes);
+  const poster =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="360" height="640"><rect width="360" height="640" fill="#65897b"/><circle cx="250" cy="150" r="90" fill="#c4dbb1"/><path d="M0 350h200v290H0z" fill="#324641"/></svg>';
+  const routeHandler = async (route) => {
+    const req = route.request(),
+      u = new URL(req.url());
+    if (req.method() !== "GET") writes.push(req.url());
+    if (u.origin !== origin) {
+      if (u.hostname === "vb-rtb.uma.media")
+        return route.fulfill({ contentType: "video/webm", body: movie });
+      if (u.hostname === "cdn-st.rutubelist.ru")
+        return route.fulfill({ contentType: "image/svg+xml", body: poster });
+      return route.abort();
+    }
+    if (u.pathname.startsWith("/_morrow/yappy/")) {
+      if (networkFail)
         return route.fulfill({
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'POST',
-            'Access-Control-Allow-Headers': '*',
-          },
+          status: 429,
+          headers: { "Retry-After": "1" },
+          contentType: "application/json",
+          body: "{}",
         });
-      calls.push(new URLSearchParams(route.request().postData()).get('prompt'));
-      if (mode === 'delay')
-        await new Promise((resolve) => setTimeout(resolve, 1200));
-      if (mode === 'network') return route.abort();
-      const status = mode === 'rate' ? 429 : 200;
-      await route.fulfill({
-        status,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Retry-After': '1',
-          'Access-Control-Expose-Headers': 'Retry-After',
-        },
-        contentType: 'application/json',
-        body: JSON.stringify({
-          status: true,
-          result: {
-            text:
-              mode === 'empty'
-                ? []
-                : [
-                    '## Ответ\n\n**Полезный текст**\n\n<script>window.injected=1</script>\n\n[опасно](javascript:alert(1))\n\n```js\nconst n = 1;\n```\n\n| A | B |\n| --- | --- |\n| 1 | 2 |',
-                  ],
-          },
-        }),
+      const p = u.pathname.split("/").slice(3),
+        page = Number(u.searchParams.get("page") || 1);
+      let data;
+      if (p[0] === "feed" || p[0] === "search")
+        data = {
+          results: [1, 2, 3, 4].map((n) => rawVideo(n + (page - 1) * 4)),
+          next: page < 3 ? "true" : null,
+        };
+      else if (p[0] === "video") data = rawVideo(parseInt(p[1], 16));
+      else if (p[0] === "author") data = creator;
+      else if (p[0] === "author-videos")
+        data = { results: [rawVideo(1), rawVideo(2)], next: null };
+      else if (p[0] === "comments")
+        data = {
+          results:
+            page === 1
+              ? [
+                  {
+                    hex: "abc123",
+                    commenterHex: id(901),
+                    commenter: {
+                      hex: id(901),
+                      name: "Аня",
+                      photo: creator.avatar,
+                    },
+                    markdown: "<img src=x onerror=alert(1)> Красиво!",
+                    creationDate: "2026-09-14T12:00:00Z",
+                    likeCount: 3,
+                  },
+                ]
+              : [],
+          next: null,
+        };
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(data || {}),
       });
-    });
-  const page = await context.newPage();
-  const errors = [];
-  page.on('pageerror', (error) => {
-    errors.push(error.message);
-    console.error('PAGE:', error.message);
-  });
-  await page.addInitScript(() => {
-    window.cspErrors = [];
-    document.addEventListener('securitypolicyviolation', (e) =>
-      window.cspErrors.push(e.violatedDirective),
-    );
-  });
-  await page.goto(origin);
-  if (process.env.MORROW_LIVE) {
-    const result = await page.evaluate(async () => {
-      const { generate } = await import('./morrow-ai.js');
-      return generate({
-        prompt:
-          'User: My name is Vera. Assistant: Hello. User: What is my name? Reply with name only.',
-        signal: new AbortController().signal,
-      });
-    });
-    assert.match(result, /Vera/i);
-    console.log('Live Prexzy POST, CORS and context: PASS');
-    return;
-  }
-  // Guest appearance preferences survive reload without carrying profile data.
-  await page
-    .locator('.rail')
-    .getByRole('button', { name: 'Настройки', exact: true })
-    .click();
-  await page.getByLabel('Язык интерфейса').selectOption('en');
-  await page.getByLabel('Interface language').waitFor();
-  await page.reload();
-  await page.getByLabel('Interface language').waitFor();
-  assert.equal(await page.getByLabel('Interface language').inputValue(), 'en');
-  await page.getByLabel('Interface language').selectOption('ru');
-  await page.getByLabel('Язык интерфейса').waitFor();
-  async function signup(login) {
-    await page
-      .locator('.rail-bottom')
-      .getByRole('button', { name: 'Войти', exact: true })
-      .click();
-    await page
-      .getByRole('dialog')
-      .getByRole('button', { name: 'Создать аккаунт' })
-      .click();
-    await page.locator('dialog input[name=login]').fill(login);
-    await page.locator('dialog input[name=password]').fill('password123');
-    await page
-      .getByRole('dialog')
-      .getByRole('button', { name: 'Создать аккаунт' })
-      .click();
-    await page.locator('dialog').waitFor({ state: 'detached' });
-  }
-  async function send(text) {
-    await page.locator('#prompt').fill(text);
-    await page.getByRole('button', { name: 'Отправить', exact: true }).click();
-  }
-  async function navigate(name) {
-    await page
-      .locator('.rail')
-      .getByRole('button', { name, exact: true })
-      .click();
-  }
-  await signup('alice');
-  await send('Мой проект называется Atlas.');
-  await page.locator('.message.assistant').waitFor();
-  assert.equal(await page.evaluate(() => window.injected), undefined);
-  assert.equal(
-    await page
-      .locator('.message script, .message a[href^="javascript:"]')
-      .count(),
-    0,
-  );
-  assert.equal(await page.locator('.message table').count(), 1);
-  await send('Как называется мой проект?');
-  await page.waitForFunction(
-    () => document.querySelectorAll('.message.assistant').length === 2,
-  );
-  assert.ok(calls[1].includes('Atlas') && calls[1].includes('assistant'));
-  await page.reload();
-  await page.locator('.message.assistant').first().waitFor();
-  assert.equal(await page.locator('.message.assistant').count(), 2);
-  await page.getByRole('button', { name: 'Изменить запрос' }).last().click();
-  await page.locator('dialog textarea').fill('Изменённый вопрос');
-  await page
-    .locator('dialog')
-    .getByRole('button', { name: 'Сохранить', exact: true })
-    .click();
-  await page.locator('dialog').waitFor({ state: 'detached' });
-  assert.ok(calls.at(-1).includes('Изменённый вопрос'));
-  await navigate('Проекты');
-  await page.getByRole('button', { name: 'Новый проект' }).click();
-  await page
-    .getByRole('dialog')
-    .getByLabel('Название', { exact: true })
-    .fill('Atlas');
-  await page
-    .getByRole('dialog')
-    .getByLabel('Инструкция для AI')
-    .fill('Answer in short paragraphs.');
-  await page
-    .getByRole('dialog')
-    .getByRole('button', { name: 'Сохранить' })
-    .click();
-  await page.getByRole('button', { name: 'Открыть проект' }).click();
-  await page.getByLabel('Загрузить файлы', { exact: true }).setInputFiles({
-    name: 'notes.md',
-    mimeType: 'text/markdown',
-    buffer: Buffer.from('Unique file marker <img src=x onerror=alert(1)>'),
-  });
-  await page.getByRole('heading', { name: 'notes.md' }).waitFor();
-  await page
-    .locator('main')
-    .getByRole('button', { name: 'Новый диалог', exact: true })
-    .click();
-  await page.getByRole('button', { name: 'Выбрать файлы' }).click();
-  await page.getByRole('dialog').getByLabel('notes.md').check();
-  await page
-    .getByRole('dialog')
-    .getByRole('button', { name: 'Сохранить' })
-    .click();
-  await send('Объясни файл');
-  await page.locator('.message.assistant').waitFor();
-  assert.ok(calls.at(-1).includes('Unique file marker'));
-  assert.ok(calls.at(-1).includes('Answer in short paragraphs.'));
-  mode = 'delay';
-  await send('Запрос для отмены');
-  await page.getByRole('button', { name: 'Остановить', exact: true }).click();
-  await page.waitForTimeout(1400);
-  assert.equal(await page.locator('.message.assistant').count(), 1);
-  mode = 'empty';
-  await page
-    .getByRole('button', { name: 'Повторить ответ', exact: true })
-    .last()
-    .click();
-  await page.getByRole('status').filter({ hasText: 'пустой' }).waitFor();
-  mode = 'rate';
-  await page
-    .getByRole('button', { name: 'Повторить ответ', exact: true })
-    .last()
-    .click();
-  await page
-    .getByRole('status')
-    .filter({ hasText: 'Лимит запросов' })
-    .waitFor();
-  await page.waitForTimeout(1100);
-  mode = 'network';
-  await page
-    .getByRole('button', { name: 'Повторить ответ', exact: true })
-    .last()
-    .click();
-  await page
-    .getByRole('status')
-    .filter({ hasText: 'Нет соединения' })
-    .waitFor();
-  mode = 'ok';
-  await page
-    .getByRole('button', { name: 'Повторить ответ', exact: true })
-    .last()
-    .click();
-  await page.waitForFunction(
-    () => document.querySelectorAll('.message.assistant').length === 2,
-  );
-  await navigate('Профиль');
-  const backupPromise = page.waitForEvent('download');
-  await page
-    .getByRole('button', { name: 'Экспорт данных', exact: true })
-    .click();
-  const backup = JSON.parse(
-    await fs.readFile(await (await backupPromise).path(), 'utf8'),
-  );
-  assert.equal(backup.workspace.projects[0].name, 'Atlas');
-  assert.equal(JSON.stringify(backup).includes('password123'), false);
-  await page.getByRole('button', { name: 'Выйти', exact: true }).click();
-  await page
-    .getByRole('dialog')
-    .getByRole('button', { name: 'Выйти', exact: true })
-    .click();
-  await signup('bob');
-  assert.equal(await page.locator('.history-item').count(), 0);
-  await navigate('Файлы');
-  assert.equal(await page.locator('.file-card').count(), 0);
-  await navigate('Профиль');
-  await page.getByLabel('Импорт данных', { exact: true }).setInputFiles({
-    name: 'backup.json',
-    mimeType: 'application/json',
-    buffer: Buffer.from(JSON.stringify(backup)),
-  });
-  await page
-    .getByRole('dialog')
-    .getByRole('button', { name: 'Импорт данных' })
-    .click();
-  await page.locator('dialog').waitFor({ state: 'detached' });
-  assert.equal(await page.locator('.history-item').count(), 2);
-  await navigate('Диалоги');
-  await page.locator('.history-item').first().click();
-  // A late response belongs to the originating chat, even after navigation.
-  mode = 'delay';
-  const previousReplies = await page.locator('.message.assistant').count();
-  await send('Navigation isolation test');
-  await page.getByRole('button', { name: 'Остановить', exact: true }).waitFor();
-  await page
-    .locator('.sidebar')
-    .getByRole('button', { name: 'Новый диалог', exact: true })
-    .click();
-  await page.waitForTimeout(1400);
-  assert.equal(await page.locator('.message.assistant').count(), 0);
-  await page.goBack();
-  await page.waitForFunction(
-    (n) => document.querySelectorAll('.message.assistant').length === n,
-    previousReplies + 1,
-  );
-  mode = 'ok';
-  // Fail only the assistant write, after the user message has committed.
-  await page.evaluate(() => {
-    window.originalPut = IDBObjectStore.prototype.put;
-    IDBObjectStore.prototype.put = function (value, ...rest) {
-      if (
-        this.name === 'workspaces' &&
-        value.data.chats.some(
-          (c) =>
-            c.messages.some((m) => m.text === 'Unsaved answer test') &&
-            c.messages.at(-1)?.role === 'assistant',
-        )
-      )
-        throw new DOMException('full', 'QuotaExceededError');
-      return window.originalPut.call(this, value, ...rest);
-    };
-  });
-  await send('Unsaved answer test');
-  await page.locator('.message.assistant .error').waitFor();
-  await page.evaluate(() => {
-    IDBObjectStore.prototype.put = window.originalPut;
-    delete window.originalPut;
-  });
-  await page
-    .locator('.message.assistant')
-    .last()
-    .getByRole('button', { name: 'Сохранить', exact: true })
-    .click();
-  await page
-    .locator('.message.assistant .error')
-    .waitFor({ state: 'detached' });
-  // Drafts persist before sending, including the first message of a new chat.
-  await page
-    .locator('.sidebar')
-    .getByRole('button', { name: 'Новый диалог', exact: true })
-    .click();
-  await page.locator('#prompt').fill('Unsent draft');
-  await page.waitForTimeout(600);
-  await page.reload();
-  await page.waitForFunction(
-    () => document.querySelector('#prompt')?.value === 'Unsent draft',
-  );
-  const fileChecks = await page.evaluate(async () => {
-    const { readFile } = await import('./morrow-files.js');
-    const { buildContext } = await import('./morrow-ai.js');
-    const { blankWorkspace, newChat, parseImport } = await import(
-      './morrow-store.js'
-    );
-    const failures = [];
-    for (const file of [
-      new File(['x'], 'x.html'),
-      new File(['x'.repeat(262145)], 'x.txt'),
-      new File([new Uint8Array([255])], 'x.txt'),
-    ]) {
-      try {
-        await readFile(file);
-        failures.push(false);
-      } catch {
-        failures.push(true);
-      }
     }
-    const chat = newChat();
-    chat.messages.push({ role: 'user', text: 'x'.repeat(25000), files: [] });
     try {
-      buildContext(chat, null, blankWorkspace().settings);
-      failures.push(false);
-    } catch (e) {
-      failures.push(e.message === 'contextLimit');
-    }
-    for (const value of ['{', 'null']) {
-      try {
-        parseImport(value);
-        failures.push(false);
-      } catch (e) {
-        failures.push(e.message === 'invalidData');
-      }
-    }
-    return failures;
-  });
-  assert.ok(fileChecks.every(Boolean));
-  const validation = await page.evaluate(async () => {
-    const { validateWorkspace, blankWorkspace, WorkspaceStore } = await import(
-      './morrow-store.js'
-    );
-    const result = [];
-    for (const mutation of [
-      (d) => {
-        d.profile.avatar = 'javascript:alert(1)';
-      },
-      (d) => {
-        d.projects = [
-          { id: '__proto__', name: 'x', description: '', instruction: '' },
-        ];
-      },
-      (d) => {
-        d.files = Array(101).fill({});
-      },
-    ]) {
-      const data = blankWorkspace();
-      mutation(data);
-      try {
-        validateWorkspace(data);
-        result.push(false);
-      } catch {
-        result.push(true);
-      }
-    }
-    const id = sessionStorage.getItem('morrow:session:v1');
-    const a = new WorkspaceStore(),
-      b = new WorkspaceStore();
-    await a.load(id);
-    await b.load(id);
-    await a.mutate((d) => {
-      d.profile.name = 'Bob';
-    });
-    try {
-      await b.mutate((d) => {
-        d.profile.name = 'Stale';
-      });
-      result.push(false);
-    } catch (e) {
-      result.push(e.message === 'conflict');
-    }
-    const old = IDBObjectStore.prototype.put;
-    IDBObjectStore.prototype.put = function () {
-      throw new DOMException('full', 'QuotaExceededError');
-    };
-    try {
-      await a.mutate((d) => {
-        d.profile.name = 'Lost';
-      });
-      result.push(false);
-    } catch {
-      result.push(a.data.profile.name === 'Bob');
-    } finally {
-      IDBObjectStore.prototype.put = old;
-    }
-    return result;
-  });
-  assert.ok(validation.every(Boolean), JSON.stringify(validation));
-  await page.reload();
-  await navigate('Настройки');
-  await page.getByLabel('Язык интерфейса').selectOption('en');
-  await page.getByLabel('Appearance').selectOption('dark');
-  await page.waitForFunction(
-    () => document.documentElement.dataset.theme === 'dark',
-  );
-  assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark');
-  for (const width of [320, 360, 390, 720, 768, 1024, 1440]) {
-    await page.setViewportSize({ width, height: 900 });
-    for (const name of ['Chats', 'Projects', 'Files', 'Profile', 'Settings']) {
-      await navigate(name);
-      if (name === 'Chats') {
-        if (width <= 760)
-          await page.getByRole('button', { name: 'Menu', exact: true }).click();
-        await page
-          .locator('.history-item')
-          .filter({ hasText: 'Объясни файл' })
-          .click();
-      }
-      assert.ok(
-        await page.evaluate(
-          () =>
-            document.documentElement.scrollWidth <= innerWidth + 1 &&
-            document.querySelector('main').scrollWidth <=
-              document.querySelector('main').clientWidth + 1,
-        ),
-        `${name} overflow at ${width}`,
+      const file = path.resolve(
+        root,
+        u.pathname === "/" ? "index.html" : "." + u.pathname,
       );
-    }
-  }
-  await page.screenshot({
-    path: path.join(__dirname, '.tmp/morrow-desktop.png'),
-  });
-  await navigate('Chats');
-  await page
-    .locator('.history-item')
-    .filter({ hasText: 'Объясни файл' })
-    .click();
-  await page.screenshot({
-    path: path.join(__dirname, '.tmp/morrow-chat-desktop.png'),
-  });
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({
-    path: path.join(__dirname, '.tmp/morrow-chat-mobile.png'),
-  });
-  await page.setViewportSize({ width: 1440, height: 1000 });
-  await navigate('Settings');
-  await page.getByLabel('Interface language').selectOption('ru');
-  await page.getByLabel('Язык интерфейса').waitFor();
-  await navigate('Диалоги');
-  await page
-    .locator('.history-item')
-    .filter({ hasText: 'Объясни файл' })
-    .click();
-  mode = 'delay';
-  await send('Signout race test');
-  await page.getByRole('button', { name: 'Остановить', exact: true }).waitFor();
-  await navigate('Профиль');
-  await page.getByRole('button', { name: 'Выйти', exact: true }).click();
-  await page
-    .getByRole('dialog')
-    .getByRole('button', { name: 'Выйти', exact: true })
-    .click();
-  await signup('charlie');
-  await page.waitForTimeout(1400);
-  assert.equal(await page.locator('.message.assistant').count(), 0);
-  assert.equal(await page.locator('.history-item').count(), 0);
-  await navigate('Профиль');
-  await page
-    .getByRole('button', { name: 'Удалить аккаунт', exact: true })
-    .click();
-  await page
-    .getByRole('dialog')
-    .getByLabel('Удалить аккаунт', { exact: true })
-    .fill('charlie');
-  await page
-    .getByRole('dialog')
-    .getByRole('button', { name: 'Сохранить', exact: true })
-    .click();
-  await page.locator('dialog').waitFor({ state: 'detached' });
-  await page
-    .locator('.rail-bottom')
-    .getByRole('button', { name: 'Войти', exact: true })
-    .click();
-  await page.locator('dialog input[name=login]').fill('alice');
-  await page.locator('dialog input[name=password]').fill('wrongpass123');
-  await page
-    .getByRole('dialog')
-    .getByRole('button', { name: 'Войти', exact: true })
-    .click();
-  await page
-    .getByRole('dialog')
-    .getByText('Неверный логин или пароль.')
-    .waitFor();
-  await page.locator('dialog input[name=password]').fill('password123');
-  await page
-    .getByRole('dialog')
-    .getByRole('button', { name: 'Войти', exact: true })
-    .click();
-  await page.locator('dialog').waitFor({ state: 'detached' });
-  assert.equal(await page.locator('.history-item').count(), 2);
-  const deleted = await page.evaluate(async () =>
-    (await import('./morrow-db.js')).findAccount('charlie'),
-  );
-  assert.equal(deleted, undefined);
-  // Accelerate only the provider deadline, leaving browser and test clocks intact.
-  const timeoutResult = await page.evaluate(async () => {
-    const { generate } = await import('./morrow-ai.js');
-    const original = window.setTimeout;
-    window.setTimeout = (fn, delay, ...args) =>
-      original(fn, delay === 60000 ? 15 : delay, ...args);
-    try {
-      await generate({
-        prompt: 'Timeout test',
-        signal: new AbortController().signal,
+      if (!file.startsWith(root + path.sep)) throw Error();
+      await route.fulfill({
+        contentType: file.endsWith(".js")
+          ? "text/javascript"
+          : file.endsWith(".css")
+            ? "text/css"
+            : file.endsWith(".svg")
+              ? "image/svg+xml"
+              : "text/html",
+        body: await fs.readFile(file),
+        headers: { "Content-Security-Policy": policy },
       });
-      return 'unexpected';
+    } catch {
+      await route.fulfill({ status: 404, body: "Missing" });
+    }
+  };
+  await context.route("**/*", routeHandler);
+  const page = await context.newPage();
+  page.on("pageerror", (e) => {
+    errors.push(e.message);
+    console.error("PAGE", e.message);
+  });
+  await page.addInitScript(() =>
+    document.addEventListener("securitypolicyviolation", (e) =>
+      console.error("CSP:" + e.violatedDirective),
+    ),
+  );
+  page.on("console", (m) => {
+    if (m.text().startsWith("CSP:")) csp.push(m.text());
+  });
+  const wait = () => page.waitForTimeout(150);
+  const open = async (hash) => {
+    await page.goto(origin + "/" + hash);
+    await wait();
+  };
+  const state = () =>
+    page.evaluate(async () => {
+      const { restoreSession } = await import("/morrow-auth.js");
+      const { read } = await import("/morrow-db.js");
+      const a = await restoreSession();
+      return a ? (await read("videos", a.id))?.data : null;
+    });
+  async function register(name) {
+    await page.locator(".login-button").click();
+    await page.locator("dialog .text-button").click();
+    await page.locator("dialog input[autocomplete=username]").fill(name);
+    await page.locator("dialog input[type=password]").fill("pass12345");
+    await page.locator("dialog button[type=submit]").click();
+    await page.waitForSelector("dialog.auth-dialog", { state: "detached" });
+  }
+  await open("#/feed");
+  await page.waitForSelector("video");
+  await page.waitForFunction(() =>
+    [...document.querySelectorAll("video")].some((v) => v.currentTime > 0),
+  );
+  assert.ok((await page.locator("video").count()) <= 3);
+  await register("morrow_one");
+  await page
+    .locator(".video-slide")
+    .first()
+    .getByRole("button", { name: "Нравится", exact: true })
+    .click();
+  await page.waitForFunction(async () => {
+    const { read } = await import("/morrow-db.js"),
+      { restoreSession } = await import("/morrow-auth.js");
+    return (
+      (await read("videos", (await restoreSession()).id))?.data.likes.length ===
+      1
+    );
+  });
+  await page
+    .locator(".video-slide")
+    .first()
+    .getByRole("button", { name: "Сохранить", exact: true })
+    .click();
+  await wait();
+  assert.equal((await state()).saved.length, 1);
+  await page
+    .locator(".video-slide")
+    .first()
+    .getByRole("button", { name: "Комментарии", exact: true })
+    .click();
+  await page.waitForSelector(".comment");
+  assert.equal(await page.locator(".comment-text img").count(), 0);
+  await page
+    .locator(".comment")
+    .first()
+    .getByRole("button", { name: "Ответить", exact: true })
+    .click();
+  await page
+    .locator(".comment-form textarea")
+    .fill("Мой ответ на публичный комментарий");
+  await page.getByRole("button", { name: "Отправить", exact: true }).click();
+  await page.waitForFunction(
+    () => document.querySelectorAll(".comment").length === 2,
+  );
+  await page
+    .locator(".comment")
+    .last()
+    .getByRole("button", { name: "Ответить", exact: true })
+    .click();
+  await page.locator(".comment-form textarea").fill("Вложенный ответ");
+  await page.getByRole("button", { name: "Отправить", exact: true }).click();
+  await page.waitForFunction(
+    () => document.querySelectorAll(".comment").length === 3,
+  );
+  assert.ok((await state()).comments[1].parentId.startsWith("local:"));
+  await page
+    .locator(".comment")
+    .nth(1)
+    .getByRole("button", { name: "Редактировать", exact: true })
+    .click();
+  await page.locator(".comment-form textarea").fill("Исправленный ответ");
+  await page.getByRole("button", { name: "Отправить", exact: true }).click();
+  await wait();
+  assert.equal((await state()).comments[0].text, "Исправленный ответ");
+  await page
+    .locator(".comments-panel")
+    .screenshot({ path: "tests/.tmp/morrow-comments.png" });
+  // Removing a parent preserves its reply; explicit thread removal clears descendants.
+  await page
+    .locator(".comment")
+    .nth(1)
+    .getByRole("button", { name: "Удалить", exact: true })
+    .click();
+  await page
+    .locator("dialog")
+    .last()
+    .getByRole("button", { name: "Удалить", exact: true })
+    .click();
+  await wait();
+  assert.equal((await state()).comments[0].deleted, true);
+  assert.equal((await state()).comments.length, 2);
+  await page
+    .getByRole("button", { name: "Удалить ветку", exact: true })
+    .click();
+  await page
+    .locator("dialog")
+    .last()
+    .getByRole("button", { name: "Удалить", exact: true })
+    .click();
+  await wait();
+  assert.equal((await state()).comments.length, 0);
+  await page.locator(".comments-panel>header button").click();
+  await open("#/profile");
+  assert.ok((await page.locator(".video-tile").count()) > 0);
+  await page
+    .getByRole("button", { name: "Редактировать профиль", exact: true })
+    .click();
+  await page.getByLabel("Имя", { exact: true }).fill("Мой профиль");
+  await page.getByLabel("О себе").fill("Текст <script>alert(1)</script>");
+  await page.locator("dialog button[type=submit]").click();
+  await page.waitForSelector("dialog", { state: "detached" });
+  assert.equal((await state()).profile.name, "Мой профиль");
+  await open("#/settings");
+  await page.getByRole("button", { name: "Выйти", exact: true }).click();
+  await page
+    .locator("dialog")
+    .getByRole("button", { name: "Выйти", exact: true })
+    .click();
+  await page.waitForSelector(".login-button");
+  await register("morrow_two");
+  assert.equal((await state()).likes.length, 0);
+  assert.equal((await state()).comments.length, 0);
+  // Revision conflict must reject the stale writer, never overwrite committed data.
+  const conflict = await page.evaluate(async () => {
+    const { ProfileStore } = await import("/morrow-store.js");
+    const { restoreSession } = await import("/morrow-auth.js");
+    const a = await restoreSession(),
+      one = await new ProfileStore(a).load(),
+      two = await new ProfileStore(a).load();
+    await one.change((d) => (d.profile.about = "winner"));
+    try {
+      await two.change((d) => (d.profile.about = "lost"));
+      return "missed";
     } catch (e) {
       return e.message;
-    } finally {
-      window.setTimeout = original;
     }
   });
-  assert.equal(timeoutResult, 'timeout');
-  assert.deepEqual(errors, []);
-  assert.deepEqual(await page.evaluate(() => window.cspErrors), []);
-  console.log(
-    'Morrow browser: account isolation, chats, context, files, projects, import/export, cancellation, failures, storage, XSS, i18n, themes, responsive: PASS',
+  assert.equal(conflict, "conflict");
+  await page.reload();
+  await page.waitForSelector("video");
+  // Untrusted imports and provider fields cannot create executable URLs or cycles.
+  const rejected = await page.evaluate(async () => {
+    const { blankProfile, validateProfile } = await import("/morrow-store.js");
+    const { video, safeURL } = await import("/morrow-yappy.js");
+    const d = blankProfile();
+    d.profile.avatar = "data:image/svg+xml;base64,AAAA";
+    let ok = false;
+    try {
+      validateProfile(d);
+    } catch {
+      ok = true;
+    }
+    return (
+      ok &&
+      safeURL("https://vb-rtb.uma.media.evil.test/x", true) === "" &&
+      safeURL("https://user:pass@vb-rtb.uma.media/x", true) === "" &&
+      video({ uuid: "__proto__" }) === null
+    );
+  });
+  assert.ok(rejected);
+  // Both languages, all major screens, narrow layouts and dialogs.
+  for (const lang of ["ru", "en"]) {
+    await page.evaluate(async (l) => {
+      const { setLanguage } = await import("/morrow-i18n.js");
+      setLanguage(l);
+    }, lang);
+    for (const width of [320, 390, 768, 1440]) {
+      await page.setViewportSize({ width, height: width < 500 ? 844 : 1000 });
+      for (const screen of [
+        "feed",
+        "explore",
+        "profile",
+        "settings",
+        "author/yappy/" + id(900),
+      ]) {
+        await open("#/" + screen);
+        await page.waitForTimeout(180);
+        const over = await page.evaluate(
+          () =>
+            document.documentElement.scrollWidth > innerWidth ||
+            document.querySelector("main").scrollWidth >
+              document.querySelector("main").clientWidth + 1,
+        );
+        assert.equal(over, false, `${lang} ${width} ${screen}`);
+        if (screen === "feed") {
+          assert.ok((await page.locator("video").count()) <= 3);
+          if (lang === "ru" && (width === 390 || width === 1440))
+            await page.screenshot({
+              path: `tests/.tmp/morrow-video-${width}.png`,
+            });
+        }
+      }
+    }
+  }
+  await open("#/feed");
+  networkFail = true;
+  await page.reload();
+  await page.waitForSelector("video");
+  assert.ok((await page.locator("video").count()) > 0);
+  networkFail = false;
+  // In-app navigation restores the current slide without recreating the feed at zero.
+  await page.locator(".feed").focus();
+  await page.keyboard.press("ArrowDown");
+  await page.waitForTimeout(700);
+  const before = await page.locator(".feed").evaluate((e) => e.scrollTop);
+  await page.locator('a[href="#/profile"]').first().click();
+  await page.locator('a[href="#/feed"]').first().click();
+  await page.waitForTimeout(300);
+  const after = await page.locator(".feed").evaluate((e) => e.scrollTop);
+  assert.ok(Math.abs(after - before) < 3);
+  // Rejected writes preserve the committed reaction state.
+  const prior = (await state()).likes.length;
+  await page.evaluate(() => {
+    window.originalTransaction = IDBDatabase.prototype.transaction;
+    IDBDatabase.prototype.transaction = function (stores, mode, ...args) {
+      if (mode === "readwrite")
+        throw new DOMException("Full", "QuotaExceededError");
+      return window.originalTransaction.call(this, stores, mode, ...args);
+    };
+  });
+  await page
+    .locator(".video-slide .action-button")
+    .filter({ has: page.locator("svg") })
+    .first()
+    .click();
+  await wait();
+  assert.equal((await state()).likes.length, prior);
+  await page.evaluate(() => {
+    IDBDatabase.prototype.transaction = window.originalTransaction;
+  });
+  // Upgrade a real v1 IndexedDB: preserve credentials and old AI data, add video data.
+  const legacyContext = await browser.newContext({ locale: "ru-RU" });
+  await legacyContext.route("**/*", routeHandler);
+  const legacyPage = await legacyContext.newPage();
+  await legacyPage.route(origin + "/", (r) =>
+    r.fulfill({
+      contentType: "text/html",
+      body: "<!doctype html><title>Migration seed</title>",
+    }),
   );
-})()
-  .catch(async (error) => {
-    console.error(error);
-    const page = browser?.contexts()[0]?.pages()[0];
-    if (page) {
-      console.error('Notice:', await page.locator('#notice').textContent());
-      await page.screenshot({
-        path: path.join(__dirname, '.tmp/morrow-failure.png'),
-      });
-    }
-    process.exitCode = 1;
-  })
-  .finally(async () => {
-    await browser?.close();
+  await legacyPage.goto(origin + "/");
+  await legacyPage.evaluate(async () => {
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const key = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode("pass12345"),
+      "PBKDF2",
+      false,
+      ["deriveBits"],
+    );
+    const hash = new Uint8Array(
+      await crypto.subtle.deriveBits(
+        { name: "PBKDF2", salt, iterations: 210000, hash: "SHA-256" },
+        key,
+        256,
+      ),
+    );
+    const encode = (b) => btoa(String.fromCharCode(...b));
+    await new Promise((resolve, reject) => {
+      const req = indexedDB.open("morrow:workspace:v1", 1);
+      req.onupgradeneeded = () => {
+        req.result
+          .createObjectStore("accounts", { keyPath: "id" })
+          .createIndex("login", "login", { unique: true });
+        req.result.createObjectStore("workspaces", { keyPath: "id" });
+      };
+      req.onerror = reject;
+      req.onsuccess = () => {
+        const db = req.result,
+          tx = db.transaction(["accounts", "workspaces"], "readwrite");
+        tx.objectStore("accounts").add({
+          id: "legacy-user",
+          login: "legacy",
+          salt: encode(salt),
+          hash: encode(hash),
+        });
+        tx.objectStore("workspaces").add({
+          id: "legacy-user",
+          revision: 7,
+          data: {
+            version: 1,
+            profile: { name: "Старый профиль", avatar: "" },
+            chats: [{ text: "Сохранённая переписка" }],
+          },
+        });
+        tx.oncomplete = () => {
+          db.close();
+          resolve();
+        };
+      };
+    });
   });
+  await legacyPage.unroute(origin + "/");
+  await legacyPage.goto(origin + "/?app=1#/profile");
+  await legacyPage.locator(".login-button").click();
+  await legacyPage
+    .locator("dialog input[autocomplete=username]")
+    .fill("legacy");
+  await legacyPage.locator("dialog input[type=password]").fill("pass12345");
+  await legacyPage.locator("dialog button[type=submit]").click();
+  await legacyPage.waitForSelector(".profile-header");
+  assert.equal(
+    await legacyPage.locator(".profile-header h1").textContent(),
+    "Старый профиль",
+  );
+  const archive = await legacyPage.evaluate(async () => {
+    const { read } = await import("/morrow-db.js");
+    return read("workspaces", "legacy-user");
+  });
+  assert.equal(archive.revision, 7);
+  assert.equal(archive.data.chats[0].text, "Сохранённая переписка");
+  await legacyPage.evaluate(async () => {
+    const { ProfileStore } = await import("/morrow-store.js");
+    const { restoreSession } = await import("/morrow-auth.js");
+    const p = await new ProfileStore(await restoreSession()).load();
+    await p.change((d) => (d.profile.about = "Новый профиль"));
+  });
+  await legacyPage.reload();
+  await legacyPage.waitForSelector(".profile-header");
+  assert.ok(
+    (await legacyPage.locator(".profile-header").textContent()).includes(
+      "Новый профиль",
+    ),
+  );
+  await legacyContext.close();
+  assert.deepEqual(errors, []);
+  assert.deepEqual(csp, []);
+  assert.deepEqual(writes, []);
+  console.log(
+    "Morrow browser checks passed: playback, accounts, replies, persistence, conflict, XSS, RU/EN and 320–1440 px.",
+  );
+  await browser.close();
+})().catch(async (e) => {
+  console.error(e);
+  if (browser) {
+    const pages = browser.contexts().flatMap((c) => c.pages());
+    await pages
+      .at(-1)
+      ?.screenshot({ path: "tests/.tmp/morrow-failure.png" })
+      .catch(() => {});
+    await browser.close();
+  }
+  process.exit(1);
+});

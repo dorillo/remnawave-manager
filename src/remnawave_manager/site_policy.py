@@ -10,10 +10,13 @@ ASTER_NODE_CSP = LEGACY_NODE_CSP.replace(
     "connect-src 'self' https://mastodon.social;",
     "connect-src 'self' https://mastodon.social https://rutube.ru; frame-src https://rutube.ru;",
 )
-NODE_CSP = ASTER_NODE_CSP.replace(
+MORROW_AI_NODE_CSP = ASTER_NODE_CSP.replace(
     "https://mastodon.social https://rutube.ru;",
     "https://mastodon.social https://rutube.ru https://prexzyapis.com;",
 )
+
+# Video traffic uses media-src; API calls use a fixed same-origin nginx route.
+NODE_CSP = ASTER_NODE_CSP
 
 ASTER_SEARCH_PROXY = """    location = /_aster/rutube-search {
         limit_except GET { deny all; }
@@ -30,21 +33,162 @@ ASTER_SEARCH_PROXY = """    location = /_aster/rutube-search {
     }"""
 
 
-def upgrade_aster_policy(text: str) -> str:
-    """Add the exact Aster policy and search route to manager-generated configs."""
-    old = f'add_header Content-Security-Policy "{LEGACY_NODE_CSP}" always;'
+def _upgrade_known_policy(text: str) -> str:
     new = f'add_header Content-Security-Policy "{NODE_CSP}" always;'
-    upgraded = text.replace(old, new).replace(
-        f'add_header Content-Security-Policy "{ASTER_NODE_CSP}" always;', new
-    )
+    for policy in (LEGACY_NODE_CSP, ASTER_NODE_CSP, MORROW_AI_NODE_CSP):
+        text = text.replace(f'add_header Content-Security-Policy "{policy}" always;', new)
+    return text
+
+
+def upgrade_aster_policy(text: str) -> str:
+    """Upgrade known policies and preserve already installed Morrow routes."""
+    upgraded = _upgrade_known_policy(text)
+    new = f'add_header Content-Security-Policy "{NODE_CSP}" always;'
     if ASTER_SEARCH_PROXY in upgraded or new not in upgraded:
         return upgraded
     return upgraded.replace(new, f"{new}\n\n{ASTER_SEARCH_PROXY}")
 
 
 def upgrade_morrow_policy(text: str) -> str:
-    """Upgrade exact manager-generated policies without adding proxy routes."""
+    """Add only the fixed, anonymous Yappy read routes to known configurations."""
+    upgraded = _upgrade_known_policy(text)
     new = f'add_header Content-Security-Policy "{NODE_CSP}" always;'
-    for policy in (LEGACY_NODE_CSP, ASTER_NODE_CSP):
-        text = text.replace(f'add_header Content-Security-Policy "{policy}" always;', new)
-    return text
+    if MORROW_YAPPY_PROXY in upgraded or new not in upgraded:
+        return upgraded
+    return upgraded.replace(new, f"{new}\n\n{MORROW_YAPPY_PROXY}")
+
+
+MORROW_YAPPY_PROXY = r"""    location = /_morrow/yappy/feed {
+        if ($request_method != GET) { return 405; }
+        if ($args !~ "^page=[1-9][0-9]{0,3}$") { return 400; }
+        set $args "page=$arg_page&fingerprint=";
+        rewrite ^ /api/feed break;
+        proxy_pass https://yappy.media;
+        proxy_ssl_server_name on;
+        proxy_ssl_name yappy.media;
+        proxy_ssl_verify on;
+        proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+        proxy_ssl_verify_depth 4;
+        proxy_pass_request_headers off;
+        proxy_pass_request_body off;
+        proxy_set_header Host yappy.media;
+        proxy_set_header Accept application/json;
+        proxy_set_header User-Agent "Mozilla/5.0 (compatible; MorrowVideo/1.0)";
+        proxy_set_header Content-Length "";
+        proxy_hide_header Set-Cookie;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 15s;
+        proxy_send_timeout 5s;
+    }
+
+    location = /_morrow/yappy/search {
+        if ($request_method != GET) { return 405; }
+        if ($args !~ "^query=[A-Za-z0-9_.!~*%'()-]{1,1080}&page=[1-9][0-9]{0,3}$") { return 400; }
+        rewrite ^ /api/search/video break;
+        proxy_pass https://yappy.media;
+        proxy_ssl_server_name on;
+        proxy_ssl_name yappy.media;
+        proxy_ssl_verify on;
+        proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+        proxy_ssl_verify_depth 4;
+        proxy_pass_request_headers off;
+        proxy_pass_request_body off;
+        proxy_set_header Host yappy.media;
+        proxy_set_header Accept application/json;
+        proxy_set_header User-Agent "Mozilla/5.0 (compatible; MorrowVideo/1.0)";
+        proxy_set_header Content-Length "";
+        proxy_hide_header Set-Cookie;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 15s;
+        proxy_send_timeout 5s;
+    }
+
+    location ~ "^/_morrow/yappy/video/(?<morrow_id>[a-f0-9]{32})$" {
+        if ($request_method != GET) { return 405; }
+        if ($args !~ "^$") { return 400; }
+        rewrite ^ /api/video/$morrow_id break;
+        proxy_pass https://yappy.media;
+        proxy_ssl_server_name on;
+        proxy_ssl_name yappy.media;
+        proxy_ssl_verify on;
+        proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+        proxy_ssl_verify_depth 4;
+        proxy_pass_request_headers off;
+        proxy_pass_request_body off;
+        proxy_set_header Host yappy.media;
+        proxy_set_header Accept application/json;
+        proxy_set_header User-Agent "Mozilla/5.0 (compatible; MorrowVideo/1.0)";
+        proxy_set_header Content-Length "";
+        proxy_hide_header Set-Cookie;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 15s;
+        proxy_send_timeout 5s;
+    }
+
+    location ~ "^/_morrow/yappy/comments/(?<morrow_id>[a-f0-9]{32})$" {
+        if ($request_method != GET) { return 405; }
+        if ($args !~ "^page=[1-9][0-9]{0,3}$") { return 400; }
+        rewrite ^ /api/video/comments/$morrow_id break;
+        proxy_pass https://yappy.media;
+        proxy_ssl_server_name on;
+        proxy_ssl_name yappy.media;
+        proxy_ssl_verify on;
+        proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+        proxy_ssl_verify_depth 4;
+        proxy_pass_request_headers off;
+        proxy_pass_request_body off;
+        proxy_set_header Host yappy.media;
+        proxy_set_header Accept application/json;
+        proxy_set_header User-Agent "Mozilla/5.0 (compatible; MorrowVideo/1.0)";
+        proxy_set_header Content-Length "";
+        proxy_hide_header Set-Cookie;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 15s;
+        proxy_send_timeout 5s;
+    }
+
+    location ~ "^/_morrow/yappy/author/(?<morrow_id>[a-f0-9]{32})$" {
+        if ($request_method != GET) { return 405; }
+        if ($args !~ "^$") { return 400; }
+        rewrite ^ /api/profile/uid/$morrow_id break;
+        proxy_pass https://yappy.media;
+        proxy_ssl_server_name on;
+        proxy_ssl_name yappy.media;
+        proxy_ssl_verify on;
+        proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+        proxy_ssl_verify_depth 4;
+        proxy_pass_request_headers off;
+        proxy_pass_request_body off;
+        proxy_set_header Host yappy.media;
+        proxy_set_header Accept application/json;
+        proxy_set_header User-Agent "Mozilla/5.0 (compatible; MorrowVideo/1.0)";
+        proxy_set_header Content-Length "";
+        proxy_hide_header Set-Cookie;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 15s;
+        proxy_send_timeout 5s;
+    }
+
+    location ~ "^/_morrow/yappy/author-videos/(?<morrow_id>[a-f0-9]{32})$" {
+        if ($request_method != GET) { return 405; }
+        if ($args !~ "^(?:created=[0-9A-Fa-fT:.Z%+-]{1,100})?$") { return 400; }
+        rewrite ^ /api/video/list/$morrow_id break;
+        proxy_pass https://yappy.media;
+        proxy_ssl_server_name on;
+        proxy_ssl_name yappy.media;
+        proxy_ssl_verify on;
+        proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+        proxy_ssl_verify_depth 4;
+        proxy_pass_request_headers off;
+        proxy_pass_request_body off;
+        proxy_set_header Host yappy.media;
+        proxy_set_header Accept application/json;
+        proxy_set_header User-Agent "Mozilla/5.0 (compatible; MorrowVideo/1.0)";
+        proxy_set_header Content-Length "";
+        proxy_hide_header Set-Cookie;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 15s;
+        proxy_send_timeout 5s;
+    }
+
+    location /_morrow/ { return 404; }"""

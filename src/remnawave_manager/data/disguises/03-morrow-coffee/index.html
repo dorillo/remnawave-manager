@@ -2,23 +2,31 @@
 <html lang="ru">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <meta name="robots" content="noindex,nofollow,noarchive" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
     <meta name="referrer" content="no-referrer" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; connect-src 'self' https://prexzyapis.com; object-src 'none'; base-uri 'none'; form-action 'self'"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data: blob: https://cdn-st.rutubelist.ru https://cdn-st.yappy.media https://pic.rtbcdn.ru; media-src https://vb-rtb.uma.media https://*.rtbcdn.ru https://*.rutube.ru; object-src 'none'; base-uri 'none'; form-action 'self'; frame-src 'none'"
     />
-    <title>Морроу AI</title>
+    <meta name="theme-color" content="#121416" />
+    <meta
+      name="description"
+      content="Морроу — короткие видео, интересные авторы и ваши любимые моменты."
+    />
+    <title>Морроу — короткие видео</title>
+    <link rel="icon" href="favicon.svg" />
     <link rel="stylesheet" href="styles.css" />
     <script type="module" src="app.js"></script>
   </head>
-  <body>
-    <div id="app" data-app="morrow"></div>
+  <body data-app="morrow">
+    <div id="app"></div>
     <div id="notice" role="status" hidden></div>
     <noscript
-      >Включите JavaScript для работы Морроу. Enable JavaScript to use
-      Morrow.</noscript
+      >Для просмотра видео включите JavaScript. Enable JavaScript to watch
+      videos.</noscript
     >
   </body>
 </html>

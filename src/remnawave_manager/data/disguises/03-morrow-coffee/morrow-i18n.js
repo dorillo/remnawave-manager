@@ -1,220 +1,239 @@
-const words = {
-  brand: ['Морроу', 'Morrow'],
-  chats: ['Диалоги', 'Chats'],
-  projects: ['Проекты', 'Projects'],
-  files: ['Файлы', 'Files'],
-  settings: ['Настройки', 'Settings'],
-  profile: ['Профиль', 'Profile'],
-  newChat: ['Новый диалог', 'New chat'],
-  search: ['Поиск диалогов', 'Search chats'],
-  guest: ['Гость', 'Guest'],
-  login: ['Войти', 'Sign in'],
-  register: ['Создать аккаунт', 'Create account'],
-  logout: ['Выйти', 'Sign out'],
-  welcome: ['С чего начнём?', 'Where shall we begin?'],
-  intro: [
-    'Место для мыслей, вопросов и новых идей.',
-    'A space for thoughts, questions and new ideas.',
+const dictionary = {
+  refreshFeed: ["Обновить ленту", "Refresh feed"],
+  deleteThread: ["Удалить ветку", "Delete thread"],
+  deleteThreadText: [
+    "Удалить комментарий и все ваши ответы в этой ветке?",
+    "Delete this comment and all your replies in this thread?",
   ],
-  starter1: [
-    'Объясни сложную тему простыми словами',
-    'Explain a complex topic simply',
+  brand: ["Морроу", "Morrow"],
+  tagline: ["Мир в движении", "A world in motion"],
+  forYou: ["Для вас", "For you"],
+  following: ["Подписки", "Following"],
+  explore: ["Обзор", "Explore"],
+  search: ["Поиск", "Search"],
+  searchPlaceholder: [
+    "Видео, авторы, настроение",
+    "Videos, creators, a little inspiration",
   ],
-  starter2: ['Помоги улучшить мой текст', 'Help me improve my writing'],
-  starter3: ['Предложи план проекта', 'Suggest a project plan'],
-  prompt: ['Сообщение Морроу', 'Message Morrow'],
-  send: ['Отправить', 'Send'],
-  stop: ['Остановить', 'Stop'],
-  thinking: ['Морроу готовит ответ…', 'Morrow is preparing a reply…'],
-  disclosure: [
-    'Сообщение, контекст диалога и выбранные файлы отправляются Prexzy. Ответы могут содержать ошибки.',
-    'Your message, conversation context and selected files are sent to Prexzy. Answers may contain errors.',
+  profile: ["Профиль", "Profile"],
+  settings: ["Настройки", "Settings"],
+  login: ["Войти", "Log in"],
+  register: ["Создать аккаунт", "Create account"],
+  logout: ["Выйти", "Log out"],
+  logoutText: ["Выйти из этого аккаунта?", "Log out of this account?"],
+  username: ["Логин", "Username"],
+  password: ["Пароль", "Password"],
+  accountIntro: [
+    "Сохраняйте любимое. Присоединяйтесь к обсуждениям.",
+    "Keep your favourites. Join the conversation.",
   ],
-  guestHint: [
-    'Войдите, чтобы сохранять диалоги и проекты.',
-    'Sign in to save chats and projects.',
+  localInfo: [
+    "Аккаунт и ваши действия сохраняются в этом браузере. Они не отправляются в Yappy и не синхронизируются между устройствами. Очистка данных сайта удалит их.",
+    "Your account and activity stay in this browser. They are not sent to Yappy or synced between devices. Clearing site data removes them.",
   ],
-  empty: ['Здесь пока ничего нет', 'Nothing here yet'],
-  rename: ['Переименовать', 'Rename'],
-  pin: ['Закрепить', 'Pin'],
-  unpin: ['Открепить', 'Unpin'],
-  delete: ['Удалить', 'Delete'],
-  cancel: ['Отмена', 'Cancel'],
-  save: ['Сохранить', 'Save'],
-  close: ['Закрыть', 'Close'],
-  copy: ['Копировать', 'Copy'],
-  copied: ['Скопировано', 'Copied'],
-  copyFailed: [
-    'Не удалось скопировать. Выделите текст вручную.',
-    'Could not copy. Select the text manually.',
+  dataProfile: ["Данные профиля", "Profile data"],
+  close: ["Закрыть", "Close"],
+  cancel: ["Отмена", "Cancel"],
+  save: ["Сохранить", "Save"],
+  saved: ["Сохранённое", "Saved"],
+  likes: ["Понравившиеся", "Liked"],
+  like: ["Нравится", "Like"],
+  unlike: ["Убрать лайк", "Unlike"],
+  unsave: ["Убрать из сохранённого", "Unsave"],
+  comments: ["Комментарии", "Comments"],
+  myComments: ["Мои комментарии", "My comments"],
+  history: ["История", "History"],
+  follow: ["Подписаться", "Follow"],
+  unfollow: ["Отписаться", "Unfollow"],
+  followers: ["подписчиков", "followers"],
+  editProfile: ["Редактировать профиль", "Edit profile"],
+  name: ["Имя", "Name"],
+  about: ["О себе", "Bio"],
+  avatar: ["Фото профиля", "Profile photo"],
+  reply: ["Ответить", "Reply"],
+  replying: ["Ответ для", "Replying to"],
+  edit: ["Редактировать", "Edit"],
+  delete: ["Удалить", "Delete"],
+  deleteText: [
+    "Удалить этот комментарий? Ответы останутся в обсуждении.",
+    "Delete this comment? Replies will remain in the conversation.",
   ],
-  edit: ['Изменить запрос', 'Edit prompt'],
-  retry: ['Повторить ответ', 'Retry reply'],
-  editWarning: [
-    'Ответ и последующие сообщения будут заменены.',
-    'The reply and subsequent messages will be replaced.',
+  deleted: ["Комментарий удалён", "Comment deleted"],
+  send: ["Отправить", "Post"],
+  commentPlaceholder: ["Добавить комментарий…", "Add a comment…"],
+  moreComments: ["Ещё комментарии", "More comments"],
+  more: ["Загрузить ещё", "Load more"],
+  empty: ["Здесь пока ничего нет", "Nothing here yet"],
+  emptyHint: [
+    "Найдите то, что вам по душе, в ленте «Для вас».",
+    "Find something you love in your For you feed.",
   ],
-  exportChat: ['Экспорт диалога', 'Export chat'],
-  exportData: ['Экспорт данных', 'Export data'],
-  importData: ['Импорт данных', 'Import data'],
-  importWarning: [
-    'Импорт заменит ваши диалоги, проекты, файлы и настройки. Сначала сохраните экспорт.',
-    'Import replaces your chats, projects, files and settings. Save an export first.',
-  ],
-  importDone: ['Данные импортированы', 'Data imported'],
-  name: ['Название', 'Name'],
-  displayName: ['Имя', 'Display name'],
-  description: ['Описание', 'Description'],
-  instruction: ['Инструкция для AI', 'AI instructions'],
-  newProject: ['Новый проект', 'New project'],
-  editProject: ['Изменить проект', 'Edit project'],
-  project: ['Проект', 'Project'],
-  noProject: ['Без проекта', 'No project'],
-  openProject: ['Открыть проект', 'Open project'],
-  deleteProjectWarning: [
-    'Удалить проект? Его диалоги и файлы сохранятся без проекта.',
-    'Delete this project? Its chats and files will remain without a project.',
-  ],
-  deleteWarning: [
-    'Удалить без возможности восстановления?',
-    'Delete permanently?',
-  ],
-  upload: ['Загрузить файлы', 'Upload files'],
-  fileHint: [
-    'TXT, Markdown, CSV · UTF-8 · до 256 КБ каждый',
-    'TXT, Markdown, CSV · UTF-8 · up to 256 KB each',
-  ],
-  attach: ['Выбрать файлы', 'Select files'],
-  selected: ['Выбранные файлы', 'Selected files'],
-  preview: ['Просмотр', 'Preview'],
-  download: ['Скачать', 'Download'],
-  fileContext: [
-    'Текст выбранных файлов войдёт в следующий запрос. Общий контекст ограничен 24 000 символов.',
-    'Selected files are included in the next request. Total context is limited to 24,000 characters.',
-  ],
-  language: ['Язык интерфейса', 'Interface language'],
-  answerLanguage: ['Язык ответов', 'Answer language'],
-  auto: ['Как в запросе', 'Match the prompt'],
-  theme: ['Оформление', 'Appearance'],
-  system: ['Системное', 'System'],
-  light: ['Светлое', 'Light'],
-  dark: ['Тёмное', 'Dark'],
-  style: ['Стиль ответа', 'Response style'],
-  balanced: ['Сбалансированно', 'Balanced'],
-  brief: ['Кратко', 'Brief'],
-  detailed: ['Подробно', 'Detailed'],
-  provider: ['Провайдер', 'Provider'],
-  loginName: ['Логин', 'Username'],
-  password: ['Пароль', 'Password'],
-  loginHint: [
-    '3–40 символов: латинские буквы, цифры, _, . или -',
-    '3–40 characters: Latin letters, digits, _, . or -',
-  ],
-  passwordHint: ['От 8 до 128 символов', '8 to 128 characters'],
-  avatar: ['Изменить фото', 'Change photo'],
-  removeAvatar: ['Убрать фото', 'Remove photo'],
-  deleteAccount: ['Удалить аккаунт', 'Delete account'],
-  deleteAccountWarning: [
-    'Аккаунт и все его данные будут удалены. Для подтверждения введите свой логин.',
-    'Your account and all its data will be deleted. Enter your username to confirm.',
-  ],
-  backupHint: [
-    'Экспорт сохраняет переписку и файлы. Храните резервную копию в надёжном месте. Очистка данных сайта удалит сохранённые материалы.',
-    'Export includes conversations and files. Keep a backup in a safe place. Clearing site data removes saved materials.',
-  ],
-  storageUsage: ['Использовано', 'Used'],
-  saved: ['Сохранено', 'Saved'],
-  menu: ['Меню', 'Menu'],
-  back: ['Назад', 'Back'],
-  you: ['Вы', 'You'],
-  storage: [
-    'Не удалось прочитать или сохранить данные. Проверьте доступ к хранилищу браузера.',
-    'Could not read or save data. Check browser storage access.',
-  ],
-  storageFull: [
-    'Лимит хранилища — 16 МБ на профиль. Экспортируйте и удалите ненужные материалы.',
-    'Storage limit is 16 MB per profile. Export and remove unused materials.',
-  ],
-  invalidData: [
-    'Некорректные данные или превышен лимит записей.',
-    'Invalid data or record limit exceeded.',
-  ],
-  conflict: [
-    'Данные изменены в другой вкладке. Перезагрузите страницу перед продолжением.',
-    'Data changed in another tab. Reload before continuing.',
-  ],
-  sessionExpired: [
-    'Сессия завершена. Войдите снова.',
-    'Session ended. Sign in again.',
-  ],
-  invalidLogin: [
-    'Некорректный логин. Используйте 3–40 латинских букв, цифр, _, . или -.',
-    'Invalid username. Use 3–40 Latin letters, digits, _, . or -.',
-  ],
-  invalidPassword: [
-    'Пароль должен содержать от 8 до 128 символов.',
-    'Password must contain 8 to 128 characters.',
-  ],
-  credentials: [
-    'Неверный логин или пароль.',
-    'Incorrect username or password.',
-  ],
-  duplicate: ['Этот логин уже занят.', 'This username is already taken.'],
-  secureContext: [
-    'Для входа требуется HTTPS или localhost.',
-    'Sign-in requires HTTPS or localhost.',
-  ],
-  fileType: [
-    'Поддерживаются файлы TXT, MD и CSV.',
-    'Supported files: TXT, MD and CSV.',
-  ],
-  fileSize: ['Файл превышает 256 КБ.', 'File exceeds 256 KB.'],
-  fileEncoding: [
-    'Нужен текстовый файл в кодировке UTF-8.',
-    'A UTF-8 text file is required.',
-  ],
-  avatarError: [
-    'Выберите PNG, JPEG или WebP до 5 МБ.',
-    'Choose PNG, JPEG or WebP up to 5 MB.',
-  ],
-  contextLimit: [
-    'Контекст превышает 24 000 символов. Уберите вложения или начните новый диалог.',
-    'Context exceeds 24,000 characters. Remove attachments or start a new chat.',
+  noComments: ["Начните обсуждение", "Start the conversation"],
+  loading: ["Загрузка…", "Loading…"],
+  retry: ["Повторить", "Try again"],
+  network: [
+    "Не удалось загрузить данные. Попробуйте ещё раз.",
+    "Could not load the content. Please try again.",
   ],
   rateLimit: [
-    'Лимит запросов. Подождите и повторите попытку.',
-    'Rate limit reached. Wait and try again.',
+    "Источник просит подождать. Повторите немного позже.",
+    "The source is busy. Please try again shortly.",
   ],
-  providerAccess: [
-    'Провайдер ограничил доступ к генерации. Попробуйте позже.',
-    'The provider restricted generation access. Try again later.',
+  unavailable: ["Видео больше недоступно", "This video is unavailable"],
+  storage: [
+    "Не удалось сохранить изменения в браузере.",
+    "Could not save changes in this browser.",
   ],
-  unavailable: [
-    'AI-сервис временно недоступен. Повторите запрос позже.',
-    'AI service is temporarily unavailable. Retry later.',
+  conflict: [
+    "Данные изменились в другой вкладке. Перезагрузите страницу.",
+    "Your data changed in another tab. Please reload.",
   ],
-  invalidResponse: [
-    'Провайдер вернул пустой или некорректный ответ.',
-    'The provider returned an empty or invalid response.',
+  sessionExpired: ["Войдите в аккаунт снова.", "Please log in again."],
+  invalidData: [
+    "Неверный формат или слишком большой файл.",
+    "Invalid format or file too large.",
   ],
-  timeout: [
-    'Время ожидания ответа истекло. Можно повторить запрос.',
-    'Response timed out. You can retry.',
+  invalidLogin: [
+    "Логин: 3–40 латинских букв, цифр, точек, дефисов или _.",
+    "Use 3–40 letters, digits, dots, hyphens or underscores.",
   ],
-  cancelled: ['Генерация остановлена', 'Generation stopped'],
-  network: [
-    'Нет соединения с AI-сервисом. Проверьте интернет и повторите запрос.',
-    'Cannot reach the AI service. Check your connection and retry.',
+  invalidPassword: [
+    "Пароль должен содержать 8–128 символов.",
+    "Use a password of 8–128 characters.",
   ],
+  duplicate: [
+    "Этот логин уже занят в браузере.",
+    "This username already exists in this browser.",
+  ],
+  credentials: [
+    "Неверный логин или пароль.",
+    "Incorrect username or password.",
+  ],
+  secureContext: ["Для входа требуется HTTPS.", "HTTPS is required to log in."],
+  avatarError: [
+    "Выберите PNG, JPEG или WebP до 5 МБ.",
+    "Choose a PNG, JPEG or WebP under 5 MB.",
+  ],
+  copied: ["Ссылка скопирована", "Link copied"],
+  copyFailed: [
+    "Не удалось скопировать. Скопируйте ссылку ниже.",
+    "Could not copy. Copy the link below.",
+  ],
+  share: ["Поделиться", "Share"],
+  original: ["Открыть в Yappy", "Open in Yappy"],
+  notInterested: ["Не интересно", "Not interested"],
+  hideAuthor: ["Скрыть автора", "Hide creator"],
+  hidden: ["Скрытые видео и авторы", "Hidden videos and creators"],
+  resetHidden: ["Показать всё снова", "Show everything again"],
+  play: ["Воспроизвести", "Play"],
+  pause: ["Пауза", "Pause"],
+  mute: ["Выключить звук", "Mute"],
+  unmute: ["Включить звук", "Unmute"],
+  previous: ["Предыдущее видео", "Previous video"],
+  next: ["Следующее видео", "Next video"],
+  quality: ["Качество", "Quality"],
+  progress: ["Позиция видео", "Video position"],
+  details: ["Подробнее", "More"],
+  less: ["Свернуть", "Less"],
+  language: ["Язык", "Language"],
+  theme: ["Оформление", "Appearance"],
+  system: ["Как на устройстве", "System"],
+  dark: ["Тёмное", "Dark"],
+  light: ["Светлое", "Light"],
+  economy: ["Экономия трафика", "Data saver"],
+  export: ["Экспорт данных", "Export data"],
+  import: ["Импорт данных", "Import data"],
+  importText: [
+    "Заменить данные этого профиля содержимым файла?",
+    "Replace this profile’s data with the file contents?",
+  ],
+  archive: ["Скачать архив Морроу AI", "Download Morrow AI archive"],
+  noArchive: ["Архив не найден", "No archive found"],
+  clearHistory: ["Очистить историю", "Clear history"],
+  clearText: ["Это действие нельзя отменить.", "This action cannot be undone."],
+  deleteAccount: ["Удалить аккаунт", "Delete account"],
+  deleteAccountText: [
+    "Все данные этого аккаунта, включая архив Морроу AI, будут удалены из браузера.",
+    "All data for this account, including its Morrow AI archive, will be removed from this browser.",
+  ],
+  clearCache: ["Очистить кэш ленты", "Clear feed cache"],
+  stale: [
+    "Показана сохранённая лента. Подключение к источнику недоступно.",
+    "Showing your cached feed. The source is currently unavailable.",
+  ],
+  localSearch: [
+    "Результаты среди загруженных видео",
+    "Results from loaded videos",
+  ],
+  searchResults: ["Результаты поиска", "Search results"],
+  all: ["Все", "All"],
+  shortcuts: [
+    "↑ ↓ — видео · Пробел — пауза · M — звук",
+    "↑ ↓ videos · Space pause · M mute",
+  ],
+  source: ["Видео из Yappy", "Videos from Yappy"],
+  discover: ["Найдите своё следующее увлечение", "Find your next fascination"],
+  discoverText: [
+    "Короткие истории. Настоящие люди. Каждый свайп — что-то новое.",
+    "Short stories. Real people. Something new with every swipe.",
+  ],
+  start: ["Смотреть видео", "Watch videos"],
+  noFollowing: [
+    "Подпишитесь на интересных авторов",
+    "Follow creators you enjoy",
+  ],
+  unknownAuthor: ["Автор", "Creator"],
+  end: ["Вы посмотрели эту подборку", "You’ve reached the end"],
+  updated: ["Изменения сохранены", "Changes saved"],
+  reload: ["Перезагрузить", "Reload"],
+  limitedComments: [
+    "Ответы на эти комментарии сохраняются в вашем профиле.",
+    "Your replies to these comments stay in your profile.",
+  ],
+  position: ["Видео", "Video"],
+  removeAvatar: ["Убрать фото", "Remove photo"],
 };
-let language = navigator.language.startsWith('ru') ? 'ru' : 'en';
-export function setLanguage(value) {
-  language = value === 'ru' ? 'ru' : 'en';
-  document.documentElement.lang = language;
+let language = navigator.language.startsWith("ru") ? "ru" : "en";
+try {
+  const stored = JSON.parse(localStorage.getItem("morrow:appearance:v1"));
+  if (["ru", "en"].includes(stored?.language)) language = stored.language;
+} catch {}
+export function getLanguage() {
+  return language;
 }
-export const getLanguage = () => language;
-export const t = (key) =>
-  words[key]?.[language === 'ru' ? 0 : 1] ||
-  words.unavailable[language === 'ru' ? 0 : 1];
-export const date = (value) =>
-  new Intl.DateTimeFormat(language, { dateStyle: 'medium' }).format(value);
+export function setLanguage(value) {
+  language = value === "ru" ? "ru" : "en";
+  document.documentElement.lang = language;
+  try {
+    const old = JSON.parse(localStorage.getItem("morrow:appearance:v1")) || {};
+    localStorage.setItem(
+      "morrow:appearance:v1",
+      JSON.stringify({ ...old, language }),
+    );
+  } catch {}
+}
+export function t(key) {
+  return (
+    dictionary[key]?.[language === "ru" ? 0 : 1] ||
+    dictionary.network[language === "ru" ? 0 : 1]
+  );
+}
+export function number(n) {
+  return n == null
+    ? ""
+    : new Intl.NumberFormat(language, {
+        notation: "compact",
+        maximumFractionDigits: 1,
+      }).format(n);
+}
+export function date(value) {
+  const d = new Date(value);
+  return Number.isNaN(d.getTime())
+    ? ""
+    : new Intl.DateTimeFormat(language, {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      }).format(d);
+}
+setLanguage(language);

@@ -92,7 +92,7 @@ class DisguiseSiteTests(unittest.TestCase):
                     self.assertIn("frame-src https://rutube.ru", html)
                     self.assertNotIn("site-runtime.js", html)
                 elif template_id == "03-morrow-coffee":
-                    self.assertIn("connect-src 'self' https://prexzyapis.com", html)
+                    self.assertIn("connect-src 'self'", html)
                     self.assertNotIn("site-runtime.js", html)
                 else:
                     self.assertIn("connect-src 'none'", html)

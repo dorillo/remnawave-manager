@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import re
 import tempfile
 import unittest
@@ -15,19 +16,59 @@ from remnawave_manager.site_policy import (
     ASTER_SEARCH_PROXY,
     LEGACY_NODE_CSP,
     NODE_CSP,
+    MORROW_AI_NODE_CSP,
+    MORROW_YAPPY_PROXY,
     upgrade_morrow_policy,
 )
 
 
 class MorrowIntegrationTests(unittest.TestCase):
+    def test_preview_proxy_accepts_only_known_read_routes(self) -> None:
+        script = Path(__file__).parents[1] / "scripts" / "preview_morrow.py"
+        spec = importlib.util.spec_from_file_location("preview_morrow", script)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        handler = object.__new__(module.MorrowPreviewHandler)
+        identifier = "a" * 32
+
+        self.assertEqual(
+            handler._upstream_url("/_morrow/yappy/feed", "page=1"),
+            "https://yappy.media/api/feed?page=1&fingerprint=",
+        )
+        self.assertIn(
+            "%D0%BA%D0%BE%D1%82",
+            handler._upstream_url(
+                "/_morrow/yappy/search", "query=%D0%BA%D0%BE%D1%82&page=2"
+            ),
+        )
+        self.assertEqual(
+            handler._upstream_url(
+                f"/_morrow/yappy/author-videos/{identifier}",
+                "created=2026-09-15T12%3A30%3A00%2B03%3A00",
+            ),
+            f"https://yappy.media/api/video/list/{identifier}"
+            "?created=2026-09-15T12%3A30%3A00%2B03%3A00",
+        )
+        for path, query in (
+            ("/_morrow/yappy/feed", "page=0"),
+            ("/_morrow/yappy/feed", "page=1&url=https://example.com"),
+            ("/_morrow/yappy/video/../../secret", ""),
+            (f"/_morrow/yappy/video/{identifier}", "extra=1"),
+            ("/_morrow/yappy/unknown", "page=1"),
+        ):
+            with self.subTest(path=path, query=query):
+                self.assertIsNone(handler._upstream_url(path, query))
+
     def test_upgrade_preserves_routes_and_custom_policies(self) -> None:
-        for old_policy in (LEGACY_NODE_CSP, ASTER_NODE_CSP, NODE_CSP):
+        for old_policy in (LEGACY_NODE_CSP, ASTER_NODE_CSP, MORROW_AI_NODE_CSP, NODE_CSP):
             original = f'add_header Content-Security-Policy "{old_policy}" always;\r\n'
             updated = upgrade_morrow_policy(original)
             self.assertIn(NODE_CSP, updated)
             self.assertTrue(updated.endswith('\r\n'))
             self.assertEqual(upgrade_morrow_policy(updated), updated)
-            self.assertNotIn('proxy_pass', updated)
+            self.assertIn(MORROW_YAPPY_PROXY, updated)
             self.assertIn(ASTER_SEARCH_PROXY, upgrade_morrow_policy(original + ASTER_SEARCH_PROXY))
         custom = 'add_header Content-Security-Policy "default-src none" always;'
         self.assertEqual(upgrade_morrow_policy(custom), custom)
@@ -43,12 +84,12 @@ class MorrowIntegrationTests(unittest.TestCase):
                     self.assertTrue((module.parent / dependency).is_file(), dependency)
             html = (target / 'index.html').read_text(encoding='utf-8')
             self.assertNotIn('site-runtime.js', html)
-            self.assertIn('https://prexzyapis.com', html)
+            self.assertIn("connect-src 'self'", html)
 
     def test_apply_upgrades_or_rolls_back_csp_and_template(self) -> None:
         for failure in (False, True):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as temporary:
-                root = Path(temporary)
+                root = Path(temporary).resolve()
                 site = root / 'site'
                 site.mkdir()
                 index = site / 'index.html'
@@ -80,7 +121,7 @@ class MorrowIntegrationTests(unittest.TestCase):
                     else:
                         apply_template(mock.Mock(), store, '03-morrow-coffee')
                         self.assertIn(NODE_CSP, config.read_text())
-                        self.assertTrue((site / 'morrow-ai.js').is_file())
+                        self.assertTrue((site / 'morrow-player.js').is_file())
                         saved = store.save_inventory.call_args.args[0]
                         self.assertEqual(next(f.sha256 for f in saved.managed_files if f.path == str(config)), sha256_file(config))
                         config.write_text('operator edit', encoding='utf-8')

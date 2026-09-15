@@ -3,22 +3,22 @@ import {
   findAccount,
   read,
   deleteAccount,
-} from './morrow-db.js';
-import { blankWorkspace } from './morrow-store.js';
-const SESSION = 'morrow:session:v1';
+} from "./morrow-db.js";
+import { blankProfile } from "./morrow-store.js";
+const SESSION = "morrow:session:v1";
 const encode = (bytes) => btoa(String.fromCharCode(...bytes));
 async function derive(password, salt) {
   const key = await crypto.subtle.importKey(
-    'raw',
+    "raw",
     new TextEncoder().encode(password),
-    'PBKDF2',
+    "PBKDF2",
     false,
-    ['deriveBits'],
+    ["deriveBits"],
   );
   return encode(
     new Uint8Array(
       await crypto.subtle.deriveBits(
-        { name: 'PBKDF2', salt, iterations: 210000, hash: 'SHA-256' },
+        { name: "PBKDF2", salt, iterations: 210000, hash: "SHA-256" },
         key,
         256,
       ),
@@ -32,17 +32,17 @@ export async function restoreSession() {
   } catch {
     return null;
   }
-  return id ? (await read('accounts', id)) || null : null;
+  return id ? (await read("accounts", id)) || null : null;
 }
 export async function authenticate(login, password, register = false) {
   login = login.trim().toLowerCase();
-  if (!/^[a-z0-9_.-]{3,40}$/.test(login)) throw new Error('invalidLogin');
+  if (!/^[a-z0-9_.-]{3,40}$/.test(login)) throw new Error("invalidLogin");
   if (password.length < 8 || password.length > 128)
-    throw new Error('invalidPassword');
-  if (!crypto.subtle) throw new Error('secureContext');
+    throw new Error("invalidPassword");
+  if (!crypto.subtle) throw new Error("secureContext");
   let account = await findAccount(login);
   if (register) {
-    if (account) throw new Error('duplicate');
+    if (account) throw new Error("duplicate");
     const salt = crypto.getRandomValues(new Uint8Array(16));
     account = {
       id: crypto.randomUUID(),
@@ -50,7 +50,7 @@ export async function authenticate(login, password, register = false) {
       salt: encode(salt),
       hash: await derive(password, salt),
     };
-    await createAccount(account, blankWorkspace(login));
+    await createAccount(account, blankProfile(login));
   } else if (
     !account ||
     (await derive(
@@ -58,7 +58,7 @@ export async function authenticate(login, password, register = false) {
       Uint8Array.from(atob(account.salt), (c) => c.charCodeAt(0)),
     )) !== account.hash
   ) {
-    throw new Error('credentials');
+    throw new Error("credentials");
   }
   try {
     sessionStorage.setItem(SESSION, account.id);
