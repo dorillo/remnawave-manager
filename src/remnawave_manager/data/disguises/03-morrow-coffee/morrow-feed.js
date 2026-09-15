@@ -1,4 +1,4 @@
-import { el, button } from "./morrow-ui.js";
+import { el, button, loadingIndicator } from "./morrow-ui.js";
 import { t } from "./morrow-i18n.js";
 // Empty fixed-height shells retain the scroll position; only three cards own media.
 export function createFeed({
@@ -99,7 +99,7 @@ export function createFeed({
   async function more() {
     if (busy || ended || dead) return;
     busy = true;
-    tail.replaceChildren(el("p", {}, t("loading")));
+    tail.replaceChildren(loadingIndicator());
     try {
       const result = await load(controller.signal);
       if (dead) return;

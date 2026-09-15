@@ -267,8 +267,10 @@ hr {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 30px;
-  width: min(450px, 65%);
-  margin-right: auto;
+  width: min(450px, calc(100% - 260px));
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
   padding: 0 15px;
   color: var(--muted);
 }
@@ -488,6 +490,44 @@ hr {
   width: 54px;
   flex-shrink: 0;
 }
+.action-author-wrap {
+  position: relative;
+  width: 48px;
+  height: 54px;
+  margin: 0 auto 2px;
+}
+.action-author {
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  overflow: hidden;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: var(--raised);
+}
+.action-author .avatar {
+  width: 100%;
+  height: 100%;
+}
+.author-follow-badge {
+  position: absolute;
+  right: -3px;
+  bottom: 0;
+  width: 21px;
+  height: 21px;
+  min-height: 0;
+  padding: 0;
+  border: 2px solid var(--bg);
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1;
+}
+.author-follow-badge:hover {
+  background: #b6eb50;
+}
 .action-button {
   width: 100%;
   min-width: 0;
@@ -651,12 +691,12 @@ hr {
 }
 .video-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 16px;
   margin-top: 20px;
 }
 .video-tile {
-  aspect-ratio: 9/14;
+  aspect-ratio: 9/16;
   background: var(--panel);
   position: relative;
   overflow: hidden;
@@ -668,6 +708,7 @@ hr {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
   transition: transform 0.3s;
 }
 .video-tile:hover > img {
@@ -702,6 +743,30 @@ hr {
   gap: 24px;
   align-items: flex-start;
   margin: 10px 0 30px;
+}
+.profile-uploads {
+  margin: 0 0 28px;
+}
+.profile-section-head {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.profile-section-head h2 {
+  margin: 0;
+}
+.uploads-content .video-grid {
+  margin-top: 14px;
+}
+.upload-hint {
+  margin: 0;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 13px;
 }
 .profile-header > div {
   min-width: 0;
@@ -746,6 +811,55 @@ hr {
   display: flex;
   gap: 14px;
   align-items: center;
+}
+.file-picker {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  padding: 9px 12px 9px 15px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  cursor: pointer;
+}
+.file-picker:hover {
+  border-color: var(--accent);
+  background: var(--raised);
+}
+.file-picker-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-weight: 600;
+}
+.file-picker-button svg {
+  width: 18px;
+  height: 18px;
+}
+.file-picker-name {
+  flex-shrink: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-picker:focus-within {
+  border-color: var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.file-picker input[type="file"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  opacity: 0;
+  cursor: pointer;
 }
 .settings-content {
   max-width: 600px;
@@ -824,8 +938,15 @@ dialog > header h2 {
   margin: 0;
 }
 dialog > header button {
-  font-size: 12px;
-  padding: 7px 10px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 7px;
+}
+.modal-close svg {
+  width: 18px;
+  height: 18px;
 }
 .auth-form {
   display: flex;
@@ -871,6 +992,7 @@ details p {
 .discussion {
   display: flex;
   flex-direction: column;
+  position: relative;
   min-height: 0;
   height: 100%;
   gap: 12px;
@@ -880,6 +1002,26 @@ details p {
   min-height: 0;
   flex: 1;
   overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent) transparent;
+}
+.comment-list::-webkit-scrollbar {
+  width: 9px;
+}
+.comment-list::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 999px;
+}
+.comment-list::-webkit-scrollbar-thumb {
+  background: var(--accent);
+  background: color-mix(in srgb, var(--accent) 75%, var(--panel));
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: 999px;
+}
+.comment-list::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+  border-width: 2px;
 }
 .comment {
   display: flex;
@@ -986,6 +1128,40 @@ details p {
   align-self: center;
   background: none;
   border: 0;
+}
+.comments-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: color-mix(in srgb, var(--panel) 82%, transparent);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 28px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+.loading-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  color: var(--muted);
+  font-size: 12px;
+}
+@keyframes spin {
+  to { transform: rotate(1turn); }
 }
 .empty-note {
   padding: 30px;
@@ -1127,6 +1303,7 @@ details p {
   }
   .topbar {
     left: 0;
+    justify-content: flex-start;
     height: 60px;
     padding: 0 14px;
     gap: 8px;
@@ -1136,6 +1313,8 @@ details p {
     flex-shrink: 0;
   }
   .searchbar {
+    position: static;
+    transform: none;
     margin: 0 auto 0 0;
     width: auto;
     min-width: 0;
@@ -1340,6 +1519,14 @@ details p {
     font-size: 160px;
     bottom: -40px;
     right: 0;
+  }
+  .file-picker {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .file-picker-name {
+    max-width: 100%;
   }
   .comments-panel {
     inset: auto 0 0;

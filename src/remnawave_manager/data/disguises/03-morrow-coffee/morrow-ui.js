@@ -14,6 +14,17 @@ export function el(tag, attributes = {}, ...children) {
 }
 export const button = (label, action, className = "") =>
   el("button", { type: "button", class: className, onclick: action }, label);
+export const loadingIndicator = (className = "") =>
+  el(
+    "div",
+    { class: "loading-indicator " + className, role: "status" },
+    el("span", { class: "loading-spinner", "aria-hidden": true }),
+    el("span", {}, t("loading")),
+  );
+export const loadingLabel = () => [
+  el("span", { class: "loading-spinner", "aria-hidden": true }),
+  el("span", {}, t("loading")),
+];
 export const field = (label, input) =>
   el("label", { class: "field" }, el("span", {}, label), input);
 export function select(values, value, change) {
@@ -54,7 +65,7 @@ export function modal(title, content) {
       "header",
       {},
       heading,
-      button(t("close"), () => dialog.close()),
+      iconButton("close", t("close"), () => dialog.close(), "modal-close"),
     ),
     content,
   );
@@ -137,6 +148,7 @@ export function icon(name) {
       "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8M9 3h6l1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1Z",
     compass: "m16 8-3 5-5 3 3-5ZM22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0",
     clock: "M12 6v6l4 2M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0",
+    image: "M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Zm3 12 3-3 2 2 3-4 3 5M8 9h.01",
   };
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   for (const [k, v] of Object.entries({

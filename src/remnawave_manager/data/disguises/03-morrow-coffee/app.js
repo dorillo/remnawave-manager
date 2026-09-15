@@ -10,6 +10,8 @@ import {
   copy,
   icon,
   iconButton,
+  loadingIndicator,
+  loadingLabel,
   portrait,
 } from "./morrow-ui.js";
 import {
@@ -32,6 +34,11 @@ import { validId } from "./morrow-yappy.js";
 import { createFeed } from "./morrow-feed.js";
 import { createPlayer, pauseAll } from "./morrow-player.js";
 import { openComments } from "./morrow-comments.js";
+import {
+  openVideo as openUpload,
+  saveVideo,
+  videosFor,
+} from "./morrow-uploads.js";
 let account = null,
   store = null,
   feed = null,
@@ -274,7 +281,7 @@ function comments(v) {
     getStore: () => store,
     mutate: (edit) =>
       mutate((d) => {
-        remember(d, v);
+        if (!v.local) remember(d, v);
         edit(d);
       }),
     gate: () => authDialog(),
@@ -308,7 +315,7 @@ function toggleVideo(v, key) {
   gate(async () => {
     try {
       await mutate((d) => {
-        remember(d, v);
+        if (!v.local) remember(d, v);
         toggle(d[key], v.id);
       });
     } catch (e) {
@@ -345,6 +352,7 @@ function videoCard(v) {
       const owner = capturedStore();
       if (!owner || recorded === owner) return;
       recorded = owner;
+      if (v.local) return;
       owner
         .change((d) => {
           remember(d, v);
@@ -360,6 +368,24 @@ function videoCard(v) {
     },
   });
   const actions = el("div", { class: "video-actions" });
+  const authorAvatar = button(
+    "",
+    () => (v.local ? go("#/profile") : openAuthor(v.author.id)),
+    "action-author",
+  );
+  authorAvatar.append(portrait(v.author));
+  const authorAction = el("div", { class: "action-author-wrap" }, authorAvatar);
+  const followBadge = v.local
+    ? null
+    : button(
+        store?.data.following.includes(v.author.id) ? "✓" : "+",
+        () => follow(v.author),
+        "author-follow-badge",
+      );
+  if (followBadge) {
+    followBadge.setAttribute("aria-label", t("follow"));
+    authorAction.append(followBadge);
+  }
   const caption = el("p", { class: "caption" }, v.description);
   const more = button(
     t("details"),
@@ -403,6 +429,11 @@ function videoCard(v) {
   }
   function refresh() {
     const d = store?.data;
+    if (followBadge) {
+      const following = !!d?.following.includes(v.author.id);
+      followBadge.textContent = following ? "✓" : "+";
+      followBadge.setAttribute("aria-label", t(following ? "unfollow" : "follow"));
+    }
     const menuAction = () => {
       const hide = async (kind) => {
         try {
@@ -433,6 +464,7 @@ function videoCard(v) {
       );
     };
     actions.replaceChildren(
+      authorAction,
       action(
         "heart",
         d?.likes.includes(v.id) ? "unlike" : "like",
@@ -542,12 +574,14 @@ function mountFeed(load) {
   );
   feed.start();
 }
-function grid(items) {
-  const container = el("div", { class: "video-grid" });
+function appendTiles(container, items) {
   for (const v of items) {
     const a = el(
       "a",
-      { href: "#/video/yappy/" + v.id, class: "video-tile" },
+      {
+        href: v.local ? "#/video/local/" + v.id : "#/video/yappy/" + v.id,
+        class: "video-tile",
+      },
       el("img", {
         src: v.poster || "favicon.svg",
         alt: "",
@@ -566,7 +600,98 @@ function grid(items) {
     );
     container.append(a);
   }
+}
+function grid(items) {
+  const container = el("div", { class: "video-grid" });
+  appendTiles(container, items);
   return container;
+}
+function localVideo(record) {
+  const source = URL.createObjectURL(record.file);
+  return {
+    id: record.id,
+    local: true,
+    sourceUrl: "",
+    description: record.description,
+    poster: record.poster,
+    sources: { hd: source },
+    revokeSource: () => URL.revokeObjectURL(source),
+    author: {
+      id: account.id,
+      name: store.data.profile.name || account.login,
+      nickname: account.login,
+      avatar: store.data.profile.avatar,
+    },
+    stats: { likes: 0, comments: 0, views: 0 },
+    publishedAt: new Date(record.createdAt).toISOString(),
+    music: "",
+  };
+}
+function uploadVideo() {
+  if (!store) {
+    authDialog(uploadVideo);
+    return;
+  }
+  const owner = store;
+  const file = el("input", { type: "file", accept: "video/*", required: true });
+  const description = el("textarea", { rows: 4, maxlength: 5000 });
+  const error = el("p", { class: "error", role: "alert" });
+  const submit = button(t("publish"), () => {}, "primary");
+  submit.type = "submit";
+  const form = el(
+    "form",
+    {
+      class: "stack upload-form",
+      onsubmit: async (event) => {
+        event.preventDefault();
+        if (!file.files[0]) {
+          error.textContent = t("videoError");
+          return;
+        }
+        submit.disabled = true;
+        submit.replaceChildren(...loadingLabel());
+        try {
+          if (store !== owner) throw new Error("sessionExpired");
+          await saveVideo(owner.account.id, file.files[0], description.value);
+          dialog.close();
+          notice(t("uploaded"));
+          profilePage();
+        } catch (e) {
+          error.textContent = t(e.message);
+        } finally {
+          submit.disabled = false;
+          submit.textContent = t("publish");
+        }
+      },
+    },
+    el("p", { class: "upload-hint" }, t("uploadHint")),
+    field(t("selectVideo"), file),
+    field(t("description"), description),
+    error,
+    submit,
+  );
+  const dialog = modal(t("uploadVideo"), form);
+}
+async function renderUploads(target, owner) {
+  try {
+    const records = await videosFor(owner.account.id);
+    if (!target.isConnected || store !== owner) return;
+    target.replaceChildren(
+      records.length
+        ? grid(records.map(localVideo))
+        : el("p", { class: "muted-text" }, t("noUploadedVideos")),
+    );
+  } catch (e) {
+    if (target.isConnected) target.replaceChildren(el("p", { class: "error" }, t(e.message)));
+  }
+}
+async function localVideoPage(id, signal) {
+  if (!store) throw new Error("sessionExpired");
+  const record = await openUpload(account.id, id);
+  if (signal.aborted) return;
+  if (!record) throw new Error("unavailable");
+  const video = localVideo(record);
+  mountFeed(async () => ({ items: [video], next: null }));
 }
 async function authorPage(id, signal) {
   const author = await data.getAuthor(id, signal);
@@ -606,6 +731,7 @@ async function authorPage(id, signal) {
     if (busy || done || signal.aborted) return;
     busy = true;
     more.disabled = true;
+    more.replaceChildren(...loadingLabel());
     try {
       const result = await data.getAuthorVideos(id, cursor, signal);
       if (signal.aborted) return;
@@ -622,6 +748,7 @@ async function authorPage(id, signal) {
     } finally {
       busy = false;
       more.disabled = false;
+      if (!done) more.textContent = t("more");
     }
   }
   await load();
@@ -641,6 +768,7 @@ async function searchPage(query, signal) {
     button(t("start"), () => go("#/feed"), "primary"),
   );
   const results = el("div"),
+    resultsGrid = grid([]),
     status = el("p", { role: "status" }),
     more = button(t("more"), load, "load-button");
   let page = 1,
@@ -657,21 +785,27 @@ async function searchPage(query, signal) {
       more,
     ),
   );
+  results.append(resultsGrid);
   async function load() {
     if (busy || done || signal.aborted) return;
     busy = true;
     more.disabled = true;
+    more.replaceChildren(...loadingLabel());
     try {
-      const result = query
-        ? await data.search(query, page, signal)
-        : await data.getFeed(page, signal);
-      if (signal.aborted) return;
-      const fresh = result.items.filter(
-        (v) => !known.has(v.id) && (known.add(v.id), true),
-      );
-      results.append(grid(fresh));
-      page++;
-      done = !result.next || !fresh.length;
+      let loaded = 0;
+      while (!done && loaded < 3) {
+        const result = query
+          ? await data.search(query, page, signal)
+          : await data.getFeed(page, signal);
+        if (signal.aborted) return;
+        const fresh = result.items.filter(
+          (v) => !known.has(v.id) && (known.add(v.id), true),
+        );
+        appendTiles(resultsGrid, fresh);
+        page++;
+        loaded++;
+        done = !result.next || !fresh.length;
+      }
       more.hidden = done;
       if (!known.size) results.replaceChildren(empty());
     } catch (e) {
@@ -693,8 +827,17 @@ async function searchPage(query, signal) {
     } finally {
       busy = false;
       more.disabled = false;
+      if (!done && !status.textContent) more.textContent = t("more");
     }
   }
+  main.addEventListener(
+    "scroll",
+    () => {
+      if (main.scrollTop + main.clientHeight >= main.scrollHeight - 480)
+        load();
+    },
+    { signal },
+  );
   await load();
 }
 function profilePage() {
@@ -724,13 +867,32 @@ function profilePage() {
         "div",
         { class: "actions" },
         button(t("editProfile"), editProfile, "primary"),
+        button(t("uploadVideo"), uploadVideo),
         button(t("settings"), () => go("#/settings")),
       ),
     ),
   );
   const tabs = el("div", { class: "profile-tabs", role: "tablist" });
   const content = el("div", { role: "tabpanel" });
-  for (const key of ["likes", "saved", "history", "myComments", "following"]) {
+  const uploads = el(
+    "section",
+    { class: "profile-uploads" },
+    el(
+      "div",
+      { class: "profile-section-head" },
+      el("h2", {}, t("myVideos")),
+      button(t("uploadVideo"), uploadVideo, "primary"),
+    ),
+    el("div", { class: "uploads-content" }, loadingIndicator()),
+  );
+  for (const key of [
+    "likes",
+    "saved",
+    "history",
+    "myComments",
+    "myVideos",
+    "following",
+  ]) {
     const b = button(
       t(key),
       () => {
@@ -743,7 +905,8 @@ function profilePage() {
     b.setAttribute("aria-selected", String(tab === key));
     tabs.append(b);
   }
-  if (tab === "myComments") {
+  if (tab === "myVideos") content.append(uploads);
+  else if (tab === "myComments") {
     for (const c of d.comments.filter((x) => !x.deleted).toReversed())
       content.append(
         el(
@@ -781,14 +944,16 @@ function profilePage() {
   main.replaceChildren(
     el("div", { class: "page-container" }, head, tabs, content),
   );
+  if (tab === "myVideos")
+    renderUploads(uploads.querySelector(".uploads-content"), store);
 }
 function editProfile() {
   const owner = store;
   const name = el("input", {
-      value: owner.data.profile.name,
-      maxlength: 80,
-      required: true,
-    }),
+    value: owner.data.profile.name,
+    maxlength: 80,
+    required: true,
+  }),
     about = el(
       "textarea",
       { maxlength: 2000, rows: 3 },
@@ -797,14 +962,29 @@ function editProfile() {
   let photo = owner.data.profile.avatar;
   const preview = el("div", {}, portrait(owner.data.profile, "large")),
     file = el("input", {
+      id: "profile-photo-" + crypto.randomUUID(),
       type: "file",
       accept: "image/png,image/jpeg,image/webp",
     }),
+    fileName = el("small", { class: "file-picker-name" }, t("noFile")),
+    filePicker = el(
+      "label",
+      { class: "file-picker", for: file.id },
+      el(
+        "span",
+        { class: "file-picker-button" },
+        icon("image"),
+        el("span", {}, t("choosePhoto")),
+      ),
+      fileName,
+      file,
+    ),
     error = el("p", { class: "error", role: "alert" });
   let processing = false;
   file.onchange = async () => {
     if (!file.files[0]) return;
     processing = true;
+    fileName.textContent = file.files[0].name;
     try {
       photo = await avatar(file.files[0]);
       preview.replaceChildren(
@@ -818,6 +998,7 @@ function editProfile() {
   };
   const submit = button(t("save"), () => {}, "primary");
   submit.type = "submit";
+
   const dialog = modal(
     t("editProfile"),
     el(
@@ -848,9 +1029,16 @@ function editProfile() {
         },
       },
       preview,
-      field(t("avatar"), file),
+      el(
+        "div",
+        { class: "field" },
+        el("span", {}, t("avatar")),
+        filePicker,
+      ),
       button(t("removeAvatar"), () => {
         photo = "";
+        file.value = "";
+        fileName.textContent = t("noFile");
         preview.replaceChildren(portrait({ name: name.value }, "large"));
       }),
       field(t("name"), name),
@@ -1058,7 +1246,7 @@ async function route() {
   pauseAll();
   for (const d of document.querySelectorAll("dialog")) d.close();
   main.className = "main";
-  main.replaceChildren(el("div", { class: "empty-state" }, t("loading")));
+  main.replaceChildren(el("div", { class: "empty-state" }, loadingIndicator()));
   renderChrome();
   const hash = location.hash.slice(1) || "/feed";
   const [path, queryString] = hash.split("?");
@@ -1090,6 +1278,12 @@ async function route() {
         return result;
       });
     } else if (
+      parts[0] === "video" &&
+      parts[1] === "local" &&
+      validId(parts[2])
+    )
+      await localVideoPage(parts[2], signal);
+    else if (
       parts[0] === "author" &&
       parts[1] === "yappy" &&
       validId(parts[2])

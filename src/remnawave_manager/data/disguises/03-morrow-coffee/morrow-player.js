@@ -103,6 +103,7 @@ export function createPlayer(
       video.pause();
       video.removeAttribute("src");
       video.load();
+      item.revokeSource?.();
       players.delete(api);
     },
     toggle: togglePlay,
@@ -170,6 +171,11 @@ export function createPlayer(
   });
   video.addEventListener("error", async () => {
     if (destroyed) return;
+    if (item.local) {
+      feedback.hidden = false;
+      feedback.replaceChildren(el("p", {}, t("unavailable")));
+      return;
+    }
     if (!refreshed) {
       refreshed = true;
       try {

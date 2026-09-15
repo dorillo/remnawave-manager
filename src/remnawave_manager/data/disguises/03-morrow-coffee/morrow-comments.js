@@ -7,6 +7,7 @@ import {
   portrait,
   modal,
   confirmAction,
+  loadingIndicator,
 } from "./morrow-ui.js";
 export function openComments(video, { getStore, mutate, gate, openAuthor }) {
   const controller = new AbortController();
@@ -18,7 +19,16 @@ export function openComments(video, { getStore, mutate, gate, openAuthor }) {
     editing = null;
   const list = el("div", { class: "comment-list" }),
     error = el("p", { class: "error", role: "alert" }),
-    context = el("div", { class: "reply-context" });
+    context = el("div", { class: "reply-context" }),
+    loading = loadingIndicator("comments-loading");
+  loading.hidden = true;
+  list.addEventListener(
+    "scroll",
+    () => {
+      if (list.scrollTop + list.clientHeight >= list.scrollHeight - 240) load();
+    },
+    { signal: controller.signal },
+  );
   const input = el("textarea", {
     rows: 2,
     maxlength: 5000,
@@ -43,7 +53,7 @@ export function openComments(video, { getStore, mutate, gate, openAuthor }) {
   const loadMore = button(t("moreComments"), load, "more-comments");
   const dialog = modal(
     t("comments"),
-    el("div", { class: "discussion" }, list, loadMore, form),
+    el("div", { class: "discussion" }, list, loading, loadMore, form),
   );
   dialog.classList.add("comments-panel");
   dialog.addEventListener("close", () => controller.abort());
@@ -119,7 +129,7 @@ export function openComments(video, { getStore, mutate, gate, openAuthor }) {
       children.get(parent).push(c);
     }
     list.replaceChildren();
-    if (!all.length)
+    if (!all.length && !busy)
       list.append(el("p", { class: "empty-note" }, t("noComments")));
     function row(c, depth) {
       const liked = d?.commentLikes.includes(c.id),
@@ -252,14 +262,23 @@ export function openComments(video, { getStore, mutate, gate, openAuthor }) {
     if (busy || !next) return;
     busy = true;
     loadMore.disabled = true;
+    loading.hidden = false;
     error.textContent = "";
     try {
-      const result = await getComments(video.id, page, controller.signal);
-      const known = new Set(publicItems.map((c) => c.id));
-      const fresh = result.items.filter((c) => !known.has(c.id));
-      publicItems.push(...fresh);
-      next = !!result.next && !!fresh.length && publicItems.length < 1000;
-      page++;
+      let loaded = 0;
+      while (next && loaded < 5) {
+        const result = await getComments(video.id, page, controller.signal);
+        const known = new Set(publicItems.map((c) => c.id));
+        const fresh = result.items.filter((c) => !known.has(c.id));
+        publicItems.push(...fresh);
+        loaded++;
+        page++;
+        next =
+          !!result.next &&
+          !!fresh.length &&
+          !!result.items.length &&
+          publicItems.length < 1000;
+      }
       render();
       loadMore.hidden = !next;
     } catch (e) {
@@ -267,9 +286,9 @@ export function openComments(video, { getStore, mutate, gate, openAuthor }) {
     } finally {
       busy = false;
       loadMore.disabled = false;
+      loading.hidden = true;
     }
   }
-  render();
   load();
   return dialog;
 }

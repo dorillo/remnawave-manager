@@ -307,6 +307,19 @@ let browser;
   await page.locator("dialog button[type=submit]").click();
   await page.waitForSelector("dialog", { state: "detached" });
   assert.equal((await state()).profile.name, "Мой профиль");
+  await page.locator(".profile-tabs button").nth(4).click();
+  await page.locator(".profile-uploads .primary").click();
+  await page.locator("dialog input[type=file]").setInputFiles({
+    name: "local-video.webm",
+    mimeType: "video/webm",
+    buffer: movie,
+  });
+  await page.locator("dialog textarea").fill("Локальное видео");
+  await page.locator("dialog button[type=submit]").click();
+  await page.waitForSelector("dialog", { state: "detached" });
+  await page.waitForSelector(".profile-uploads .video-tile");
+  await page.locator(".profile-uploads .video-tile").first().click();
+  await page.waitForSelector('video[src^="blob:"]');
   await open("#/settings");
   await page.getByRole("button", { name: "Выйти", exact: true }).click();
   await page
