@@ -211,37 +211,6 @@ export function openComments(video, { getStore, mutate, gate, openAuthor }) {
             }),
           ),
         );
-      if (c.local && (children.get(c.id) || []).length)
-        actions.append(
-          button(t("deleteThread"), () =>
-            confirmAction(
-              t("deleteThread"),
-              t("deleteThreadText"),
-              async () => {
-                await mutate((state) => {
-                  const removed = new Set([c.id]);
-                  let added = true;
-                  while (added) {
-                    added = false;
-                    for (const item of state.comments)
-                      if (removed.has(item.parentId) && !removed.has(item.id)) {
-                        removed.add(item.id);
-                        added = true;
-                      }
-                  }
-                  state.comments = state.comments.filter(
-                    (item) => !removed.has(item.id),
-                  );
-                  state.commentLikes = state.commentLikes.filter(
-                    (id) => !removed.has(id),
-                  );
-                });
-                setTarget(null);
-                render();
-              },
-            ),
-          ),
-        );
       body.append(actions);
       const item = el(
         "article",

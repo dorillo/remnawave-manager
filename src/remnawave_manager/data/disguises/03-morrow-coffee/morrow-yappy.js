@@ -29,7 +29,7 @@ export function author(raw = {}) {
   if (!validId(id)) return null;
   return {
     id,
-    name: text(raw.firstName || raw.name || raw.nickname, 80) || "Yappy",
+    name: text(raw.firstName || raw.name || raw.nickname, 80) || "Автор",
     nickname: text(raw.nickname || raw.name, 80),
     avatar: safeURL(raw.avatar144 || raw.avatar || raw.photo),
     about: text(raw.about, 2000),
@@ -61,8 +61,6 @@ export function video(raw) {
   if (!creator) return null;
   return {
     id,
-    provider: "yappy",
-    sourceUrl: `https://yappy.media/video/${id}`,
     author: creator,
     description: text(raw.description),
     poster: safeURL(raw.thumbnail),

@@ -203,6 +203,34 @@ let browser;
     await page.locator("dialog button[type=submit]").click();
     await page.waitForSelector("dialog.auth-dialog", { state: "detached" });
   }
+  for (const width of [320, 390, 768, 2002]) {
+    await page.setViewportSize({ width, height: 965 });
+    for (const screen of ["following", "profile"]) {
+      await open("#/" + screen);
+      const layout = await page.locator(".empty-state").evaluate((section) => {
+        const actions = section.querySelector(".empty-actions");
+        const bounds = [section, actions, ...actions.querySelectorAll("button")].map(
+          (node) => node.getBoundingClientRect(),
+        );
+        return {
+          centers: bounds.map((box) => box.x + box.width / 2),
+          viewportWidth: document.documentElement.scrollWidth,
+          labels: [...actions.querySelectorAll("button")].map((b) => b.textContent),
+        };
+      });
+      assert.deepEqual(layout.labels, ["Смотреть видео", "Войти"]);
+      assert.equal(layout.viewportWidth <= width, true, `${screen} overflow at ${width}`);
+      assert.ok(
+        Math.abs(layout.centers[0] - layout.centers[1]) < 1,
+        `${screen} actions off center at ${width}`,
+      );
+      assert.ok(
+        layout.centers.slice(2).every((center) => center > 0 && center < width),
+        `${screen} button outside viewport at ${width}`,
+      );
+    }
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await open("#/feed");
   await page.waitForSelector("video");
   await page.waitForFunction(() =>
@@ -272,7 +300,7 @@ let browser;
   await page
     .locator(".comments-panel")
     .screenshot({ path: "tests/.tmp/morrow-comments.png" });
-  // Removing a parent preserves its reply; explicit thread removal clears descendants.
+  // Removing a parent preserves its reply; deleting an entire thread is unavailable.
   await page
     .locator(".comment")
     .nth(1)
@@ -286,16 +314,11 @@ let browser;
   await wait();
   assert.equal((await state()).comments[0].deleted, true);
   assert.equal((await state()).comments.length, 2);
-  await page
-    .getByRole("button", { name: "Удалить ветку", exact: true })
-    .click();
-  await page
-    .locator("dialog")
-    .last()
-    .getByRole("button", { name: "Удалить", exact: true })
-    .click();
-  await wait();
-  assert.equal((await state()).comments.length, 0);
+  assert.equal(
+    await page.getByRole("button", { name: "Удалить ветку", exact: true }).count(),
+    0,
+  );
+  assert.equal((await state()).comments.length, 2);
   await page.locator(".comments-panel>header button").click();
   await open("#/profile");
   assert.ok((await page.locator(".video-tile").count()) > 0);
@@ -308,7 +331,7 @@ let browser;
   await page.waitForSelector("dialog", { state: "detached" });
   assert.equal((await state()).profile.name, "Мой профиль");
   await page.locator(".profile-tabs button").nth(4).click();
-  await page.locator(".profile-uploads .primary").click();
+  await page.getByRole("button", { name: "Загрузить видео", exact: true }).click();
   await page.locator("dialog input[type=file]").setInputFiles({
     name: "local-video.webm",
     mimeType: "video/webm",
@@ -320,6 +343,35 @@ let browser;
   await page.waitForSelector(".profile-uploads .video-tile");
   await page.locator(".profile-uploads .video-tile").first().click();
   await page.waitForSelector('video[src^="blob:"]');
+  await page.waitForFunction(async () => {
+    const { restoreSession } = await import("/morrow-auth.js");
+    const { openVideo } = await import("/morrow-uploads.js");
+    const account = await restoreSession();
+    const id = location.hash.split("/").at(-1);
+    return (await openVideo(account.id, id))?.views >= 1;
+  });
+  await page.getByRole("button", { name: "Подробнее", exact: true }).click();
+  await page.getByRole("button", { name: "Удалить", exact: true }).click();
+  await page
+    .locator("dialog")
+    .last()
+    .getByRole("button", { name: "Удалить", exact: true })
+    .click();
+  await page.waitForURL(origin + "/#/profile?tab=myVideos");
+  await page.waitForSelector(".profile-uploads");
+  assert.equal(await page.locator(".profile-uploads .empty-state svg").count(), 1);
+  assert.equal(await page.locator(".profile-uploads .primary").count(), 0);
+  await open("#/profile?tab=saved");
+  await page
+    .locator('.profile-tabs button[aria-selected="true"]')
+    .filter({ hasText: "Сохранённое" })
+    .waitFor();
+  await page.reload();
+  await page.waitForSelector('.profile-tabs button[aria-selected="true"]');
+  assert.equal(
+    await page.locator('.profile-tabs button[aria-selected="true"]').innerText(),
+    "Сохранённое",
+  );
   await open("#/settings");
   await page.getByRole("button", { name: "Выйти", exact: true }).click();
   await page
@@ -381,7 +433,7 @@ let browser;
         "explore",
         "profile",
         "settings",
-        "author/yappy/" + id(900),
+        "author/remote/" + id(900),
       ]) {
         await open("#/" + screen);
         await page.waitForTimeout(180);
@@ -438,6 +490,33 @@ let browser;
   await page.evaluate(() => {
     IDBDatabase.prototype.transaction = window.originalTransaction;
   });
+  const removedAccountId = await page.evaluate(async (bytes) => {
+    const { restoreSession } = await import("/morrow-auth.js");
+    const { saveVideo } = await import("/morrow-uploads.js");
+    const account = await restoreSession();
+    await saveVideo(
+      account.id,
+      new File([new Uint8Array(bytes)], "delete-test.webm", { type: "video/webm" }),
+      "Delete with account",
+    );
+    return account.id;
+  }, bytes);
+  await page.evaluate(async () => {
+    const { setLanguage } = await import("/morrow-i18n.js");
+    setLanguage("ru");
+  });
+  await open("#/settings");
+  await page.getByRole("button", { name: "Удалить аккаунт", exact: true }).click();
+  await page.locator("dialog").getByRole("button", { name: "Удалить", exact: true }).click();
+  await page.waitForSelector(".login-button");
+  const deleted = await page.evaluate(async (ownerId) => {
+    const { read } = await import("/morrow-db.js");
+    const { videosFor } = await import("/morrow-uploads.js");
+    return !(await read("accounts", ownerId)) &&
+      !(await read("videos", ownerId)) &&
+      (await videosFor(ownerId)).length === 0;
+  }, removedAccountId);
+  assert.ok(deleted, "account deletion must remove local video files");
   // Upgrade a real v1 IndexedDB: preserve credentials and old AI data, add video data.
   const legacyContext = await browser.newContext({ locale: "ru-RU" });
   await legacyContext.route("**/*", routeHandler);

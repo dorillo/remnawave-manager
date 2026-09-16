@@ -112,8 +112,6 @@ export function validateProfile(raw) {
     const numeric = (n) => (Number.isFinite(n) && n >= 0 ? n : null);
     return {
       id: v.id,
-      provider: "yappy",
-      sourceUrl: `https://yappy.media/video/${v.id}`,
       description: str(v.description, 5000),
       poster: safeURL(v.poster),
       sources,

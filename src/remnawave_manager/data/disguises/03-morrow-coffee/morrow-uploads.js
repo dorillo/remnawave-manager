@@ -97,6 +97,7 @@ export async function saveVideo(ownerId, file, description) {
     createdAt: Date.now(),
     duration: media.duration,
     poster: media.poster,
+    views: 0,
     file,
   };
   await withStore("readwrite", (store) => result(store.add(record)));
@@ -119,5 +120,20 @@ export async function removeVideo(ownerId, id) {
     const record = await result(store.get(id));
     if (!record || record.ownerId !== ownerId) throw new Error("videoNotFound");
     await result(store.delete(id));
+  });
+}
+export async function removeOwnerVideos(ownerId) {
+  return withStore("readwrite", async (store) => {
+    const ids = await result(store.index("ownerId").getAllKeys(ownerId));
+    for (const id of ids) store.delete(id);
+  });
+}
+export async function recordView(ownerId, id) {
+  return withStore("readwrite", async (store) => {
+    const record = await result(store.get(id));
+    if (!record || record.ownerId !== ownerId) throw new Error("videoNotFound");
+    record.views = Math.max(0, Number(record.views) || 0) + 1;
+    await result(store.put(record));
+    return record.views;
   });
 }

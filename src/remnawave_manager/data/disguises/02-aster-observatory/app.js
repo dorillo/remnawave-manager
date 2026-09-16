@@ -44,7 +44,35 @@ const navigation = [
   'later',
   'profile',
 ];
-const symbols = ['⌂', '▦', '◉', '◷', '♡', '◴', '○'];
+const navigationIcons = {
+  home: 'm3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z',
+  catalog: 'M4 4h6v6H4ZM14 4h6v6h-6ZM4 14h6v6H4ZM14 14h6v6h-6Z',
+  subscriptions:
+    'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0ZM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8',
+  history: 'M12 6v6l4 2M21 12a9 9 0 1 1-3-6.7M21 3v5h-5',
+  likes:
+    'M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z',
+  later: 'M6 3h12v18l-6-4-6 4Z',
+  profile: 'M20 21v-2a6 6 0 0 0-6-6h-4a6 6 0 0 0-6 6v2M16 6a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z',
+};
+function navigationIcon(name) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  for (const [key, value] of Object.entries({
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    'stroke-width': '1.8',
+    'stroke-linecap': 'round',
+    'stroke-linejoin': 'round',
+    'aria-hidden': 'true',
+    class: 'sidebar-icon',
+  }))
+    svg.setAttribute(key, value);
+  const path = document.createElementNS(svg.namespaceURI, 'path');
+  path.setAttribute('d', navigationIcons[name] || navigationIcons.home);
+  svg.append(path);
+  return svg;
+}
 let catalog,
   loading = true,
   failed = false,
@@ -236,10 +264,10 @@ function shell() {
   const nav = el(
     'nav',
     { 'aria-label': t('menu') },
-    navigation.map((item, i) =>
+    navigation.map((item) =>
       link(
         [
-          el('span', { 'aria-hidden': true }, symbols[i]),
+          navigationIcon(item),
           el('span', {}, t(item)),
         ],
         `#/${item}`,

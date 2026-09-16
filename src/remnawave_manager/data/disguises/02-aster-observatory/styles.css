@@ -170,7 +170,7 @@ p { line-height: 1.55; }
   font-size: 14px;
   font-weight: 500;
 }
-.sidebar nav a > span:first-child { width: 22px; text-align: center; font-size: 21px; }
+.sidebar-icon { width: 22px; height: 22px; flex: none; }
 .sidebar nav a:hover { background: var(--soft); text-decoration: none; }
 .sidebar nav a.active { background: var(--accent-soft); font-weight: 700; }
 .sidebar-backdrop { display: none; }

@@ -5,6 +5,7 @@ import {
   deleteAccount,
 } from "./morrow-db.js";
 import { blankProfile } from "./morrow-store.js";
+import { removeOwnerVideos } from "./morrow-uploads.js";
 const SESSION = "morrow:session:v1";
 const encode = (bytes) => btoa(String.fromCharCode(...bytes));
 async function derive(password, salt) {
@@ -75,6 +76,7 @@ export function logout() {
   }
 }
 export async function removeAccount(id) {
+  await removeOwnerVideos(id);
   await deleteAccount(id);
   logout();
 }

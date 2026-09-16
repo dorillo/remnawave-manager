@@ -22,13 +22,10 @@ import {
 } from "./morrow-auth.js";
 import {
   ProfileStore,
-  blankProfile,
-  validateProfile,
   toggle,
   remember,
 } from "./morrow-store.js";
-import { read } from "./morrow-db.js";
-import { avatar, download } from "./morrow-files.js";
+import { avatar } from "./morrow-files.js";
 import * as data from "./morrow-data.js";
 import { validId } from "./morrow-yappy.js";
 import { createFeed } from "./morrow-feed.js";
@@ -36,6 +33,8 @@ import { createPlayer, pauseAll } from "./morrow-player.js";
 import { openComments } from "./morrow-comments.js";
 import {
   openVideo as openUpload,
+  recordView,
+  removeVideo,
   saveVideo,
   videosFor,
 } from "./morrow-uploads.js";
@@ -43,8 +42,7 @@ let account = null,
   store = null,
   feed = null,
   routeController = null,
-  routeVersion = 0,
-  tab = "likes";
+  routeVersion = 0;
 let theme = "dark",
   economy = false;
 try {
@@ -104,8 +102,6 @@ function renderChrome() {
       "div",
       { class: "sidebar-bottom" },
       el("p", { class: "tagline" }, t("tagline")),
-      button(t("settings"), () => go("#/settings"), "quiet"),
-      el("small", {}, t("source")),
     ),
   );
   const query = el("input", {
@@ -144,14 +140,18 @@ function renderChrome() {
       el("img", { src: "favicon.svg", alt: t("brand"), width: 32, height: 32 }),
     ),
     searchForm,
-    language,
-    account
-      ? button(
-          store?.data.profile.name || account.login,
-          () => go("#/profile"),
-          "account-chip",
-        )
-      : button(t("login"), () => authDialog(), "primary login-button"),
+    el(
+      "div",
+      { class: "topbar-actions" },
+      language,
+      account
+        ? button(
+            store?.data.profile.name || account.login,
+            () => go("#/profile"),
+            "account-chip",
+          )
+        : button(t("login"), () => authDialog(), "primary login-button"),
+    ),
   );
 }
 async function mutate(edit) {
@@ -243,25 +243,32 @@ function authDialog(after) {
     error,
     submit,
     switcher,
-    el(
-      "details",
-      {},
-      el("summary", {}, t("dataProfile")),
-      el("p", {}, t("localInfo")),
-    ),
   );
   const dialog = modal(t("login"), form);
   dialog.classList.add("auth-dialog");
   login.focus();
 }
-function empty(title = t("empty")) {
+function empty(
+  title = t("empty"),
+  description = t("emptyHint"),
+  action = button(t("start"), () => go("#/feed"), "primary"),
+  iconName = "compass",
+) {
   return el(
     "section",
     { class: "empty-state" },
-    icon("compass"),
+    icon(iconName),
     el("h2", {}, title),
-    el("p", {}, t("emptyHint")),
+    el("p", {}, description),
+    action,
+  );
+}
+function emptyActions(showLogin = false) {
+  return el(
+    "div",
+    { class: "empty-actions" },
     button(t("start"), () => go("#/feed"), "primary"),
+    showLogin ? button(t("login"), () => authDialog()) : null,
   );
 }
 function errorView(e, retry) {
@@ -273,7 +280,7 @@ function errorView(e, retry) {
   );
 }
 function openAuthor(id) {
-  go("#/author/yappy/" + id);
+  go("#/author/remote/" + id);
 }
 function comments(v) {
   if (matchMedia("(max-width: 760px)").matches) pauseAll();
@@ -290,7 +297,7 @@ function comments(v) {
 }
 function share(v) {
   const url = new URL(location.href);
-  url.hash = "/video/yappy/" + v.id;
+  url.hash = "/video/remote/" + v.id;
   const link = el("input", {
     readonly: true,
     value: url.href,
@@ -303,11 +310,6 @@ function share(v) {
       { class: "stack" },
       link,
       button(t("share"), () => copy(url.href), "primary"),
-      el(
-        "a",
-        { href: v.sourceUrl, target: "_blank", rel: "noopener noreferrer" },
-        t("original"),
-      ),
     ),
   );
 }
@@ -352,9 +354,21 @@ function videoCard(v) {
       const owner = capturedStore();
       if (!owner || recorded === owner) return;
       recorded = owner;
-      if (v.local) return;
+      if (v.local) {
+        recordView(owner.account.id, v.id)
+          .then((views) => {
+            v.stats.views = views;
+          })
+          .catch((e) => {
+            recorded = null;
+            notice(t(e.message));
+          });
+        return;
+      }
       owner
         .change((d) => {
+          if (v.stats.views != null)
+            v.stats.views = Math.max(0, Number(v.stats.views) || 0) + 1;
           remember(d, v);
           d.history = [
             { id: v.id, at: Date.now() },
@@ -416,7 +430,7 @@ function videoCard(v) {
   );
   const canvas = el("div", { class: "video-canvas" }, player.node, info);
   const card = el("div", { class: "video-card" }, canvas, actions);
-  function action(name, key, onClick, count, pressed) {
+  function action(name, key, onClick, count, pressed, displayKey = key) {
     const b = iconButton(
       name,
       t(key),
@@ -424,7 +438,7 @@ function videoCard(v) {
       "action-button" + (pressed ? " selected" : ""),
     );
     if (pressed != null) b.setAttribute("aria-pressed", String(pressed));
-    b.append(el("span", {}, count == null ? t(key) : number(count)));
+    b.append(el("span", {}, count == null ? t(displayKey) : number(count)));
     return b;
   }
   function refresh() {
@@ -448,20 +462,24 @@ function videoCard(v) {
           notice(t(e.message));
         }
       };
-      const menu = modal(
-        t("details"),
-        el(
-          "div",
-          { class: "stack" },
+      const menu = modal(t("details"), el("div", { class: "stack" }));
+      const content = menu.querySelector(".stack");
+      if (v.local) {
+        content.append(
+          button(t("delete"), () =>
+            confirmAction(t("deleteVideo"), t("deleteVideoText"), async () => {
+              await removeVideo(account.id, v.id);
+              menu.close();
+              go("#/profile?tab=myVideos");
+            }),
+          ),
+        );
+      } else {
+        content.append(
           button(t("notInterested"), () => gate(() => hide("hidden"))),
           button(t("hideAuthor"), () => gate(() => hide("hiddenAuthors"))),
-          el(
-            "a",
-            { href: v.sourceUrl, target: "_blank", rel: "noopener noreferrer" },
-            t("original"),
-          ),
-        ),
-      );
+        );
+      }
     };
     actions.replaceChildren(
       authorAction,
@@ -490,6 +508,7 @@ function videoCard(v) {
         () => toggleVideo(v, "saved"),
         null,
         !!d?.saved.includes(v.id),
+        "save",
       ),
       action("share", "share", () => share(v)),
       action("dots", "details", menuAction),
@@ -579,7 +598,7 @@ function appendTiles(container, items) {
     const a = el(
       "a",
       {
-        href: v.local ? "#/video/local/" + v.id : "#/video/yappy/" + v.id,
+        href: v.local ? "#/video/local/" + v.id : "#/video/remote/" + v.id,
         class: "video-tile",
       },
       el("img", {
@@ -611,7 +630,6 @@ function localVideo(record) {
   return {
     id: record.id,
     local: true,
-    sourceUrl: "",
     description: record.description,
     poster: record.poster,
     sources: { hd: source },
@@ -622,7 +640,7 @@ function localVideo(record) {
       nickname: account.login,
       avatar: store.data.profile.avatar,
     },
-    stats: { likes: 0, comments: 0, views: 0 },
+    stats: { likes: 0, comments: 0, views: Math.max(0, Number(record.views) || 0) },
     publishedAt: new Date(record.createdAt).toISOString(),
     music: "",
   };
@@ -633,7 +651,28 @@ function uploadVideo() {
     return;
   }
   const owner = store;
-  const file = el("input", { type: "file", accept: "video/*", required: true });
+  const file = el("input", {
+    id: "video-file-" + crypto.randomUUID(),
+    type: "file",
+    accept: "video/*",
+    required: true,
+  });
+  const fileName = el("small", { class: "file-picker-name" }, t("noFile"));
+  const filePicker = el(
+    "label",
+    { class: "file-picker", for: file.id },
+    el(
+      "span",
+      { class: "file-picker-button" },
+      icon("play"),
+      el("span", {}, t("chooseVideo")),
+    ),
+    fileName,
+    file,
+  );
+  file.onchange = () => {
+    fileName.textContent = file.files[0]?.name || t("noFile");
+  };
   const description = el("textarea", { rows: 4, maxlength: 5000 });
   const error = el("p", { class: "error", role: "alert" });
   const submit = button(t("publish"), () => {}, "primary");
@@ -665,7 +704,7 @@ function uploadVideo() {
       },
     },
     el("p", { class: "upload-hint" }, t("uploadHint")),
-    field(t("selectVideo"), file),
+    field(t("selectVideo"), filePicker),
     field(t("description"), description),
     error,
     submit,
@@ -679,7 +718,12 @@ async function renderUploads(target, owner) {
     target.replaceChildren(
       records.length
         ? grid(records.map(localVideo))
-        : el("p", { class: "muted-text" }, t("noUploadedVideos")),
+        : empty(
+            t("noUploadedVideos"),
+            t("noUploadedVideosHint"),
+            null,
+            "play",
+          ),
     );
   } catch (e) {
     if (target.isConnected) target.replaceChildren(el("p", { class: "error" }, t(e.message)));
@@ -846,13 +890,20 @@ function profilePage() {
       el(
         "div",
         { class: "page-container" },
-        empty(t("profile")),
-        button(t("login"), () => authDialog(), "primary"),
+        empty(t("profile"), t("emptyHint"), emptyActions(true)),
       ),
     );
     return;
   }
   const d = store.data;
+  const selectedTab = new URLSearchParams(location.hash.split("?")[1] || "").get(
+    "tab",
+  );
+  const tab = ["likes", "saved", "following", "history", "myVideos"].includes(
+    selectedTab,
+  )
+    ? selectedTab
+    : "likes";
   const head = el(
     "header",
     { class: "profile-header" },
@@ -862,10 +913,11 @@ function profilePage() {
       {},
       el("h1", {}, d.profile.name),
       el("p", {}, "@" + account.login),
+      el("p", { class: "profile-followers" }, number(0) + " " + t("followers")),
       el("p", {}, d.profile.about),
       el(
         "div",
-        { class: "actions" },
+        { class: "actions profile-actions" },
         button(t("editProfile"), editProfile, "primary"),
         button(t("uploadVideo"), uploadVideo),
         button(t("settings"), () => go("#/settings")),
@@ -877,46 +929,38 @@ function profilePage() {
   const uploads = el(
     "section",
     { class: "profile-uploads" },
-    el(
-      "div",
-      { class: "profile-section-head" },
-      el("h2", {}, t("myVideos")),
-      button(t("uploadVideo"), uploadVideo, "primary"),
-    ),
     el("div", { class: "uploads-content" }, loadingIndicator()),
   );
   for (const key of [
     "likes",
     "saved",
-    "history",
-    "myComments",
-    "myVideos",
     "following",
+    "history",
+    "myVideos",
   ]) {
+    const tabIcons = {
+      likes: "heart",
+      saved: "bookmark",
+      following: "users",
+      history: "clock",
+      myVideos: "play",
+    };
     const b = button(
-      t(key),
+      "",
       () => {
-        tab = key;
-        profilePage();
+        go("#/profile?tab=" + key);
       },
       tab === key ? "active" : "",
     );
+    b.setAttribute("aria-label", t(key));
+    b.title = t(key);
+    b.append(icon(tabIcons[key]), el("span", { class: "profile-tab-label" }, t(key)));
     b.setAttribute("role", "tab");
     b.setAttribute("aria-selected", String(tab === key));
     tabs.append(b);
   }
   if (tab === "myVideos") content.append(uploads);
-  else if (tab === "myComments") {
-    for (const c of d.comments.filter((x) => !x.deleted).toReversed())
-      content.append(
-        el(
-          "a",
-          { class: "comment-summary", href: "#/video/yappy/" + c.videoId },
-          el("p", {}, c.text),
-          el("small", {}, t("comments")),
-        ),
-      );
-  } else if (tab === "following") {
+  else if (tab === "following") {
     for (const id of d.following) {
       const a = d.authors.find((x) => x.id === id) || {
         id,
@@ -925,7 +969,7 @@ function profilePage() {
       content.append(
         el(
           "a",
-          { class: "author-row", href: "#/author/yappy/" + id },
+          { class: "author-row", href: "#/author/remote/" + id },
           portrait(a),
           el("strong", {}, a.name),
         ),
@@ -1079,115 +1123,11 @@ function settingsPage() {
         },
       ),
     ),
-    field(
-      t("economy"),
-      el("input", {
-        type: "checkbox",
-        checked: economy,
-        onchange: async (e) => {
-          const value = e.target.checked;
-          try {
-            if (store)
-              await mutate((d) => {
-                d.economy = value;
-              });
-            economy = value;
-          } catch (err) {
-            e.target.checked = !value;
-            notice(t(err.message));
-          }
-        },
-      }),
-    ),
-    button(t("clearCache"), () => {
-      data.clearCache();
-      notice(t("updated"));
-    }),
   );
   if (store) {
     const owner = store;
-    const importFile = el("input", {
-      type: "file",
-      accept: "application/json,.json",
-      "aria-label": t("import"),
-      onchange: async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        try {
-          if (file.size > 8000000) throw new Error("invalidData");
-          const raw = JSON.parse(await file.text());
-          if (raw.format !== "morrow-video-profile")
-            throw new Error("invalidData");
-          const checked = validateProfile(raw.data);
-          confirmAction(
-            t("import"),
-            t("importText"),
-            async () => {
-              if (store !== owner) throw new Error("sessionExpired");
-              await mutate((d) => Object.assign(d, checked));
-              economy = store.data.economy;
-              renderChrome();
-              settingsPage();
-            },
-            "import",
-          );
-        } catch (err) {
-          notice(t("invalidData"));
-        } finally {
-          e.target.value = "";
-        }
-      },
-    });
     content.append(
       el("hr"),
-      el("h2", {}, t("dataProfile")),
-      el("p", { class: "muted-text" }, t("localInfo")),
-      button(t("export"), () =>
-        download(
-          "morrow-profile.json",
-          JSON.stringify(
-            { format: "morrow-video-profile", data: owner.data },
-            null,
-            2,
-          ),
-          "application/json",
-        ),
-      ),
-      field(t("import"), importFile),
-      button(t("archive"), async () => {
-        try {
-          const old = await read("workspaces", owner.account.id);
-          if (!old) {
-            notice(t("noArchive"));
-            return;
-          }
-          download(
-            "morrow-ai-archive.json",
-            JSON.stringify(old.data, null, 2),
-            "application/json",
-          );
-        } catch (e) {
-          notice(t(e.message));
-        }
-      }),
-      button(t("clearHistory"), () =>
-        confirmAction(t("clearHistory"), t("clearText"), () =>
-          mutate((d) => {
-            d.history = [];
-          }),
-        ),
-      ),
-      button(t("resetHidden"), async () => {
-        try {
-          await mutate((d) => {
-            d.hidden = [];
-            d.hiddenAuthors = [];
-          });
-          notice(t("updated"));
-        } catch (e) {
-          notice(t(e.message));
-        }
-      }),
       button(t("logout"), () =>
         confirmAction(
           t("logout"),
@@ -1261,7 +1201,7 @@ async function route() {
       });
     } else if (
       parts[0] === "video" &&
-      parts[1] === "yappy" &&
+      parts[1] === "remote" &&
       validId(parts[2])
     ) {
       const v = await data.getVideo(parts[2], signal);
@@ -1285,7 +1225,7 @@ async function route() {
       await localVideoPage(parts[2], signal);
     else if (
       parts[0] === "author" &&
-      parts[1] === "yappy" &&
+      parts[1] === "remote" &&
       validId(parts[2])
     )
       await authorPage(parts[2], signal);
@@ -1295,10 +1235,7 @@ async function route() {
           el(
             "div",
             { class: "page-container" },
-            empty(t("noFollowing")),
-            !store
-              ? button(t("login"), () => authDialog(), "primary")
-              : el("span"),
+            empty(t("noFollowing"), t("emptyHint"), emptyActions(!store)),
           ),
         );
         return;
