@@ -28,7 +28,12 @@ let pendingRouteIndex = null;
 const REMOTE_PROFILES = 'answers:remote-profiles:v1';
 const remoteProfiles = new Map();
 const e = (value) => String(value ?? '').replace(/[&<>"']/g, (x) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[x]);
-const qurl = (id) => id.startsWith('mail:') ? `#/question/mail/${id.slice(5)}` : `#/question/local/${id.slice(6)}`;
+function qurl(id) {
+  if (typeof id !== 'string') return '#/home';
+  if (/^mail:\d{1,12}$/.test(id)) return `#/question/mail/${id.slice(5)}`;
+  if (/^local:[0-9a-f-]{36}$/.test(id)) return `#/question/local/${id.slice(6)}`;
+  return '#/home';
+}
 const accountName = (id) => state.accounts.find((x) => x.id === id)?.name || (lang() === 'ru' ? 'Удалённый профиль' : 'Deleted profile');
 const user = () => currentUser(state);
 const backLink = (fallback = '#/home') => `<button class="back-link" type="button" data-action="back" data-fallback="${e(fallback)}">← ${e(t('back'))}</button>`;
