@@ -50,15 +50,15 @@ const dictionary = {
   uploading: ["Сохраняем видео…", "Saving video…"],
   uploaded: ["Видео опубликовано", "Video published"],
   uploadHint: [
-    "Максимальный размер видео — 500 МБ.",
-    "Maximum video size is 500 MB.",
+    "Поддерживаются видеоформаты, которые может воспроизвести браузер.",
+    "Video formats supported by your browser can be uploaded.",
   ],
   noUploadedVideos: ["Здесь пока нет ваших видео", "You have no videos yet"],
   noUploadedVideosHint: [
     "Загруженные вами видео появятся здесь.",
     "Videos you upload will appear here.",
   ],
-  videoError: ["Выберите корректный видеофайл до 500 МБ.", "Choose a valid video file under 500 MB."],
+  videoError: ["Выберите корректный видеофайл.", "Choose a valid video file."],
   videoNotFound: ["Видео не найдено", "Video not found"],
   deleteVideo: ["Удалить видео", "Delete video"],
   deleteVideoText: [
@@ -126,8 +126,8 @@ const dictionary = {
   ],
   secureContext: ["Для входа требуется HTTPS.", "HTTPS is required to log in."],
   avatarError: [
-    "Выберите PNG, JPEG или WebP до 5 МБ.",
-    "Choose a PNG, JPEG or WebP under 5 MB.",
+    "Выберите PNG, JPEG или WebP.",
+    "Choose a PNG, JPEG or WebP image.",
   ],
   copied: ["Ссылка скопирована", "Link copied"],
   copyFailed: [

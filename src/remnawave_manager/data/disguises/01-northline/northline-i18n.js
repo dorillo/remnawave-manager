@@ -120,7 +120,7 @@ const EN = new Map(Object.entries({
   'Загрузить фото профиля': 'Upload profile photo',
   'Загрузить': 'Upload',
   'Заменить': 'Replace',
-  'Квадратное изображение до 12 МБ': 'Square image up to 12 MB',
+  'Квадратное изображение': 'Square image',
   'Ваш профиль, публикации и всё, чем вы делитесь': 'Your profile, posts, and everything you share',
   'Выбирайте интересы, сохраняйте находки и собирайте свой круг авторов.': 'Choose interests, save discoveries, and build your circle of authors.',
   'Расскажите о том, что вам интересно.': 'Share what interests you.',
@@ -259,7 +259,7 @@ const EN = new Map(Object.entries({
   'Текст истории': 'Post text',
   'Текст черновика': 'Draft text',
   'О чём вы думаете? Поделитесь своей историей…': 'What are you thinking? Share your story…',
-  'До 4 вложений; видео до 2 МБ': 'Up to 4 attachments; video up to 2 MB',
+  'До 4 вложений': 'Up to 4 attachments',
   'Подготавливаем вложения…': 'Preparing attachments…',
   'Дождитесь подготовки вложений': 'Wait for attachments to finish processing',
   'Удалить вложение': 'Remove attachment',
@@ -291,8 +291,6 @@ const EN = new Map(Object.entries({
   'Не удалось подготовить изображение': 'Could not process the image',
   'Не удалось подготовить вложение': 'Could not process the attachment',
   'Дождитесь подготовки изображения': 'Wait for the image to finish processing',
-  'Изображение больше 12 МБ': 'The image is larger than 12 MB',
-  'Суммарный размер вложений слишком большой': 'The total attachment size is too large',
   'Не удалось скопировать ссылку': 'Could not copy the link',
   'Не удалось открыть страницу': 'Could not open the page',
   'Не удалось обновить ленту. Проверьте подключение или попробуйте позже.': 'Could not refresh the feed. Check your connection or try again later.',
@@ -345,7 +343,7 @@ const PATTERNS = [
   [/^(\d+) сохранённых$/, '$1 saved'],
   [/^(\d+) подписчиков$/, '$1 followers'],
   [/^(\d+) подписок$/, '$1 following'],
-  [/^До (\d+) вложений; видео до 2 МБ$/, 'Up to $1 attachments; video up to 2 MB'],
+  [/^До (\d+) вложений$/, 'Up to $1 attachments'],
 ];
 
 export function getInterfaceLanguage() {

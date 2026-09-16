@@ -23,7 +23,7 @@ from .runner import (
     read_stable_regular_file,
     sha256_file,
 )
-from .site_policy import upgrade_aster_policy, upgrade_morrow_policy
+from .site_policy import upgrade_answers_policy, upgrade_aster_policy, upgrade_morrow_policy
 from .state import StateStore, utc_now
 
 DISGUISE_TEMPLATE_COUNT = 10
@@ -221,7 +221,10 @@ def _validate_site_inventory(inventory: Inventory, target: Path) -> None:
 
 
 def _aster_policy_changes(
-    inventory: Inventory, *, morrow: bool = False
+    inventory: Inventory,
+    *,
+    morrow: bool = False,
+    answers: bool = False,
 ) -> list[tuple[Path, str, str, int]]:
     """Prepare only known CSP upgrades, and only for unchanged managed nginx files."""
     changes: list[tuple[Path, str, str, int]] = []
@@ -244,7 +247,12 @@ def _aster_policy_changes(
             raise ValidationError(f"Конфигурация nginx изменена после adoption: {path}")
         # Decode bytes directly so rollback preserves CRLF as well as LF.
         old = snapshot.data.decode("utf-8")
-        new = upgrade_morrow_policy(old) if morrow else upgrade_aster_policy(old)
+        if answers:
+            new = upgrade_answers_policy(old)
+        elif morrow:
+            new = upgrade_morrow_policy(old)
+        else:
+            new = upgrade_aster_policy(old)
         if old != new:
             changes.append((path, old, new, snapshot.mode))
     return changes
@@ -266,8 +274,12 @@ def apply_template(
     _validate_site_inventory(inventory, target)
     _template(template_id)
     policy_changes = (
-        _aster_policy_changes(inventory, morrow=template_id == "03-morrow-coffee")
-        if template_id in {"02-aster-observatory", "03-morrow-coffee"}
+        _aster_policy_changes(
+            inventory,
+            morrow=template_id == "03-morrow-coffee",
+            answers=template_id == "04-signal-works",
+        )
+        if template_id in {"02-aster-observatory", "03-morrow-coffee", "04-signal-works"}
         else []
     )
     create_backup(runner, store, reason=f"pre-disguise-{template_id}", retention=None)
@@ -290,8 +302,12 @@ def apply_template(
         _assert_trusted_site_directories(target)
         _validate_site_inventory(inventory, target)
         current_policy_changes = (
-            _aster_policy_changes(inventory, morrow=template_id == "03-morrow-coffee")
-            if template_id in {"02-aster-observatory", "03-morrow-coffee"}
+            _aster_policy_changes(
+                inventory,
+                morrow=template_id == "03-morrow-coffee",
+                answers=template_id == "04-signal-works",
+            )
+            if template_id in {"02-aster-observatory", "03-morrow-coffee", "04-signal-works"}
             else []
         )
         if policy_changes != current_policy_changes:

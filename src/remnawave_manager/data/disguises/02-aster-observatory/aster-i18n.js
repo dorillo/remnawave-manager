@@ -104,8 +104,8 @@ const words = {
   avatar: ['Фото профиля', 'Profile photo'],
   bio: ['О себе', 'About you'],
   avatarError: [
-    'Выберите изображение до 10 МБ.',
-    'Choose an image up to 10 MB.',
+    'Выберите корректное изображение.',
+    'Choose a valid image.',
   ],
   yourChannel: ['Ваш канал', 'Your channel'],
   editProfile: ['Редактировать профиль', 'Edit profile'],
@@ -116,12 +116,12 @@ const words = {
   uploading: ['Сохраняем видео…', 'Saving video…'],
   uploaded: ['Видео опубликовано', 'Video published'],
   uploadHint: [
-    'MP4, WebM и другие поддерживаемые форматы, до 500 МБ.',
-    'MP4, WebM and other supported formats, up to 500 MB.',
+    'MP4, WebM и другие поддерживаемые форматы.',
+    'MP4, WebM and other supported formats.',
   ],
   videoError: [
-    'Выберите видео до 500 МБ и укажите название.',
-    'Choose a video up to 500 MB and enter a title.',
+    'Выберите корректное видео и укажите название.',
+    'Choose a valid video and enter a title.',
   ],
   videoStorageError: [
     'Не удалось сохранить видео. Проверьте свободное место и попробуйте снова.',

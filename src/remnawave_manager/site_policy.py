@@ -58,6 +58,116 @@ def upgrade_morrow_policy(text: str) -> str:
     return upgraded.replace(new, f"{new}\n\n{MORROW_YAPPY_PROXY}")
 
 
+def upgrade_answers_policy(text: str) -> str:
+    """Add fixed anonymous Mail Answers read routes to known managed configs."""
+    upgraded = _upgrade_known_policy(text)
+    new = f'add_header Content-Security-Policy "{NODE_CSP}" always;'
+    if ANSWERS_MAIL_PROXY in upgraded or new not in upgraded:
+        return upgraded
+    return upgraded.replace(new, f"{new}\n\n{ANSWERS_MAIL_PROXY}")
+
+
+ANSWERS_MAIL_PROXY = r"""    location = /_answers/mail/feed {
+        if ($request_method != GET) { return 405; }
+        if ($args !~ "^limit=20(?:&pos=[0-9]{1,12})?(?:&space=[a-z0-9_-]{1,70})?$") { return 400; }
+        proxy_pass https://otvet.mail.ru/api/topic/feed;
+        proxy_ssl_server_name on;
+        proxy_ssl_name otvet.mail.ru;
+        proxy_ssl_verify on;
+        proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+        proxy_pass_request_headers off;
+        proxy_pass_request_body off;
+        proxy_set_header Host otvet.mail.ru;
+        proxy_set_header Accept application/json;
+        proxy_set_header User-Agent "Mozilla/5.0 (compatible; Spros/1.0)";
+        proxy_set_header Content-Length "";
+        proxy_hide_header Set-Cookie;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 15s;
+    }
+
+    location = /_answers/mail/spaces {
+        if ($request_method != GET) { return 405; }
+        if ($args != "") { return 400; }
+        proxy_pass https://otvet.mail.ru/api/topic/spaces/top;
+        proxy_ssl_server_name on;
+        proxy_ssl_name otvet.mail.ru;
+        proxy_ssl_verify on;
+        proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+        proxy_pass_request_headers off;
+        proxy_pass_request_body off;
+        proxy_set_header Host otvet.mail.ru;
+        proxy_set_header Accept application/json;
+        proxy_set_header User-Agent "Mozilla/5.0 (compatible; Spros/1.0)";
+        proxy_set_header Content-Length "";
+        proxy_hide_header Set-Cookie;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 15s;
+    }
+
+    location = /_answers/mail/search {
+        if ($request_method != GET) { return 405; }
+        if ($args !~ "^text=[A-Za-z0-9._~%+-]{1,600}$") { return 400; }
+        rewrite ^ /api/topic/search break;
+        proxy_pass https://otvet.mail.ru;
+        proxy_ssl_server_name on;
+        proxy_ssl_name otvet.mail.ru;
+        proxy_ssl_verify on;
+        proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+        proxy_pass_request_headers off;
+        proxy_pass_request_body off;
+        proxy_set_header Host otvet.mail.ru;
+        proxy_set_header Accept application/json;
+        proxy_set_header User-Agent "Mozilla/5.0 (compatible; Spros/1.0)";
+        proxy_set_header Content-Length "";
+        proxy_hide_header Set-Cookie;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 15s;
+    }
+
+    location ~ "^/_answers/mail/question/(?<answers_id>[0-9]{1,12})$" {
+        if ($request_method != GET) { return 405; }
+        if ($args != "") { return 400; }
+        rewrite ^ /api/topic/question/$answers_id break;
+        proxy_pass https://otvet.mail.ru;
+        proxy_ssl_server_name on;
+        proxy_ssl_name otvet.mail.ru;
+        proxy_ssl_verify on;
+        proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+        proxy_pass_request_headers off;
+        proxy_pass_request_body off;
+        proxy_set_header Host otvet.mail.ru;
+        proxy_set_header Accept application/json;
+        proxy_set_header User-Agent "Mozilla/5.0 (compatible; Spros/1.0)";
+        proxy_set_header Content-Length "";
+        proxy_hide_header Set-Cookie;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 15s;
+    }
+
+    location ~ "^/_answers/mail/answers/(?<answers_id>[0-9]{1,12})$" {
+        if ($request_method != GET) { return 405; }
+        if ($args != "limit=50") { return 400; }
+        rewrite ^ /api/topic/answers/$answers_id break;
+        proxy_pass https://otvet.mail.ru;
+        proxy_ssl_server_name on;
+        proxy_ssl_name otvet.mail.ru;
+        proxy_ssl_verify on;
+        proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+        proxy_pass_request_headers off;
+        proxy_pass_request_body off;
+        proxy_set_header Host otvet.mail.ru;
+        proxy_set_header Accept application/json;
+        proxy_set_header User-Agent "Mozilla/5.0 (compatible; Spros/1.0)";
+        proxy_set_header Content-Length "";
+        proxy_hide_header Set-Cookie;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 15s;
+    }
+
+    location /_answers/ { return 404; }"""
+
+
 MORROW_YAPPY_PROXY = r"""    location = /_morrow/yappy/feed {
         if ($request_method != GET) { return 405; }
         if ($args !~ "^page=[1-9][0-9]{0,3}$") { return 400; }

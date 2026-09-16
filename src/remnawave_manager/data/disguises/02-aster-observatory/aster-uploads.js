@@ -1,6 +1,5 @@
 const DATABASE = 'aster:media:v1';
 const STORE = 'videos';
-export const MAX_VIDEO_SIZE = 500 * 1024 * 1024;
 
 function database() {
   return new Promise((resolve, reject) => {
@@ -100,7 +99,6 @@ export async function saveVideo(ownerId, file, title, description = '') {
     typeof ownerId !== 'string' ||
     !file?.type?.startsWith('video/') ||
     !file.size ||
-    file.size > MAX_VIDEO_SIZE ||
     !title.trim()
   )
     throw new Error('videoError');

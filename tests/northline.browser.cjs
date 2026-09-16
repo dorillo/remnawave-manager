@@ -391,7 +391,7 @@ let browser;
   await page.locator('.reply-prompt').getByRole('button', { name: 'Написать комментарий' }).click();
   const commentField = page.getByLabel('Текст комментария');
   assert.equal(await commentField.getAttribute('maxlength'), '5000');
-  await page.getByRole('dialog').getByText('До 4 вложений; видео до 2 МБ', { exact: true }).waitFor();
+  await page.getByRole('dialog').getByText('До 4 вложений', { exact: true }).waitFor();
   await page.getByRole('dialog').getByText('0 / 5000', { exact: true }).waitFor();
   const commentLayout = await page.getByRole('dialog').evaluate((modal) => {
     const field = modal.querySelector('.compose-text').getBoundingClientRect();

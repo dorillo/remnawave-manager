@@ -1,6 +1,5 @@
 const DATABASE = "morrow:media:v1";
 const STORE = "videos";
-export const MAX_VIDEO_SIZE = 500 * 1024 * 1024;
 
 function database() {
   return new Promise((resolve, reject) => {
@@ -85,8 +84,7 @@ export async function saveVideo(ownerId, file, description) {
   if (
     typeof ownerId !== "string" ||
     !file?.type?.startsWith("video/") ||
-    !file.size ||
-    file.size > MAX_VIDEO_SIZE
+    !file.size
   )
     throw new Error("videoError");
   const media = await details(file);

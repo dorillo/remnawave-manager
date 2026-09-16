@@ -1,8 +1,5 @@
 export async function avatar(file) {
-  if (
-    !/^image\/(png|jpeg|webp)$/.test(file.type) ||
-    file.size > 5 * 1024 * 1024
-  )
+  if (!/^image\/(png|jpeg|webp)$/.test(file.type))
     throw new Error("avatarError");
   const bitmap = await createImageBitmap(file);
   try {

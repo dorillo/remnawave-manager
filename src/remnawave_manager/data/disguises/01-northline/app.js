@@ -72,9 +72,6 @@ function replace(target, ...children) {
 }
 let reader = readReader();
 const MAX_ATTACHMENTS = 4;
-const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
-const MAX_VIDEO_BYTES = 2 * 1024 * 1024;
-const MAX_LOCAL_MEDIA_CHARS = 3_600_000;
 function localMedia(value) {
   return Array.isArray(value)
     ? value
@@ -1075,26 +1072,12 @@ function showCommentComposer(post, parent = null) {
       const added = [];
       for (const file of files) {
         if (file.type.startsWith('image/')) {
-          if (file.size > MAX_IMAGE_BYTES) {
-            toast(`Изображение «${file.name}» больше 12 МБ`);
-            continue;
-          }
           const url = await imageDataUrl(file);
           added.push({ id: newId('media'), type: 'image', url, preview: url, alt: file.name });
         } else if (file.type.startsWith('video/')) {
-          if (file.size > MAX_VIDEO_BYTES) {
-            toast(`Видео «${file.name}» больше 2 МБ`);
-            continue;
-          }
           const url = await readFileAsDataUrl(file);
           added.push({ id: newId('media'), type: 'video', url, preview: '', alt: file.name });
         } else toast(`Файл «${file.name}» не является изображением или видео`);
-      }
-      const total = [...attachments, ...added].reduce((size, media) => size + media.url.length, 0);
-      if (total > MAX_LOCAL_MEDIA_CHARS) {
-        toast('Суммарный размер вложений слишком большой');
-        mediaStatus.textContent = '';
-        return;
       }
       if (!attachmentInput.isConnected) return;
       attachments = [...attachments, ...added];
@@ -1147,7 +1130,7 @@ function showCommentComposer(post, parent = null) {
       button('Добавить фото или видео', () => attachmentInput.click(), {
         className: 'button secondary', symbol: 'camera',
       }),
-      el('small', { text: `До ${MAX_ATTACHMENTS} вложений; видео до 2 МБ` }),
+      el('small', { text: `До ${MAX_ATTACHMENTS} вложений` }),
     ]),
     attachmentList,
     el('div', { class: 'compose-status' }, [mediaStatus, count]),
@@ -2146,7 +2129,7 @@ function showProfileEditor() {
     avatar({ name: name.value || reader.name, avatar: selectedAvatar }, true),
     el('div', {}, [
       el('strong', { text: selectedAvatar ? 'Фото профиля выбрано' : 'Фото профиля' }),
-      el('small', { text: 'Квадратное изображение до 12 МБ' }),
+      el('small', { text: 'Квадратное изображение' }),
     ]),
     button(selectedAvatar ? 'Заменить' : 'Загрузить', () => avatarInput.click(), { className: 'button secondary', symbol: 'camera' }),
     selectedAvatar && button('Удалить', () => { selectedAvatar = ''; renderAvatarPreview(); }, { className: 'text-button muted' }),
@@ -2156,7 +2139,6 @@ function showProfileEditor() {
     avatarInput.value = '';
     if (!file) return;
     if (!file.type.startsWith('image/')) { toast('Выберите изображение'); return; }
-    if (file.size > MAX_IMAGE_BYTES) { toast('Изображение больше 12 МБ'); return; }
     avatarInput.disabled = true;
     try {
       selectedAvatar = await imageDataUrl(file);
@@ -2298,25 +2280,12 @@ function showComposer(id) {
       const added = [];
       for (const file of files) {
         if (file.type.startsWith('image/')) {
-          if (file.size > MAX_IMAGE_BYTES) {
-            toast(`Изображение «${file.name}» больше 12 МБ`);
-            continue;
-          }
           const url = await imageDataUrl(file);
           added.push({ id: newId('media'), type: 'image', url, preview: url, alt: file.name });
         } else if (file.type.startsWith('video/')) {
-          if (file.size > MAX_VIDEO_BYTES) {
-            toast(`Видео «${file.name}» больше 2 МБ`);
-            continue;
-          }
           const url = await readFileAsDataUrl(file);
           added.push({ id: newId('media'), type: 'video', url, preview: '', alt: file.name });
         } else toast(`Файл «${file.name}» не является изображением или видео`);
-      }
-      const total = [...attachments, ...added].reduce((size, media) => size + media.url.length, 0);
-      if (total > MAX_LOCAL_MEDIA_CHARS) {
-        toast('Суммарный размер вложений слишком большой');
-        return;
       }
       if (!attachmentInput.isConnected) return;
       attachments = [...attachments, ...added];
@@ -2379,7 +2348,7 @@ function showComposer(id) {
       button('Добавить фото или видео', () => attachmentInput.click(), {
         className: 'button secondary', symbol: 'camera',
       }),
-      el('small', { text: `До ${MAX_ATTACHMENTS} вложений; видео до 2 МБ` }),
+      el('small', { text: `До ${MAX_ATTACHMENTS} вложений` }),
     ]),
     attachmentList,
     el('div', { class: 'compose-status' }, [status, count]),

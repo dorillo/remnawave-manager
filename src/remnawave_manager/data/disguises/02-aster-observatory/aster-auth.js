@@ -85,7 +85,7 @@ export const signOut = () =>
     state.session = null;
   });
 export async function avatar(file) {
-  if (!file?.type.startsWith('image/') || file.size > 10 * 1024 * 1024)
+  if (!file?.type.startsWith('image/'))
     throw new Error('avatarError');
   const bitmap = await createImageBitmap(file);
   try {
