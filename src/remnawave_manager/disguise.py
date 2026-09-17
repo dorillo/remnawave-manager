@@ -23,7 +23,12 @@ from .runner import (
     read_stable_regular_file,
     sha256_file,
 )
-from .site_policy import upgrade_answers_policy, upgrade_aster_policy, upgrade_morrow_policy
+from .site_policy import (
+    upgrade_answers_policy,
+    upgrade_aster_policy,
+    upgrade_morrow_policy,
+    upgrade_svod_policy,
+)
 from .state import StateStore, utc_now
 
 DISGUISE_TEMPLATE_COUNT = 10
@@ -225,6 +230,7 @@ def _aster_policy_changes(
     *,
     morrow: bool = False,
     answers: bool = False,
+    svod: bool = False,
 ) -> list[tuple[Path, str, str, int]]:
     """Prepare only known CSP upgrades, and only for unchanged managed nginx files."""
     changes: list[tuple[Path, str, str, int]] = []
@@ -247,7 +253,9 @@ def _aster_policy_changes(
             raise ValidationError(f"Конфигурация nginx изменена после adoption: {path}")
         # Decode bytes directly so rollback preserves CRLF as well as LF.
         old = snapshot.data.decode("utf-8")
-        if answers:
+        if svod:
+            new = upgrade_svod_policy(old)
+        elif answers:
             new = upgrade_answers_policy(old)
         elif morrow:
             new = upgrade_morrow_policy(old)
@@ -278,8 +286,9 @@ def apply_template(
             inventory,
             morrow=template_id == "03-morrow-coffee",
             answers=template_id == "04-signal-works",
+            svod=template_id == "05-field-notes",
         )
-        if template_id in {"02-aster-observatory", "03-morrow-coffee", "04-signal-works"}
+        if template_id in {"02-aster-observatory", "03-morrow-coffee", "04-signal-works", "05-field-notes"}
         else []
     )
     create_backup(runner, store, reason=f"pre-disguise-{template_id}", retention=None)
@@ -306,8 +315,9 @@ def apply_template(
                 inventory,
                 morrow=template_id == "03-morrow-coffee",
                 answers=template_id == "04-signal-works",
+                svod=template_id == "05-field-notes",
             )
-            if template_id in {"02-aster-observatory", "03-morrow-coffee", "04-signal-works"}
+            if template_id in {"02-aster-observatory", "03-morrow-coffee", "04-signal-works", "05-field-notes"}
             else []
         )
         if policy_changes != current_policy_changes:

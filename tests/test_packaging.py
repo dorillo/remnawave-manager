@@ -116,6 +116,7 @@ class PackagingTests(unittest.TestCase):
                 "data/disguises/*/*.html",
                 "data/disguises/*/*.css",
                 "data/disguises/*/*.js",
+                "data/disguises/*/*.md",
                 "data/disguises/*/*/*.json",
                 "data/disguises/*/*.jpg",
                 "data/disguises/*/*.svg",

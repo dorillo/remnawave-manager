@@ -68,3 +68,12 @@ https://unsplash.com/license
 
 Attribution and source pages are listed in:
 src/remnawave_manager/data/disguises/CREDITS.md
+
+Svod HTML sanitizer
+===================
+
+DOMPurify 3.4.15 by Cure53 and contributors is included in
+src/remnawave_manager/data/disguises/05-field-notes/purify.es.js.
+Source: https://github.com/cure53/DOMPurify
+License: Apache-2.0 OR MPL-2.0; full text is provided alongside the module
+in DOMPurify-LICENSE.md.
