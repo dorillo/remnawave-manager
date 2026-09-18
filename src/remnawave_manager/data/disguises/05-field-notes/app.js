@@ -51,7 +51,7 @@ function parseRoute() {
     ].includes(path)
       ? path
       : "home",
-    q: (params.get("q") || "").slice(0, 300),
+    q: (params.get("q") || "").slice(0, 200),
     section: params.get("section") || "",
   };
 }
@@ -109,25 +109,21 @@ function shell() {
   const nav = el(
     "nav",
     { "aria-label": t("menu") },
-    navItems.map((key) =>
-      link(
+    navItems.map((key) => {
+      const item = link(
         [icon(key), t(key)],
         route(key),
         current.path === key ? "active" : "",
-      ),
-    ),
+      );
+      if (current.path === key) item.setAttribute("aria-current", "page");
+      return item;
+    }),
   );
   side = el(
     "aside",
     { class: "sidebar", id: "navigation" },
     el("p", { class: "rail-label" }, t("reading")),
     nav,
-    el(
-      "div",
-      { class: "sidebar-bottom" },
-      el("span", { class: "source-dot" }, t("sourceShort")),
-      el("small", {}, t("russian")),
-    ),
   );
   const language = button(
     lang === "ru" ? "EN" : "RU",
@@ -139,11 +135,19 @@ function shell() {
     "quiet",
   );
   language.setAttribute("aria-label", t("language"));
-  const setNavigation = (open) => {
+  const setNavigation = (open, restoreFocus = false) => {
     app.classList.toggle("nav-open", open);
     menu.setAttribute("aria-expanded", String(open));
     document.body.classList.toggle("mobile-nav-open", open);
-    if (open) side.querySelector("a")?.focus();
+    for (const node of app.querySelectorAll(".header,main,.footer"))
+      node.inert = open;
+    if (open) {
+      const focusNavigation = () => {
+        if (app.classList.contains("nav-open")) side.querySelector("a")?.focus();
+      };
+      requestAnimationFrame(focusNavigation);
+      side.addEventListener("transitionend", focusNavigation, { once: true });
+    } else if (restoreFocus) menu.focus();
   };
   const menu = button(
     icon("menu"),
@@ -153,9 +157,15 @@ function shell() {
   menu.setAttribute("aria-label", t("menu"));
   menu.setAttribute("aria-expanded", "false");
   menu.setAttribute("aria-controls", "navigation");
-  side.prepend(
-    button(icon("close"), () => setNavigation(false), "drawer-close"),
+  const drawerClose = button(
+    icon("close"),
+    () => setNavigation(false, true),
+    "drawer-close",
   );
+  drawerClose.setAttribute("aria-label", t("close"));
+  side.prepend(drawerClose);
+  const appearanceButton = button(icon("appearance"), appearance, "quiet");
+  appearanceButton.setAttribute("aria-label", t("appearance"));
   main = el("main", { id: "main", tabindex: -1 });
   app.replaceChildren(
     link(t("skip"), "#main", "skip-link"),
@@ -185,7 +195,7 @@ function shell() {
         "div",
         { class: "header-actions" },
         language,
-        button(icon("appearance"), appearance, "quiet"),
+        appearanceButton,
         button(
           account ? account.name : t("login"),
           () => (account ? accountDialog() : authDialog()),
@@ -196,20 +206,17 @@ function shell() {
     el(
       "div",
       { class: "layout" },
-      button(t("close"), () => setNavigation(false), "nav-backdrop"),
+      button(t("close"), () => setNavigation(false, true), "nav-backdrop"),
       side,
       main,
     ),
     el(
       "footer",
       { class: "footer" },
-      el("span", {}, t("brand") + " · " + t("sourceShort")),
+      el("span", {}, t("brand") + " · " + t("tagline")),
       link(t("about"), route("about")),
     ),
   );
-  app
-    .querySelector(".header-actions button:nth-child(2)")
-    .setAttribute("aria-label", t("appearance"));
   app.querySelector(".skip-link").addEventListener("click", (e) => {
     e.preventDefault();
     main.focus();
@@ -265,9 +272,6 @@ function errorView(error, host, action) {
         ),
       ),
       button(t("retry"), action),
-      error.message === "storageError"
-        ? null
-        : link(t("source"), "https://ru.wikipedia.org/", "external-source"),
     ),
   );
 }
@@ -348,7 +352,6 @@ function authDialog(after) {
       submit,
     );
     d = dialog(t(register ? "register" : "login"), [
-      el("p", { class: "muted" }, t("localHint")),
       form,
       button(
         t(register ? "login" : "register"),
@@ -358,7 +361,6 @@ function authDialog(after) {
         },
         "auth-switch",
       ),
-      el("small", { class: "muted" }, t("noRecovery")),
     ]);
   };
   build();
@@ -373,7 +375,6 @@ function accountDialog() {
       el("br"),
       el("span", { class: "muted" }, "@" + account.login),
     ),
-    el("p", { class: "muted" }, t("localHint")),
     button(t("logout"), () =>
       confirm(t("logoutConfirm"), async () => {
         await flushReading();
@@ -504,11 +505,7 @@ function resultCard(item) {
   return el(
     "article",
     { class: "result-card" },
-    el(
-      "div",
-      { class: "result-kicker" },
-      t("article") + " · " + t("sourceShort"),
-    ),
+    el("div", { class: "result-kicker" }, t("article")),
     el("h2", { lang: "ru" }, link(item.title, route("article", item.title))),
     item.snippet ? el("p", { lang: "ru" }, plain(item.snippet)) : null,
     link(t("read"), route("article", item.title), "read-link"),
@@ -623,7 +620,6 @@ async function articlePage(title, section, token, signal) {
       save,
       button(t("manage"), () => manageCollections(article)),
       button(t("print"), () => window.print()),
-      link(t("source"), data.original(article.title)),
     );
     const tocNav = el("nav", { "aria-label": t("contents") });
     const beginningButton = button(t("beginning"), () => {
@@ -662,11 +658,7 @@ async function articlePage(title, section, token, signal) {
       el(
         "header",
         { class: "article-heading" },
-        el(
-          "div",
-          { class: "eyebrow" },
-          t("article") + " / " + t("sourceShort"),
-        ),
+        el("div", { class: "eyebrow" }, t("article")),
         el("h1", { lang: "ru" }, article.title),
         tools,
       ),
@@ -683,34 +675,6 @@ async function articlePage(title, section, token, signal) {
           .map((c) =>
             link(c.replaceAll("_", " "), route("category", "Категория:" + c)),
           ),
-      ),
-      el(
-        "div",
-        { class: "article-attribution" },
-        el("p", {}, t("attribution")),
-        el(
-          "p",
-          {},
-          link(
-            t("contentLicense"),
-            "https://creativecommons.org/licenses/by-sa/4.0/",
-          ),
-          " · ",
-          t("adapted"),
-        ),
-        el(
-          "p",
-          {},
-          link(
-            t("authors"),
-            "https://ru.wikipedia.org/w/index.php?" +
-              new URLSearchParams({ title: article.title, action: "history" }),
-          ),
-        ),
-        link(t("source"), data.original(article.title)),
-        article.revid
-          ? el("small", {}, t("revision") + " " + article.revid)
-          : null,
       ),
     );
     main.replaceChildren(el("div", { class: "article-layout" }, toc, body));
@@ -778,7 +742,9 @@ async function manageCollections(article) {
       ),
       button(
         t("save"),
-        async () => {
+        async (event) => {
+          const submit = event.currentTarget;
+          submit.disabled = true;
           try {
             if (
               !(await store.get("library", `${account.id}:${article.pageid}`))
@@ -796,6 +762,7 @@ async function manageCollections(article) {
             await render();
           } catch {
             notify("storageError");
+            submit.disabled = false;
           }
         },
         "primary",
@@ -812,29 +779,41 @@ function editCollection(collection, after = () => render()) {
     value: collection?.name || "",
   });
   let d;
+  const submit = el(
+    "button",
+    { type: "submit", class: "primary" },
+    t("save"),
+  );
   d = dialog(t(collection ? "rename" : "newCollection"), [
     el(
       "form",
       {
         onsubmit: async (e) => {
           e.preventDefault();
-          if (!input.value.trim()) return;
+          const name = input.value.trim();
+          if (!name) {
+            input.value = "";
+            input.reportValidity();
+            return;
+          }
+          submit.disabled = true;
           try {
             await store.put("collections", {
               id: collection?.id || crypto.randomUUID(),
               owner: account.id,
-              name: input.value.trim(),
+              name,
               pages: collection?.pages || [],
             });
             d.close();
             await after();
           } catch {
             notify("storageError");
+            submit.disabled = false;
           }
         },
       },
       field(t("collectionName"), input),
-      el("button", { type: "submit", class: "primary" }, t("save")),
+      submit,
     ),
   ]);
 }
@@ -1019,10 +998,6 @@ async function personalPage(historyMode, token) {
     main.append(tabs);
   }
   main.append(controls, content);
-  if (!historyMode)
-    main.append(
-      el("p", { class: "muted library-footnote" }, t("offlineLibrary")),
-    );
   paint();
 }
 function readingSection(value) {
@@ -1106,16 +1081,7 @@ async function render() {
     } else if (r.path === "about")
       main.append(
         heading(t("about")),
-        el(
-          "section",
-          { class: "about-copy" },
-          el("p", {}, t("aboutText")),
-          el("p", {}, t("attribution")),
-          link(t("source"), "https://ru.wikipedia.org/"),
-          el("h2", {}, t("localProfile")),
-          el("p", {}, t("localHint")),
-          el("p", {}, t("offlineLibrary")),
-        ),
+        el("section", { class: "about-copy" }, el("p", {}, t("aboutText"))),
       );
     else await home(token, controller.signal);
   } catch (e) {
@@ -1163,7 +1129,11 @@ addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     app.classList.remove("nav-open");
     document.body.classList.remove("mobile-nav-open");
-    app.querySelector(".mobile-menu")?.setAttribute("aria-expanded", "false");
+    const menu = app.querySelector(".mobile-menu");
+    menu?.setAttribute("aria-expanded", "false");
+    for (const node of app.querySelectorAll(".header,main,.footer"))
+      node.inert = false;
+    if (!document.querySelector("dialog[open]") && menu) menu.focus();
   }
 });
 render();
@@ -1177,5 +1147,8 @@ matchMedia("(max-width: 800px)").addEventListener("change", (event) => {
   if (!event.matches) {
     app.classList.remove("nav-open");
     document.body.classList.remove("mobile-nav-open");
+    app.querySelector(".mobile-menu")?.setAttribute("aria-expanded", "false");
+    for (const node of app.querySelectorAll(".header,main,.footer"))
+      node.inert = false;
   }
 });

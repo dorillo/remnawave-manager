@@ -10,7 +10,7 @@ let browser,
   unavailable = false,
   delayedArticle = false,
   releaseArticle;
-const html = `<p><b>Земля</b> — третья планета Солнечной системы. Энциклопедия помогает исследовать мир и находить связи между понятиями.</p><table class="infobox"><tr><th colspan="2">Земля</th></tr><tr><td>Тип</td><td>Планета</td></tr><tr><td>Спутник</td><td><a href="/wiki/Луна">Луна</a></td></tr></table><h2><span id="Строение">Строение</span></h2><p>Планета состоит из нескольких слоёв.<sup><a href="#cite_note-1">[1]</a></sup></p>${"<p>Земля — наш общий дом. Изучение планеты охватывает географию, биологию и астрономию.</p>".repeat(12)}<h3 id="Ядро">Ядро</h3><table class="wikitable"><tr>${"<th>Длинный заголовок таблицы</th>".repeat(8)}</tr><tr>${"<td>Пример данных</td>".repeat(8)}</tr></table><h2 id="Примечания">Примечания</h2><ol><li id="cite_note-1">Научный источник <a href="#Строение">↑</a></li></ol><script>window.hacked=1</script><img src="javascript:alert(1)" onerror="window.hacked=2"><a href="javascript:alert(1)">bad</a><div id="app" class="header">Безопасный текст</div>`;
+const html = `<p><b>Земля</b> — третья планета Солнечной системы. Энциклопедия помогает исследовать мир и находить связи между понятиями.</p><table class="infobox"><tr><th colspan="2">Земля</th></tr><tr><td>Тип</td><td>Планета</td></tr><tr><td>Спутник</td><td><a href="/wiki/Луна">Луна</a></td></tr></table><h2><span id="Строение">Строение</span></h2><p>Планета состоит из нескольких слоёв.<sup><a href="#cite_note-1">[1]</a></sup></p>${"<p>Земля — наш общий дом. Изучение планеты охватывает географию, биологию и астрономию.</p>".repeat(12)}<h3 id="Ядро">Ядро</h3><table class="wikitable"><tr>${"<th>Длинный заголовок таблицы</th>".repeat(8)}</tr><tr>${"<td>Пример данных</td>".repeat(8)}</tr></table><h2 id="Примечания">Примечания</h2><ol><li id="cite_note-1">Научный источник <a href="#Строение">↑</a></li></ol><script>window.hacked=1</script><img src="javascript:alert(1)" onerror="window.hacked=2"><a href="javascript:alert(1)">bad</a><a href="http://example.com/plain">insecure</a><a href="https://example.com/plain">external</a><div id="app" class="header">Безопасный текст</div>`;
 (async () => {
   browser = await chromium.launch({
     executablePath:
@@ -106,6 +106,7 @@ const html = `<p><b>Земля</b> — третья планета Солнеч�
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("https://svod.test/");
   await page.getByRole("heading", { name: "Земля", exact: true }).waitFor();
+  assert.equal(await page.getByText(/Википед|Wikipedia/).count(), 0);
   assert.equal(await page.getByRole("search").count(), 1);
   await page.keyboard.press("Control+k");
   assert.equal(
@@ -148,6 +149,15 @@ const html = `<p><b>Земля</b> — третья планета Солнеч�
   assert.ok(drawerBox.left >= -1 && drawerBox.top === 0);
   assert.ok(drawerBox.height >= drawerBox.viewport);
   assert.equal(await page.locator(".nav-backdrop").isVisible(), true);
+  assert.equal(await page.locator(".header").getAttribute("inert"), "");
+  assert.equal(await page.locator("main").getAttribute("inert"), "");
+  await page.waitForTimeout(300);
+  assert.equal(
+    await page
+      .locator(".sidebar")
+      .evaluate((n) => n.contains(document.activeElement)),
+    true,
+  );
   await page.screenshot({ path: "/tmp/svod-mobile-navigation.png" });
   await page.getByRole("link", { name: "Моя библиотека", exact: true }).click();
   await page.locator(".empty .primary").waitFor();
@@ -156,6 +166,12 @@ const html = `<p><b>Земля</b> — третья планета Солнеч�
       .locator("#app")
       .evaluate((n) => n.classList.contains("nav-open")),
     false,
+  );
+  assert.equal(
+    await page
+      .locator('.sidebar a[aria-current="page"]')
+      .getAttribute("href"),
+    "#/library",
   );
   await page.locator(".empty .primary").click();
   await page.locator(".auth-switch").click();
@@ -194,6 +210,12 @@ const html = `<p><b>Земля</b> — третья планета Солнеч�
   delayedArticle = false;
   releaseArticle();
   await page.locator(".wiki-content").waitFor();
+  assert.equal(
+    await page
+      .locator('a[href*="wikipedia.org"],a[href*="wikimedia.org"]')
+      .count(),
+    0,
+  );
   // A tall infobox must not push the next section below it.
   await page.evaluate(async () => {
     const { renderArticle } = await import("/svod-article.js");
@@ -240,6 +262,13 @@ const html = `<p><b>Земля</b> — третья планета Солнеч�
     await page.locator('.wiki-content [href^="javascript"]').count(),
     0,
   );
+  assert.equal(
+    await page.getByRole("link", { name: "insecure", exact: true }).count(),
+    0,
+  );
+  const external = page.getByRole("link", { name: "external", exact: true });
+  assert.equal(await external.getAttribute("target"), "_blank");
+  assert.equal(await external.getAttribute("rel"), "noopener noreferrer");
   await page.screenshot({
     path: "/tmp/svod-article-desktop.png",
     fullPage: true,
@@ -332,6 +361,7 @@ const html = `<p><b>Земля</b> — третья планета Солнеч�
   await page.locator(".wiki-content").waitFor();
   for (const width of [320, 375, 768, 1024, 1440]) {
     await page.setViewportSize({ width, height: 850 });
+    await page.waitForTimeout(250);
     assert.ok(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= innerWidth,
@@ -346,7 +376,10 @@ const html = `<p><b>Земля</b> — третья планета Солнеч�
   await page.setViewportSize({ width: 375, height: 850 });
   await page.getByRole("button", { name: "Appearance", exact: true }).click();
   await page.getByLabel("Theme", { exact: true }).selectOption("dark");
-  await page.getByRole("button", { name: "Close", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "Appearance" })
+    .getByRole("button", { name: "Close", exact: true })
+    .click();
   await page.screenshot({ path: "/tmp/svod-dark-mobile.png", fullPage: true });
   unavailable = true;
   await page.reload();
@@ -357,7 +390,7 @@ const html = `<p><b>Земля</b> — третья планета Солнеч�
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
   await page
     .getByRole("heading", {
-      name: "Sign out of this local account?",
+      name: "Sign out of this account?",
       exact: true,
     })
     .waitFor();

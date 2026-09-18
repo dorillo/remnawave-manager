@@ -73,6 +73,16 @@ let browser;
           encodeURIComponent(content.parse.title),
       );
       await page.locator(".wiki-content").waitFor();
+      assert.doesNotMatch(
+        await page.locator("body").innerText(),
+        /Википед|Wikipedia|Викисклад/,
+      );
+      assert.equal(
+        await page
+          .locator('a[href*="wikipedia.org"],a[href*="wikimedia.org"]')
+          .count(),
+        0,
+      );
       assert.equal(
         await page
           .locator(

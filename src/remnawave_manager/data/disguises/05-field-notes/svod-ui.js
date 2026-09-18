@@ -90,8 +90,7 @@ export function dialog(title, body) {
   document.body.append(d);
   d.addEventListener("close", () => {
     d.remove();
-    if (previous?.isConnected && !document.querySelector("dialog[open]"))
-      previous.focus();
+    if (previous?.isConnected) previous.focus();
   });
   d.addEventListener("click", (e) => {
     if (e.target === d) {
@@ -106,6 +105,7 @@ export function dialog(title, body) {
     }
   });
   d.showModal();
+  d.querySelector("input,select,textarea")?.focus();
   return d;
 }
 export function confirm(title, action) {

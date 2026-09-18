@@ -1,5 +1,5 @@
 import DOMPurify from "./purify.es.js";
-import { el, route, dialog, link } from "./svod-ui.js";
+import { el, route, dialog } from "./svod-ui.js";
 import { t } from "./svod-i18n.js";
 import { original } from "./svod-data.js";
 const images = new Set([
@@ -11,9 +11,7 @@ const images = new Set([
 function safeURL(value, base) {
   try {
     const url = new URL(value, base);
-    return ["https:", "http:"].includes(url.protocol) &&
-      !url.username &&
-      !url.password
+    return url.protocol === "https:" && !url.username && !url.password
       ? url
       : null;
   } catch {
@@ -114,7 +112,9 @@ export function renderArticle(article) {
   const container = el("div", { class: "wiki-content", lang: "ru" }, fragment),
     base = original(article.title);
   container
-    .querySelectorAll(".mw-editsection,.toc,.noprint,.mw-empty-elt")
+    .querySelectorAll(
+      ".mw-editsection,.toc,.noprint,.mw-empty-elt,.metadata,.ambox,.sistersitebox,.navbox",
+    )
     .forEach((n) => n.remove());
   // Native MathML remains visible; the duplicate image fallback is unnecessary.
   for (const math of container.querySelectorAll(".mwe-math-element")) {
@@ -193,7 +193,7 @@ export function renderArticle(article) {
           document.getElementById(id)?.scrollIntoView({ block: "start" });
           history.replaceState(null, "", route("article", article.title, id));
         });
-      } else a.href = url.href;
+      } else a.removeAttribute("href");
     } else if (
       url.hostname === "ru.wikipedia.org" &&
       url.pathname.startsWith("/wiki/")
@@ -207,11 +207,17 @@ export function renderArticle(article) {
       if (title.startsWith("Категория:")) a.href = route("category", title);
       else if (title && !title.includes(":") && !url.search)
         a.href = route("article", title, anchor);
-      else {
-        a.href = url.href;
-        a.target = "_blank";
-        a.rel = "noopener noreferrer";
-      }
+      else a.removeAttribute("href");
+    } else if (
+      url.hostname === "wikipedia.org" ||
+      url.hostname.endsWith(".wikipedia.org")
+    ) {
+      a.removeAttribute("href");
+    } else if (
+      url.hostname === "wikimedia.org" ||
+      url.hostname.endsWith(".wikimedia.org")
+    ) {
+      a.remove();
     } else {
       a.href = url.href;
       a.target = "_blank";
@@ -243,7 +249,6 @@ export function renderArticle(article) {
         ),
       { once: true },
     );
-    const parent = img.closest("a");
     {
       img.tabIndex = 0;
       img.setAttribute("role", "button");
@@ -251,10 +256,6 @@ export function renderArticle(article) {
       const zoom = () =>
         dialog(img.alt || t("zoom"), [
           el("img", { src: url.href, alt: img.alt, class: "zoom-image" }),
-          link(
-            t("source"),
-            parent?.href?.startsWith("https:") ? parent.href : base,
-          ),
         ]);
       img.addEventListener("click", (e) => {
         e.preventDefault();

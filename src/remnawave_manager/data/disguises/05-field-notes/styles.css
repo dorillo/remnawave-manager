@@ -300,26 +300,6 @@ small {
   text-decoration: none;
   color: var(--ink);
 }
-.sidebar-bottom {
-  margin-top: 70px;
-  border-top: 1px solid var(--line);
-  padding-top: 22px;
-  color: var(--muted);
-  font-size: 12px;
-}
-.sidebar-bottom small {
-  display: block;
-  margin-top: 7px;
-}
-.source-dot:before {
-  content: "";
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  background: var(--accent);
-  border-radius: 50%;
-  margin-right: 7px;
-}
 main {
   min-width: 0;
   min-height: calc(100vh - 164px);
@@ -497,11 +477,6 @@ main > .load-status:only-child {
 }
 .error-box p {
   color: var(--muted);
-}
-.external-source {
-  display: inline-block;
-  margin: 12px 15px;
-  font-size: 13px;
 }
 .notice {
   padding: 14px 18px;
@@ -772,15 +747,6 @@ main > .load-status:only-child {
   width: 100%;
   font-weight: 500;
 }
-.article-attribution {
-  font-size: 12px;
-  color: var(--muted);
-  margin-top: 25px;
-}
-.article-attribution small {
-  display: block;
-  margin-top: 10px;
-}
 .library-controls {
   display: flex;
   gap: 10px;
@@ -887,10 +853,6 @@ main > .load-status:only-child {
   gap: 8px;
   align-items: center;
   flex-wrap: wrap;
-}
-.library-footnote {
-  font-size: 12px;
-  margin-top: 30px;
 }
 .about-copy {
   max-width: 750px;
@@ -1189,9 +1151,6 @@ dialog > button {
     border: 0;
     background: transparent;
   }
-  .sidebar-bottom {
-    margin-top: 40px;
-  }
   .nav-backdrop {
     position: fixed;
     z-index: 41;
@@ -1412,9 +1371,6 @@ dialog > button {
   }
   .article-heading h1 {
     font-size: 28pt;
-  }
-  .article-attribution {
-    break-inside: avoid;
   }
 }
 /* Preserve readable cells: wide tables scroll instead of collapsing into letters. */

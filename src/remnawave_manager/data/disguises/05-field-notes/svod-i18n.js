@@ -1,11 +1,5 @@
 const words = {
-  contentLicense: ["Текст: CC BY-SA 4.0", "Text: CC BY-SA 4.0"],
-  adapted: [
-    "Оформление адаптировано для «Свода». У изображений могут быть отдельные условия использования.",
-    "Presentation adapted for Svod. Images may have separate terms of use.",
-  ],
-  authors: ["Авторы и история изменений", "Authors and revision history"],
-  storageTitle: ["Локальные данные недоступны", "Local data is unavailable"],
+  storageTitle: ["Данные недоступны", "Data is unavailable"],
   brand: ["Свод", "Svod"],
   tagline: ["Открывая знания", "Discovering knowledge"],
   home: ["Главная", "Home"],
@@ -17,25 +11,13 @@ const words = {
   about: ["О проекте", "About"],
   login: ["Войти", "Sign in"],
   logout: ["Выйти", "Sign out"],
-  logoutConfirm: [
-    "Выйти из локального аккаунта?",
-    "Sign out of this local account?",
-  ],
+  logoutConfirm: ["Выйти из аккаунта?", "Sign out of this account?"],
   account: ["Аккаунт", "Account"],
   register: ["Создать аккаунт", "Create account"],
   name: ["Имя", "Name"],
   username: ["Логин", "Username"],
   password: ["Пароль", "Password"],
   passwordHint: ["От 8 до 128 символов", "8–128 characters"],
-  localHint: [
-    "Аккаунт хранится только в этом браузере. История и библиотека не синхронизируются между устройствами. Очистка данных сайта удалит их.",
-    "Your account is stored in this browser only. History and library do not sync across devices. Clearing site data removes them.",
-  ],
-  noRecovery: [
-    "Пароль нельзя восстановить через почту.",
-    "There is no email password recovery.",
-  ],
-  localProfile: ["Локальный профиль", "Local profile"],
   close: ["Закрыть", "Close"],
   cancel: ["Отмена", "Cancel"],
   save: ["Сохранить", "Save"],
@@ -54,8 +36,8 @@ const words = {
   duplicate: ["Этот логин уже занят.", "This username is already taken."],
   authError: ["Неверный логин или пароль.", "Incorrect username or password."],
   storageError: [
-    "Не удалось сохранить данные браузера. Проверьте доступное место и настройки хранения.",
-    "Could not save browser data. Check available space and storage settings.",
+    "Не удалось сохранить данные. Повторите попытку.",
+    "Could not save data. Please try again.",
   ],
   secureError: [
     "Для аккаунтов откройте сайт по HTTPS или на localhost.",
@@ -64,8 +46,8 @@ const words = {
   loading: ["Загружаем…", "Loading…"],
   unavailable: ["Не удалось загрузить материал", "Unable to load content"],
   unavailableHint: [
-    "Источник сейчас недоступен. Попробуйте ещё раз немного позже.",
-    "The source is currently unavailable. Please try again shortly.",
+    "Материал сейчас недоступен. Попробуйте ещё раз немного позже.",
+    "The content is currently unavailable. Please try again shortly.",
   ],
   rateLimit: [
     "Слишком много запросов. Попробуйте позже.",
@@ -81,8 +63,6 @@ const words = {
   more: ["Показать ещё", "Show more"],
   contents: ["Содержание", "Contents"],
   beginning: ["Начало", "Overview"],
-  source: ["Читать в Википедии ↗", "Read on Wikipedia ↗"],
-  sourceShort: ["Источник: Википедия", "Source: Wikipedia"],
   article: ["Статья", "Article"],
   category: ["Категория", "Category"],
   categories: ["Категории", "Categories"],
@@ -118,10 +98,7 @@ const words = {
   geography: ["География", "Geography"],
   past: ["История", "History"],
   selected: ["Статьи для знакомства", "Explore these articles"],
-  selectedHint: [
-    "Подборка «Свода» · материалы Википедии",
-    "Selected by Svod · articles from Wikipedia",
-  ],
+  selectedHint: ["Подборка редакции «Свода»", "Selected by the Svod editors"],
   read: ["Читать статью →", "Read article →"],
   continue: ["Продолжить чтение", "Continue reading"],
   collection: ["Коллекция", "Collection"],
@@ -167,8 +144,8 @@ const words = {
     "Sign in to build your library",
   ],
   accountNeededHint: [
-    "Сохранённые статьи и история чтения будут доступны в вашем локальном профиле.",
-    "Saved articles and reading history will be available in your local profile.",
+    "После входа здесь появятся сохранённые статьи и история чтения.",
+    "Sign in to access saved articles and reading history.",
   ],
   stale: ["Сохранённая копия от", "Saved copy from"],
   noImage: ["Изображение недоступно", "Image unavailable"],
@@ -177,18 +154,13 @@ const words = {
   menu: ["Навигация", "Navigation"],
   reading: ["Чтение", "Reading"],
   aboutText: [
-    "«Свод» — независимый интерфейс для чтения русскоязычных материалов Википедии. Поиск и статьи загружаются из источника; библиотека и история остаются в вашем браузере.",
-    "Svod is an independent reader for Russian-language Wikipedia articles. Search and articles load from the source; your library and history stay in your browser.",
-  ],
-  attribution: [
-    "Авторы, история изменений и условия использования текста и изображений указаны на странице оригинала и страницах файлов.",
-    "Authors, revision history and terms for text and images are listed on the original article and file pages.",
+    "«Свод» — пространство для чтения, исследования связей и создания собственной библиотеки знаний.",
+    "Svod is a place to read, explore connections and build your own library of knowledge.",
   ],
   russian: ["Статьи на русском языке", "Articles are in Russian"],
   noItems: ["Здесь пока нет статей", "No articles here yet"],
   done: ["Сохранено", "Saved"],
   removed: ["Удалено", "Removed"],
-  revision: ["Версия", "Revision"],
   visit: ["Последнее чтение", "Last read"],
   results: ["Результаты поиска", "Search results"],
   libraryHint: [
@@ -199,13 +171,9 @@ const words = {
     "Продолжите с того места, где остановились.",
     "Pick up where you left off.",
   ],
-  offlineLibrary: [
-    "Сохранение добавляет закладку. Для загрузки полного текста обычно нужен интернет.",
-    "Saving adds a bookmark. Loading full articles usually requires an internet connection.",
-  ],
   unavailableStorage: [
-    "Локальное хранилище недоступно. Читать статьи по-прежнему можно.",
-    "Local storage is unavailable. You can still read articles.",
+    "Сохранение данных сейчас недоступно. Читать статьи по-прежнему можно.",
+    "Saving data is currently unavailable. You can still read articles.",
   ],
 };
 let preferences = {};
