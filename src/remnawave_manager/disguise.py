@@ -29,6 +29,7 @@ from .site_policy import (
     upgrade_morrow_policy,
     upgrade_northline_policy,
     upgrade_svod_policy,
+    upgrade_loop_policy,
 )
 from .state import StateStore, utc_now
 
@@ -232,6 +233,7 @@ def _aster_policy_changes(
     morrow: bool = False,
     answers: bool = False,
     svod: bool = False,
+    loop: bool = False,
     northline: bool = False,
 ) -> list[tuple[Path, str, str, int]]:
     """Prepare only known CSP upgrades, and only for unchanged managed nginx files."""
@@ -257,6 +259,8 @@ def _aster_policy_changes(
         old = snapshot.data.decode("utf-8")
         if northline:
             new = upgrade_northline_policy(old)
+        elif loop:
+            new = upgrade_loop_policy(old)
         elif svod:
             new = upgrade_svod_policy(old)
         elif answers:
@@ -291,9 +295,10 @@ def apply_template(
             morrow=template_id == "03-morrow-coffee",
             answers=template_id == "04-signal-works",
             svod=template_id == "05-field-notes",
+            loop=template_id == "06-loop-archive",
             northline=template_id == "01-northline",
         )
-        if template_id in {"01-northline", "02-aster-observatory", "03-morrow-coffee", "04-signal-works", "05-field-notes"}
+        if template_id in {"01-northline", "02-aster-observatory", "03-morrow-coffee", "04-signal-works", "05-field-notes", "06-loop-archive"}
         else []
     )
     create_backup(runner, store, reason=f"pre-disguise-{template_id}", retention=None)
@@ -321,9 +326,10 @@ def apply_template(
                 morrow=template_id == "03-morrow-coffee",
                 answers=template_id == "04-signal-works",
                 svod=template_id == "05-field-notes",
+                loop=template_id == "06-loop-archive",
                 northline=template_id == "01-northline",
             )
-            if template_id in {"01-northline", "02-aster-observatory", "03-morrow-coffee", "04-signal-works", "05-field-notes"}
+            if template_id in {"01-northline", "02-aster-observatory", "03-morrow-coffee", "04-signal-works", "05-field-notes", "06-loop-archive"}
             else []
         )
         if policy_changes != current_policy_changes:

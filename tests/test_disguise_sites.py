@@ -94,7 +94,7 @@ class DisguiseSiteTests(unittest.TestCase):
                 elif template_id == "03-morrow-coffee":
                     self.assertIn("connect-src 'self'", html)
                     self.assertNotIn("site-runtime.js", html)
-                elif template_id in {"04-signal-works", "05-field-notes"}:
+                elif template_id in {"04-signal-works", "05-field-notes", "06-loop-archive"}:
                     self.assertIn("connect-src 'self'", html)
                     self.assertNotIn("site-runtime.js", html)
                     self.assertIn('rel="icon" href="favicon.svg"', html)
@@ -125,7 +125,7 @@ class DisguiseSiteTests(unittest.TestCase):
         tags = ("aside", "article", "section", "table", "figure", "form", "nav")
         for template_id in EXPECTED_IDS:
             html = (SITES_ROOT / template_id / "index.html").read_text(encoding="utf-8")
-            if template_id in {"01-northline", "02-aster-observatory", "03-morrow-coffee", "04-signal-works", "05-field-notes"}:
+            if template_id in {"01-northline", "02-aster-observatory", "03-morrow-coffee", "04-signal-works", "05-field-notes", "06-loop-archive"}:
                 # App shells render their distinct structures in browser tests.
                 self.assertIn('data-app="', html)
                 continue
@@ -157,6 +157,8 @@ class DisguiseSiteTests(unittest.TestCase):
                     self.assertIn('data-app="answers"', html)
                 elif template_id == "05-field-notes":
                     self.assertIn('data-app="svod"', html)
+                elif template_id == "06-loop-archive":
+                    self.assertIn('data-app="loop"', html)
                 else:
                     self.assertIn("data-auth", html)
                     self.assertIn('type="email"', html)
