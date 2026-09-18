@@ -125,6 +125,8 @@ export async function copy(text) {
 }
 export function icon(name) {
   const paths = {
+    appearance: "M21 13a9 9 0 0 1-10-10A9 9 0 1 0 21 13Z",
+    globe: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0M3 12h18M12 3a18 18 0 0 1 0 18 18 18 0 0 1 0-18",
     refresh: "M20 7a9 9 0 1 0 1 8M20 3v5h-5",
     home: "m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z",
     heart:

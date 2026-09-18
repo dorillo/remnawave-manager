@@ -8,6 +8,7 @@ import stat
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from importlib.resources import files
 from pathlib import Path
 
 from .adopt import adopt
@@ -46,7 +47,7 @@ from .runner import (
     sha256_file,
 )
 from .state import StateStore
-from .site_policy import NODE_CSP
+from .site_policy import NODE_CSP, upgrade_northline_policy
 
 POSTGRES_IMAGE = (
     "postgres:18.4@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636"
@@ -1063,11 +1064,14 @@ def install_node(
             install_dir=directory,
             stop_nginx_for_http01=False,
         )
-        _install_static_site(options.site_source, directory / "site")
+        northline = _install_node_site(options.site_source, directory / "site")
+        nginx_config = render_node_nginx(domain=domain, certificate=certificate)
+        if northline:
+            nginx_config = upgrade_northline_policy(nginx_config)
         atomic_write_text(env_path, render_node_env(options.secret_key), mode=0o600)
         atomic_write_text(
             nginx_path,
-            render_node_nginx(domain=domain, certificate=certificate),
+            nginx_config,
             mode=0o600,
         )
         atomic_write_text(
@@ -1711,6 +1715,19 @@ def _validate_site_source(source: Path) -> None:
     index = source / "index.html"
     if not index.is_file() or index.is_symlink():
         raise ValidationError("В шаблоне маскировочного сайта отсутствует index.html.")
+
+
+def _install_node_site(source: Path, target: Path) -> bool:
+    """Install static files and recognize the bundled Northline proxy contract."""
+    _install_static_site(source, target)
+    northline = Path(str(files("remnawave_manager").joinpath("data/disguises/01-northline")))
+    if source.resolve() != northline.resolve():
+        return False
+    shared = target / "shared"
+    shared.mkdir(exist_ok=True, mode=0o755)
+    for name in ("date-utils.js", "storage.js"):
+        atomic_copy(northline.parent / "shared" / name, shared / name, mode=0o644)
+    return True
 
 
 def _install_static_site(source: Path, target: Path) -> None:

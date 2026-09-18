@@ -419,3 +419,17 @@ body:has(dialog[open]) { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #181513; --surface: #24201d; --soft: #302a25; --hover: #40372f;
+  --ink: #f3eae2; --muted: #b9aca1; --line: #493d33;
+  --accent: #f08b66; --accent-dark: #ffac89; --accent-soft: #4b2c20;
+}
+[data-theme="dark"] .top { background: var(--surface); }
+[data-theme="dark"] .primary { background: #b83d1c; color: #fff; }
+[data-theme="dark"] .chips button[aria-pressed="true"] { color: var(--page); }
+
+.logo { transition: color .18s ease; }
+.logo:is(:hover, :focus-visible) { color: var(--accent); text-decoration: none; }
+@media (prefers-reduced-motion: reduce) { .logo { transition: none; } }

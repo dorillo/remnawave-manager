@@ -1413,3 +1413,16 @@ dialog > button {
     font-size: 16px;
   }
 }
+
+.header-actions { gap: 2px; }
+.header-actions .quiet { display: grid; place-items: center; width: 34px; height: 34px; min-height: 34px; min-width: 34px; flex: 0 0 34px; padding: 0; border: 0; border-radius: 8px; font-size: 12px; transition: background-color .18s, color .18s; }
+.header-actions .quiet:is(:hover,:focus-visible) { background: var(--soft); color: var(--accent); }
+.header-actions .account-button { margin-left: 6px; }
+@media (prefers-reduced-motion: reduce) { .header-actions .quiet { transition: none; } }
+
+.header-actions .quiet { font-size: 13px; line-height: 1; font-weight: 600; letter-spacing: 0; }
+.header-actions .quiet svg { width: 16px; height: 16px; display: block; }
+
+.brand { transition: color .18s ease; }
+.brand:is(:hover, :focus-visible) { color: var(--accent); text-decoration: none; }
+@media (prefers-reduced-motion: reduce) { .brand { transition: none; } }

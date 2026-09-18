@@ -171,15 +171,12 @@ const EN = new Map(Object.entries({
   'Что вам интересно?': 'What interests you?',
   'Выберите темы, которые вам близки. Из них мы соберём обзор.': 'Choose topics you care about. We will use them to build your feed.',
   'Выберите хотя бы одну тему': 'Select at least one topic',
-  'Все языки': 'All languages',
   'Русский': 'Russian',
-  'Язык публикаций': 'Post language',
   'Язык интерфейса': 'Interface language',
   'Проверить новые записи': 'Check for new posts',
   'Вы читаете последние доступные записи': 'You are reading the latest available posts',
   'Вы дошли до конца доступной ленты': 'You have reached the end of the available feed',
   'Пока нет записей': 'No posts yet',
-  'На выбранном языке записей пока нет. Смените язык или загрузите следующую страницу.': 'There are no posts in the selected language yet. Change the language or load the next page.',
   'Выберите другие темы или попробуйте обновить ленту.': 'Choose other topics or try refreshing the feed.',
   'То, чем хочется поделиться': 'Things worth sharing',
   'Здесь есть о чём поговорить.': 'There is plenty to talk about.',
@@ -310,7 +307,7 @@ const EN = new Map(Object.entries({
   'О Mastodon': 'About Mastodon',
   'Line собирает публичные записи, фотографии и обсуждения из Mastodon. Имена авторов, даты и счётчики берутся из оригинальных публикаций.': 'Line brings together public posts, photos, and discussions from Mastodon. Author names, dates, and counts come from the original posts.',
   'Создайте профиль, собирайте интересные истории и присоединяйтесь к разговорам.': 'Create an account, collect interesting stories, and join conversations.',
-  'Публичные записи загружаются с mastodon.social, изображения и видео — из медиахранилищ источников. Доступность материалов зависит от источника.': 'Public posts are loaded from mastodon.social; images and videos come from the sources’ media storage. Availability depends on the source.',
+  'Публичные записи загружаются с mastodon.ml через сервер сайта, изображения и видео — из медиахранилищ источников. Доступность материалов зависит от источника.': 'Public posts are loaded from mastodon.ml through this site’s server; images and videos come from the sources’ media storage. Availability depends on the source.',
 }));
 
 const PATTERNS = [
@@ -373,7 +370,7 @@ export function setInterfaceLanguage(next) {
 
 export function initializeInterfaceLanguage() {
   document.documentElement.lang = language;
-  document.title = translate('Line — люди и истории');
+
 }
 
 initializeInterfaceLanguage();

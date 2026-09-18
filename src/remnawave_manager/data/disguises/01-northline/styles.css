@@ -537,24 +537,6 @@ small {
 .chip:hover {
   background: #ddebe0;
 }
-.language-select {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  white-space: nowrap;
-  color: #89948d;
-}
-.language-select .icon {
-  width: 14px;
-  height: 14px;
-}
-.language-select select {
-  border: none;
-  background: transparent;
-  font-size: 11px;
-  padding: 6px 0;
-  max-width: 105px;
-}
 .card {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -2104,12 +2086,6 @@ small {
     font-size: 10px;
     padding: 4px 7px;
   }
-  .language-select {
-    flex-shrink: 0;
-  }
-  .language-select select {
-    font-size: 10px;
-  }
   .post-header {
     padding: 17px 16px 11px;
     gap: 10px;
@@ -2295,3 +2271,23 @@ small {
     scroll-behavior: auto !important;
   }
 }
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #131b18; --surface: #1c2722; --ink: #e5eee9; --muted: #a3b3aa;
+  --line: #34473c; --brand: #80c9a6; --brand-dark: #a1dfbf; --soft: #253b30;
+}
+[data-theme="dark"] :is(.topbar,.modal,.modal-header,.skip-link,.composer-attachment .icon-button) { background: var(--surface); }
+[data-theme="dark"] .primary { background: #24735b; color: #fff; }
+.interface-language button { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; color: var(--muted); border: 0; border-radius: 9px; background: transparent; cursor: pointer; transition: background-color .18s, color .18s; }
+.interface-language button svg { width: 20px; height: 20px; }
+
+.interface-language { width: auto; height: auto; padding: 0; border: 0; background: transparent; flex-shrink: 0; }
+.interface-language .icon { display: block; }
+[data-theme="dark"] :is(.global-search,.primary-nav a:hover,.primary-nav a.active,.welcome-banner,.rail-intro,.content-warning > summary,.sensitive-media > summary) { background: var(--soft); border-color: var(--line); }
+[data-theme="dark"] :is(.primary-nav a,.welcome-banner p,.rail-intro p,.eyebrow,.sensitive-media > summary) { color: var(--muted); }
+[data-theme="dark"] .primary-nav a.active { color: var(--brand); }
+[data-theme="dark"] :is(.skeleton-author,.skeleton-line,.skeleton-media) { background: linear-gradient(90deg, #25372e, #30463a, #25372e); background-size: 200% 100%; }
+
+.interface-language button:is(:hover,:focus-visible) { background: var(--soft); color: var(--brand); }
+@media (prefers-reduced-motion: reduce) { .interface-language button { transition: none; } }

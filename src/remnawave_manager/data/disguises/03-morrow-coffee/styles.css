@@ -1768,3 +1768,25 @@ details p {
     top: 48px;
   }
 }
+
+@media (min-width: 761px) {
+  .video-card { width: 100%; justify-content: center; min-width: 0; }
+  .video-canvas {
+    width: calc((100vh - 173px) * 0.5625);
+    width: calc((100dvh - 173px) * 0.5625);
+    flex: 0 0 auto;
+    max-width: calc(100% - 100px);
+  }
+  .video-actions { flex-shrink: 0; }
+}
+
+@media (min-width: 1550px) {
+  .video-canvas { width: calc((100vh - 181px) * 0.5625); width: calc((100dvh - 181px) * 0.5625); }
+}
+
+.topbar-actions .language-button { display: grid; place-items: center; width: 36px; height: 36px; min-width: 36px; padding: 0; flex: 0 0 36px; border-radius: 8px; letter-spacing: 0; transition: background-color .18s, color .18s; }
+.topbar-actions .language-button:is(:hover,:focus-visible) { background: var(--raised); color: var(--text); }
+@media (prefers-reduced-motion: reduce) { .topbar-actions .language-button { transition: none; } }
+
+.topbar-actions .language-button { font-size: 13px; line-height: 1; font-weight: 600; letter-spacing: 0; }
+.topbar-actions .language-button svg { width: 16px; height: 16px; display: block; }

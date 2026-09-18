@@ -1,5 +1,11 @@
 """Known node CSP revisions and narrowly scoped template upgrades."""
 
+from .northline_proxy import render_proxy
+
+
+NORTHLINE_PROXY = render_proxy()
+LEGACY_NORTHLINE_PROXY = render_proxy(legacy=True)
+
 LEGACY_NODE_CSP = (
     "default-src 'self'; img-src 'self' data: blob: https:; "
     "media-src 'self' data: blob: https:; style-src 'self'; script-src 'self'; "
@@ -401,3 +407,13 @@ SVOD_WIKIPEDIA_PROXY = r"""    location = /_svod/wikipedia/search {
     }
 
     location /_svod/ { return 404; }"""
+
+
+def upgrade_northline_policy(text: str) -> str:
+    """Add only fixed anonymous Mastodon reads to known managed configurations."""
+    upgraded = _upgrade_known_policy(text)
+    upgraded = upgraded.replace(LEGACY_NORTHLINE_PROXY, NORTHLINE_PROXY)
+    marker = f'add_header Content-Security-Policy "{NODE_CSP}" always;'
+    if NORTHLINE_PROXY in upgraded or marker not in upgraded:
+        return upgraded
+    return upgraded.replace(marker, f"{marker}\n\n{NORTHLINE_PROXY}")

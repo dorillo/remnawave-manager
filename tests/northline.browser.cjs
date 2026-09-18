@@ -59,6 +59,8 @@ const status = (id = '101', author = '1', overrides = {}) => ({
 });
 let offline = false;
 let added = false;
+let followingFresh = false;
+let followingGate = null;
 const apiRequests = [];
 const errors = [];
 const cspErrors = [];
@@ -90,7 +92,7 @@ let browser;
   });
   await context.route('**/*', async (route) => {
     const url = new URL(route.request().url());
-    if (url.origin === origin) {
+    if (url.origin === origin && !url.pathname.startsWith('/_northline/')) {
       const resource = decodeURIComponent(
         url.pathname.endsWith('/') ? url.pathname + 'index.html' : url.pathname,
       );
@@ -114,10 +116,13 @@ let browser;
       }
       return;
     }
-    if (url.hostname === 'mastodon.social' && url.pathname.startsWith('/api/')) {
+    if (url.origin === origin && url.pathname.startsWith('/_northline/')) {
+      const upstream = url.pathname.startsWith('/_northline/legacy/') ? 'mastodon.social' : 'mastodon.ml';
+      url.pathname = url.pathname.replace(/^\/_northline\/(mastodon|legacy)/, '');
       apiRequests.push(url.pathname + url.search);
       if (process.env.NORTHLINE_LIVE === '1') {
-        await route.continue();
+        const response = await route.fetch({ url: `https://${upstream}${url.pathname}${url.search}`, maxRedirects: 0 });
+        await route.fulfill({ response });
         return;
       }
       if (offline) {
@@ -125,12 +130,12 @@ let browser;
         return;
       }
       let data;
-      if (url.pathname.includes('/timelines/tag/')) {
+      if (/\/accounts\/[0-9]{5,}\/statuses$/.test(url.pathname)) {
         data = url.searchParams.has('max_id')
           ? [
               status('80', '3', {
-                language: 'en',
-                content: '<p>An older story, loaded with pagination.</p>',
+                language: 'ru',
+                content: '<p>Предыдущая русская запись из следующей страницы.</p>',
               }),
             ]
           : [
@@ -204,6 +209,22 @@ let browser;
         await route.fulfill({ status: 401, json: { error: 'Unauthorized' } });
         return;
       } else throw new Error('Unexpected API request ' + url);
+      if (url.searchParams.get('exclude_reblogs') === 'true') {
+        assert.equal(url.pathname, '/api/v1/accounts/1/statuses');
+        if (followingGate) {
+          const gate = followingGate;
+          followingGate = null;
+          gate.started();
+          await gate.wait;
+        }
+        if (url.searchParams.has('max_id')) {
+          data = [status('250', '1', { content: '<p>Предыдущая запись выбранного автора.</p>' })];
+        } else if (followingFresh) {
+          data.unshift(status('303', '1', { content: '<p>Новая запись выбранного автора.</p>' }));
+        }
+        data.push(status('240', '1', { reblog: status('230', '2', { content: '<p>Чужая запись в репосте.</p>' }) }));
+        data.push(status('220', '2', { content: '<p>Пост неподписанного автора.</p>' }));
+      }
       await route.fulfill({ json: data });
       return;
     }
@@ -219,7 +240,7 @@ let browser;
   });
   await page.goto(base);
   assert.equal(await page.locator('html').getAttribute('lang'), 'ru');
-  assert.equal(await page.getByLabel('Язык интерфейса').inputValue(), 'ru');
+  assert.equal(await page.locator('html').getAttribute('lang'), 'ru');
   assert.equal(await page.getByRole('link', { name: 'Line', exact: true }).locator('.brand-mark svg').count(), 1);
   await page
     .locator('.post')
@@ -260,14 +281,14 @@ let browser;
     );
     return;
   }
-  assert.equal(await page.locator('.post').count(), 3, 'Duplicates across topics must be removed');
-  assert.equal(await page.locator('.post[data-post-id="101"] .rich-text p').count(), 2);
+  assert.equal(await page.locator('.post').count(), 2, 'Duplicates and non-Russian posts must be removed');
+  assert.equal(await page.locator('.post[data-post-id="ml:101"] .rich-text p').count(), 2);
   assert.equal(await page.locator('.post-image').count(), 3, 'Mastodon image enum must render');
   assert.equal(
-    await page.locator('.post[data-post-id="101"] .rich-text a').getAttribute('href'),
+    await page.locator('.post[data-post-id="ml:101"] .rich-text a').getAttribute('href'),
     '#/tag/photography',
   );
-  const first = page.locator('.post[data-post-id="101"]');
+  const first = page.locator('.post[data-post-id="ml:101"]');
   await first.getByRole('button', { name: 'Сохранить запись', exact: true }).click();
   assert.equal(await page.getByRole('dialog').locator('.auth-reason').count(), 0);
   await page.getByRole('dialog').getByRole('button', { name: 'Регистрация' }).click();
@@ -290,25 +311,25 @@ let browser;
   assert(savedStyle.selected);
   assert.notEqual(savedStyle.background, 'rgba(0, 0, 0, 0)');
   assert.notEqual(savedStyle.fill, 'none');
-  await page.locator('.post[data-post-id="102"]').getByRole('button', { name: 'Проголосовать' }).click();
+  await page.locator('.post[data-post-id="ml:102"]').getByRole('button', { name: 'Проголосовать' }).click();
   await page.getByRole('dialog').getByLabel('Утро').check();
   await page.getByRole('dialog').getByRole('button', { name: 'Проголосовать' }).click();
-  await page.locator('.post[data-post-id="102"]').getByRole('button', { name: 'Изменить голос' }).waitFor();
+  await page.locator('.post[data-post-id="ml:102"]').getByRole('button', { name: 'Изменить голос' }).waitFor();
   await page.locator('.primary-nav').getByText('Профиль', { exact: true }).click();
   await page.locator('.my-line-tabs a[href="#/me?tab=saved"]').click();
-  await page.locator('.post[data-post-id="101"]').waitFor();
+  await page.locator('.post[data-post-id="ml:101"]').waitFor();
   assert.equal(await page.locator('.post').count(), 1);
   await page.reload();
-  await page.locator('.post[data-post-id="101"]').waitFor();
+  await page.locator('.post[data-post-id="ml:101"]').waitFor();
   await page.locator('.post').getByRole('button', { name: 'Действия с записью' }).click();
   await page.getByRole('button', { name: 'Добавить в избранное' }).click();
-  assert(await page.locator('.post[data-post-id="101"] .post-action[aria-label^="Нравится"]').evaluate((control) => control.classList.contains('selected')));
+  assert(await page.locator('.post[data-post-id="ml:101"] .post-action[aria-label^="Нравится"]').evaluate((control) => control.classList.contains('selected')));
   await page.locator('.my-line-tabs a[href="#/me?tab=likes"]').click();
   assert.equal(await page.locator('.post').count(), 1);
   await page.locator('.post').getByRole('link', { name: 'Открыть обсуждение, 2 ответов' }).click();
   await page.getByText('Какой красивый свет!', { exact: true }).waitFor();
   assert.equal(await page.locator('.thread-reply.nested').count(), 1);
-  const remoteReply = page.locator('.thread-reply').filter({ has: page.locator('.post[data-post-id="201"]') });
+  const remoteReply = page.locator('.thread-reply').filter({ has: page.locator('.post[data-post-id="ml:201"]') });
   await remoteReply.getByRole('button', { name: /^Ответить @/ }).click();
   await page.getByLabel('Текст комментария').fill('Ответ именно внешнему комментарию');
   await page.getByRole('dialog').getByRole('button', { name: 'Опубликовать' }).click();
@@ -316,9 +337,9 @@ let browser;
   await page.locator('.local-comment').filter({ hasText: 'Ответ именно внешнему комментарию' }).waitFor();
   assert(await page.locator('.thread').evaluate((thread) => {
     const nodes = [...thread.children];
-    const parent = nodes.findIndex((node) => node.querySelector('[data-post-id="201"]'));
+    const parent = nodes.findIndex((node) => node.querySelector('[data-post-id="ml:201"]'));
     const child = nodes.findIndex((node) => node.textContent.includes('Ответ именно внешнему комментарию'));
-    const other = nodes.findIndex((node) => node.querySelector('[data-post-id="202"]'));
+    const other = nodes.findIndex((node) => node.querySelector('[data-post-id="ml:202"]'));
     return parent >= 0 && child > parent && nodes[child].classList.contains('nested') && (other < 0 || child > other);
   }), 'Remote and local replies must share one thread after reload');
   await page.locator('.reply-prompt').getByRole('button', { name: 'Написать комментарий' }).click();
@@ -332,29 +353,60 @@ let browser;
   assert.equal(await page.getByText('Профиль в Mastodon', { exact: true }).count(), 0);
   await page.locator('.profile-top').getByRole('button', { name: 'Добавить автора' }).click();
   await page.locator('.sidebar-link').filter({ hasText: 'Выбранные авторы' }).click();
+  await page.getByRole('heading', { name: 'Ваши авторы', exact: true }).waitFor();
   await page.getByText('Публикация из профиля, отсутствующая в ленте.', { exact: true }).waitFor();
+  assert.equal(await page.locator('.post').count(), 1);
+  assert.equal(await page.getByText('Чужая запись в репосте.', { exact: true }).count(), 0);
+  assert.equal(await page.getByText('Пост неподписанного автора.', { exact: true }).count(), 0);
+  assert(apiRequests.some((url) => url.includes('exclude_reblogs=true')));
+  followingFresh = true;
+  await page.getByRole('button', { name: 'Проверить новые записи' }).click();
+  await page.getByRole('button', { name: /Новые записи · 1/ }).click();
+  await page.getByText('Новая запись выбранного автора.', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Показать ещё', exact: true }).click();
+  await page.getByText('Предыдущая запись выбранного автора.', { exact: true }).waitFor();
+  assert.equal(await page.getByText('Чужая запись в репосте.', { exact: true }).count(), 0);
+  // An old in-flight response must not repopulate the feed after unsubscribe.
+  let releaseFollowing;
+  const startedFollowing = new Promise((started) => {
+    followingGate = { started, wait: new Promise((resolve) => { releaseFollowing = resolve; }) };
+  });
+  await page.getByRole('button', { name: 'Проверить новые записи' }).click();
+  await startedFollowing;
+  await page.evaluate(() => { location.hash = '#/profile/ml:1'; });
+  await page.locator('.profile-top').getByRole('button', { name: 'В подборке', exact: true }).click();
+  await page.evaluate(() => { location.hash = '#/feed?tab=following'; });
+  await page.getByRole('heading', { name: 'Соберите свой круг авторов' }).waitFor();
+  assert.equal(await page.locator('.post').count(), 0);
+  const oldResponse = page.waitForResponse((response) => response.url().includes('exclude_reblogs=true'));
+  releaseFollowing();
+  await oldResponse;
+  await page.waitForTimeout(50);
+  assert.equal(await page.locator('.post').count(), 0);
+  await page.evaluate(() => { location.hash = '#/profile/ml:1'; });
+  await page.locator('.profile-top').getByRole('button', { name: 'Добавить автора', exact: true }).click();
+  await page.evaluate(() => { location.hash = '#/feed?tab=following'; });
+  await page.getByText('Публикация из профиля, отсутствующая в ленте.', { exact: true }).waitFor();
+
   await page.goto(base + '#/feed');
-  await page.locator('.post[data-post-id="101"]').waitFor();
+  await page.locator('.post[data-post-id="ml:101"]').waitFor();
   await page.waitForFunction(() => !document.querySelector('.page-heading button').disabled);
   added = true;
   await page.getByRole('button', { name: 'Проверить новые записи' }).click();
   await page.getByRole('button', { name: /Новые записи · 1/ }).waitFor();
-  assert.equal(await page.locator('.post[data-post-id="110"]').count(), 0);
+  assert.equal(await page.locator('.post[data-post-id="ml:110"]').count(), 0);
   await page.getByRole('button', { name: /Новые записи · 1/ }).click();
-  await page.locator('.post[data-post-id="110"]').waitFor();
+  await page.locator('.post[data-post-id="ml:110"]').waitFor();
   await page.getByRole('button', { name: 'Показать ещё', exact: true }).click();
-  await page.getByText('An older story, loaded with pagination.', { exact: true }).waitFor();
+  await page.getByText('Предыдущая русская запись из следующей страницы.', { exact: true }).waitFor();
   assert(apiRequests.some((url) => url.includes('max_id=')));
-  await page.getByLabel('Язык публикаций').selectOption('ru');
-  assert.equal(
-    await page.getByText('An older story, loaded with pagination.', { exact: true }).count(),
-    0,
-  );
+  assert.equal(await page.getByLabel('Язык публикаций').count(), 0);
+  assert.equal(await page.locator('.post[data-post-id="ml:103"]').count(), 0);
   await page.getByRole('button', { name: 'Мои интересы', exact: true }).click();
   await page.getByRole('dialog').getByRole('checkbox').first().uncheck();
   await page.getByRole('button', { name: 'Сохранить интересы' }).click();
   await page.locator('.post').first().waitFor();
-  await page.locator('.post[data-post-id="102"] .media-button').first().click();
+  await page.locator('.post[data-post-id="ml:102"] .media-button').first().click();
   await page.getByRole('dialog').getByRole('button', { name: 'Вперёд' }).click();
   assert.equal(await page.getByText('2 / 2', { exact: true }).count(), 1);
   await page.keyboard.press('Escape');
@@ -540,17 +592,24 @@ let browser;
   await page.getByRole('dialog').getByRole('button', { name: 'Удалить', exact: true }).click();
   assert.equal(await page.locator('.draft').count(), 0);
   await page.goto(base + '#/feed');
-  const repostTarget = page.locator('.post[data-post-id="101"]');
+  const repostTarget = page.locator('.post[data-post-id="ml:101"]');
   await repostTarget.waitFor();
   await repostTarget.getByRole('button', { name: /Поделиться в Line, / }).click();
   await page.locator('.primary-nav').getByText('Профиль', { exact: true }).click();
   await page.locator('.my-line-tabs a[href="#/me?tab=reposts"]').click();
-  await page.locator('.post[data-post-id="101"]').waitFor();
+  await page.locator('.post[data-post-id="ml:101"]').waitFor();
   await page.getByRole('button', { name: 'Выйти', exact: true }).click();
   await page.getByRole('dialog').getByRole('heading', { name: 'Выйти из профиля?' }).waitFor();
   await page.getByRole('dialog').getByRole('button', { name: 'Выйти', exact: true }).click();
   await page.getByRole('heading', { name: 'Ваш профиль ждёт' }).waitFor();
   assert.equal(await page.locator('.mini-profile strong').textContent(), 'Гость Line');
+  // Hash navigation retains the same application instance and exposes stale session caches.
+  await page.evaluate(() => { location.hash = '#/feed?tab=following'; });
+  await page.getByRole('heading', { name: 'Соберите свой круг авторов' }).waitFor();
+  assert.equal(await page.locator('.post').count(), 0);
+  await page.evaluate(() => { location.hash = '#/me'; });
+  await page.getByRole('heading', { name: 'Ваш профиль ждёт' }).waitFor();
+
   await page.getByRole('button', { name: 'Войти', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Регистрация' }).click();
   await page.getByRole('dialog').getByLabel('Логин', { exact: true }).fill('northline_test');
@@ -606,6 +665,77 @@ let browser;
     return { distinctLabels, locked, released: !document.body.classList.contains('dialog-open') };
   });
   assert.deepEqual(modalSafety, { distinctLabels: true, locked: true, released: true });
+  const dataContract = await page.evaluate(async () => {
+    const { normalizeMastodonStatus, normalizeAccount, isRussian, timeline, request } = await import('./northline-data.js');
+    const raw = { id: '7', account: { id: '9' }, content: '<p>Сегодня очень красивый день</p>', in_reply_to_id: '6' };
+    const current = normalizeMastodonStatus(raw);
+    const legacy = normalizeMastodonStatus(raw, 'mastodon.social');
+    const legacyRequest = await request('/api/v1/accounts/1', { force: true });
+    const legacyAccount = normalizeAccount(legacyRequest.data, legacyRequest.instance);
+    const accepted = [
+      isRussian({ language: 'ru', text: 'Привет' }),
+      isRussian({ language: 'ru-RU', text: 'Привет' }),
+      isRussian({ language: '', text: 'Сегодня очень красивый день' }),
+      isRussian({ language: 'en', text: 'Сегодня очень красивый день' }),
+      isRussian({ language: '', text: 'Hello world' }),
+      isRussian({ language: '', text: 'Це український текст' }),
+      isRussian({ language: '', text: 'https://example.org/photo' }),
+    ];
+    const originalFetch = window.fetch;
+    let active = 0;
+    let maximum = 0;
+    let failing = false;
+    const cacheBefore = Object.fromEntries(Object.keys(localStorage)
+      .filter((key) => key.startsWith('northline:api:'))
+      .map((key) => [key, localStorage.getItem(key)]));
+    try {
+      window.fetch = async (input) => {
+        active++;
+        maximum = Math.max(maximum, active);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        active--;
+        const url = new URL(input, location.origin);
+        const even = url.pathname.includes('/109384478461363898/');
+        if (failing && even) throw new Error('unavailable');
+        const boundary = Number(url.searchParams.get('max_id') || 41);
+        const records = Array.from({ length: 40 }, (_, index) => 40 - index)
+          .filter((id) => id < boundary && (id % 2 === 0) === even).slice(0, 20)
+          .map((id) => ({ ...raw, id: String(id), language: id % 3 === 0 ? 'en' : 'ru' }));
+        return new Response(JSON.stringify(records), { status: 200 });
+      };
+      const first = await timeline('photography', { force: true });
+      const second = await timeline('photography', { maxId: first.next, force: true });
+      const end = await timeline('photography', { maxId: second.next, force: true });
+      await Promise.all(Array.from({ length: 8 }, (_, index) =>
+        request(`/api/v1/accounts/ml%3A${900 + index}`, { force: true })));
+      failing = true;
+      // A new cursor has no stale cache, so this exercises partial source failure.
+      const partial = await timeline('photography', { maxId: '39', force: true });
+      failing = false;
+      const arbitraryTag = await timeline('constructor', { force: true });
+      return {
+        current: [current.id, current.account.id, current.replyTo],
+        legacy: [legacy.id, legacy.account.id, legacy.replyTo, legacyAccount.id],
+        accepted, maximum, cursors: [first.next, second.next, end.next],
+        ids: [...first.posts, ...second.posts].map((post) => post.id),
+        partial: [partial.partial, partial.stale, partial.next],
+        arbitraryTag: arbitraryTag.posts.length,
+      };
+    } finally {
+      window.fetch = originalFetch;
+      Object.keys(localStorage).filter((key) => key.startsWith('northline:api:'))
+        .forEach((key) => localStorage.removeItem(key));
+      Object.entries(cacheBefore).forEach(([key, value]) => localStorage.setItem(key, value));
+    }
+  });
+  assert.deepEqual(dataContract.current, ['ml:7', 'ml:9', 'ml:6']);
+  assert.deepEqual(dataContract.legacy, ['7', '9', '6', '1']);
+  assert.deepEqual(dataContract.accepted, [true, true, true, false, false, false, false]);
+  assert.equal(dataContract.maximum, 3);
+  assert.deepEqual(dataContract.cursors, ['21', '1', '']);
+  assert.deepEqual(dataContract.ids, Array.from({ length: 40 }, (_, i) => 40 - i).filter((id) => id % 3 !== 0).map((id) => `ml:${id}`));
+  assert.deepEqual(dataContract.partial, [true, true, '39']);
+  assert.equal(dataContract.arbitraryTag, 0);
   const retries = await page.evaluate(async () => {
     const { request } = await import('./northline-data.js');
     const originalFetch = window.fetch;
@@ -660,14 +790,14 @@ let browser;
       .then((text) => /\bnull\b|\bundefined\b|\bfalse\b/.test(text))),
     'Conditional rendering must not expose null/false',
   );
-  await page.getByLabel('Язык интерфейса').selectOption('en');
+  await page.getByLabel('Язык интерфейса').click();
   await page.getByRole('link', { name: 'Explore', exact: true }).waitFor();
   assert.equal(await page.locator('html').getAttribute('lang'), 'en');
-  assert.equal(await page.getByLabel('Interface language').inputValue(), 'en');
+  assert.equal(await page.locator('html').getAttribute('lang'), 'en');
   assert.equal(await page.title(), 'Explore — Line');
   for (const width of [320, 390, 720, 768, 1440]) {
     await page.setViewportSize({ width, height: 844 });
-    for (const route of ['feed', 'topics', 'authors', 'profile/1', 'post/101', 'me']) {
+    for (const route of ['feed', 'topics', 'authors', 'profile/ml:1', 'post/ml:101', 'me']) {
       await page.goto(base + '#/' + route);
       await page.locator('main').waitFor();
       await page.waitForTimeout(80);
@@ -691,7 +821,7 @@ let browser;
   await page.screenshot({ path: path.join(__dirname, '.tmp/northline-interface-en.png') });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: path.join(__dirname, '.tmp/northline-interface-en-mobile.png') });
-  await page.getByLabel('Interface language').selectOption('ru');
+  await page.getByLabel('Interface language').click();
   await page.getByRole('link', { name: 'Обзор', exact: true }).waitFor();
   await page.addInitScript(() => {
     Object.defineProperty(navigator, 'languages', { configurable: true, get: () => ['en-US'] });

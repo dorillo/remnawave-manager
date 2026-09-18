@@ -12,7 +12,7 @@ const origin = 'https://aster.test';
 const base = `${origin}/02-aster-observatory/`;
 const live = process.env.ASTER_LIVE === '1';
 const policy = execFileSync(
-  'python',
+  process.env.PYTHON || 'python3',
   ['-c', 'from remnawave_manager.site_policy import NODE_CSP; print(NODE_CSP)'],
   {
     env: { ...process.env, PYTHONPATH: path.resolve(__dirname, '../src') },
@@ -294,6 +294,7 @@ let browser;
   await page
     .getByRole('button', { name: 'Создать профиль', exact: true })
     .click();
+  await page.locator('dialog:not([open])').waitFor({ state: 'detached' });
   await page.locator('dialog input[name=name]').fill('Александр');
   await page.locator('dialog input[name=email]').fill('aster@example.test');
   await page.locator('dialog input[name=password]').fill('a-strong-passphrase');
@@ -554,9 +555,8 @@ let browser;
     0,
   );
   for (const lang of ['ru', 'en']) {
-    await page
-      .getByLabel(lang === 'ru' ? 'Язык интерфейса' : 'Язык интерфейса')
-      .selectOption(lang);
+    if (await page.locator('html').getAttribute('lang') !== lang)
+      await page.getByRole('button', { name: /Язык интерфейса|Interface language/ }).click();
     for (const width of [320, 360, 390, 720, 768, 1024, 1440]) {
       await page.setViewportSize({ width, height: 1000 });
       for (const route of [
@@ -719,6 +719,7 @@ let browser;
   await page
     .getByRole('button', { name: 'Create profile', exact: true })
     .click();
+  await page.locator('dialog:not([open])').waitFor({ state: 'detached' });
   await page.locator('dialog input[name=name]').fill('Second');
   await page.locator('dialog input[name=email]').fill('second@example.test');
   await page.locator('dialog input[name=password]').fill('another-passphrase');

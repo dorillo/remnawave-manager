@@ -1,3 +1,16 @@
+// Each visit starts with the system theme; a manual toggle applies to this visit.
+const appearanceMedia = matchMedia('(prefers-color-scheme: dark)');
+let appearance = 'system';
+function applyAppearance() {
+  document.documentElement.dataset.theme = appearance === 'system'
+    ? (appearanceMedia.matches ? 'dark' : 'light') : appearance;
+}
+appearanceMedia.addEventListener('change', applyAppearance);
+applyAppearance();
+function toggleTheme() {
+  appearance = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  applyAppearance();
+}
 import { comments } from './aster-comments.js';
 import {
   t,
@@ -45,6 +58,7 @@ const navigation = [
   'profile',
 ];
 const navigationIcons = {
+  globe: 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0M3 12h18M12 3a18 18 0 0 1 0 18 18 18 0 0 1 0-18',
   home: 'm3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z',
   catalog: 'M4 4h6v6H4ZM14 4h6v6h-6ZM4 14h6v6H4ZM14 14h6v6h-6Z',
   subscriptions:
@@ -311,23 +325,13 @@ function shell() {
       ),
     },
   );
-  const language = el(
-    'select',
-    {
-      'aria-label': t('interfaceLanguage'),
-      onchange: (event) => {
-        if (!setLanguage(event.target.value)) toast(t('storageError'));
-        render();
-      },
-    },
-    ['ru', 'en'].map((value) =>
-      el(
-        'option',
-        { value, selected: locale() === value },
-        value.toUpperCase(),
-      ),
-    ),
-  );
+  const language = button(locale() === 'ru' ? 'EN' : 'RU', () => {
+    if (!setLanguage(locale() === 'ru' ? 'en' : 'ru')) toast(t('storageError'));
+    render();
+  }, { class: 'icon-button', 'aria-label': t('interfaceLanguage') });
+  const appearanceButton = button('◐', toggleTheme, {
+    class: 'icon-button', 'aria-label': 'Switch theme / Сменить тему',
+  });
   const header = el(
     'header',
     { class: 'top' },
@@ -338,10 +342,10 @@ function shell() {
       link(
         [
           el('span', { class: 'logo-mark', 'aria-hidden': true }, '▶'),
-          el('span', {}, 'Астер', el('small', {}, 'Видео')),
+          el('span', {}, 'Aster'),
         ],
         '#/home',
-        { class: 'logo', 'aria-label': 'Астер Видео' },
+        { class: 'logo', 'aria-label': 'Aster' },
       ),
     ),
     form,
@@ -349,6 +353,7 @@ function shell() {
       'div',
       { class: 'top-actions' },
       language,
+      appearanceButton,
       button(
         [
           el(
@@ -1350,7 +1355,9 @@ function render() {
   const main = shell();
   const { parts, params } = route();
   const [page, id] = parts;
-  document.title = `${t(navigation.includes(page) ? page : 'videos')} — Астер Видео`;
+  const pageTitle = page === 'watch' ? findVideo(id)?.title || t('watch')
+    : t(navigation.includes(page) ? page : page === 'channel' ? 'channel' : page === 'user' ? 'profile' : 'home');
+  document.title = `Aster — ${pageTitle}`;
   if (loading) {
     main.append(
       el('div', { class: 'loading', role: 'status' }, t('loading')),

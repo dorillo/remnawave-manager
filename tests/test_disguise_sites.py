@@ -84,7 +84,7 @@ class DisguiseSiteTests(unittest.TestCase):
                 if template_id == "07-fokus-news":
                     self.assertIn("connect-src 'self' https://api.gdeltproject.org", html)
                 elif template_id == "01-northline":
-                    self.assertIn("connect-src 'self' https://mastodon.social", html)
+                    self.assertIn("connect-src 'self';", html)
                     self.assertIn('rel="icon" href="favicon.svg"', html)
                     self.assertTrue((site / "favicon.svg").is_file())
                 elif template_id == "02-aster-observatory":
@@ -162,8 +162,10 @@ class DisguiseSiteTests(unittest.TestCase):
                     self.assertIn('type="email"', html)
                     self.assertIn('type="password"', html)
                     self.assertIn("Войти", html)
+                # A public route title does not imply an authenticated interface.
+                body = html.split("</head>", 1)[-1]
                 for marker in authenticated_state_markers:
-                    self.assertNotIn(marker, html)
+                    self.assertNotIn(marker, body)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 const dictionary = {
   refreshFeed: ["Обновить ленту", "Refresh feed"],
-  brand: ["Морроу", "Morrow"],
+  brand: ["Morrow", "Morrow"],
   tagline: ["Мир в движении", "A world in motion"],
   forYou: ["Для вас", "For you"],
   following: ["Подписки", "Following"],

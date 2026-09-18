@@ -177,7 +177,7 @@ class MorrowPreviewHandler(SimpleHTTPRequestHandler):
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=5502)
+    parser.add_argument("--port", type=int, default=5503)
     args = parser.parse_args()
     server = ThreadingHTTPServer((args.host, args.port), MorrowPreviewHandler)
     print(f"Morrow preview: http://{args.host}:{args.port}/", flush=True)

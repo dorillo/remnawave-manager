@@ -1,6 +1,20 @@
+// Each visit starts with the system theme; a manual toggle applies to this visit.
+const appearanceMedia = matchMedia('(prefers-color-scheme: dark)');
+let appearance = 'system';
+function applyAppearance() {
+  document.documentElement.dataset.theme = appearance === 'system'
+    ? (appearanceMedia.matches ? 'dark' : 'light') : appearance;
+}
+appearanceMedia.addEventListener('change', applyAppearance);
+applyAppearance();
+function toggleTheme() {
+  appearance = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  applyAppearance();
+}
 import {
-  API,
   INSTANCE,
+  instanceForId,
+  isRussian,
   TOPICS,
   request,
   timeline,
@@ -167,6 +181,8 @@ function persist(state) {
 }
 function reloadReader() {
   reader = readReader();
+  feeds.delete('following');
+  feeds.delete('overview');
   for (const [id, post] of posts) if (post.local) posts.delete(id);
   for (const [id] of accounts) if (id.startsWith('local:')) accounts.delete(id);
   for (const post of reader.localPosts) remember([localPostObject(post)]);
@@ -364,16 +380,11 @@ const searchForm = el(
   ],
 );
 function interfaceLanguageSelect() {
-  const current = getInterfaceLanguage();
-  const select = el('select', {
-    'aria-label': 'Язык интерфейса',
-    title: 'Язык интерфейса',
-    onchange: (event) => setInterfaceLanguage(event.currentTarget.value),
-  }, [
-    el('option', { value: 'ru', selected: current === 'ru', text: 'RU' }),
-    el('option', { value: 'en', selected: current === 'en', text: 'EN' }),
+  return el('div', { class: 'interface-language' }, [
+    el('button', { type: 'button', 'aria-label': 'Язык интерфейса',
+      onclick: () => setInterfaceLanguage(getInterfaceLanguage() === 'ru' ? 'en' : 'ru') }, getInterfaceLanguage() === 'ru' ? 'EN' : 'RU'),
+    el('button', { type: 'button', 'aria-label': 'Switch theme / Сменить тему', onclick: toggleTheme }, '◐'),
   ]);
-  return el('label', { class: 'interface-language' }, [icon('globe'), select]);
 }
 replace(
   root,
@@ -397,7 +408,6 @@ replace(
     ),
     searchForm,
     el('div', { class: 'topbar-actions' }, [
-      el('span', { class: 'network-label', text: 'Открытая социальная сеть' }),
       interfaceLanguageSelect(),
       iconButton('Настроить ленту', 'settings', showPreferences),
       authSlot,
@@ -531,25 +541,6 @@ function tabs(items, active) {
     ),
   );
 }
-function languageSelect() {
-  const select = el(
-    'select',
-    {
-      'aria-label': 'Язык публикаций',
-      onchange: () => {
-        reader.language = select.value;
-        persist();
-        render();
-      },
-    },
-    [
-      ['all', 'Все языки'],
-      ['ru', 'Русский'],
-      ['en', 'English'],
-    ].map(([value, text]) => el('option', { value, selected: reader.language === value, text })),
-  );
-  return el('label', { class: 'language-select' }, [icon('globe'), select]);
-}
 function personRow(account) {
   return el('div', { class: 'person-row' }, [
     routeLink(
@@ -645,9 +636,11 @@ async function loadFeed(key, { more = false, stage = false } = {}) {
   const active = sources.filter((source) => !more || !feed.done.has(source));
   const results = await pooled(active, (source) =>
     key === 'following'
-      ? accountPosts(source, { maxId: more ? feed.cursors[source] : '' })
+      ? accountPosts(source, { maxId: more ? feed.cursors[source] : '', originalsOnly: true, force: !more })
       : timeline(source, { maxId: more ? feed.cursors[source] : '', force: !more }),
   );
+  // A subscription or local profile may have changed while requests were pending.
+  if (feeds.get(key) !== feed) return;
   const fetched = [];
   let failures = 0;
   let stale = false;
@@ -656,6 +649,10 @@ async function loadFeed(key, { more = false, stage = false } = {}) {
       fetched.push(...result.value.posts);
       stale ||= result.value.stale;
       if (!stage) {
+        if (result.value.partial) {
+          feed.done.delete(active[index]);
+          return;
+        }
         if (!result.value.next || (more && result.value.next === feed.cursors[active[index]]))
           feed.done.add(active[index]);
         else feed.done.delete(active[index]);
@@ -712,9 +709,8 @@ function renderFeed(key) {
   const tagged = key.startsWith('tag:');
   const following = key === 'following';
   const items = feed.posts.filter(
-    (post) =>
-      (key !== 'overview' || !post.account.bot) &&
-      (reader.language === 'all' || post.language.split('-')[0] === reader.language),
+    (post) => (key !== 'overview' || !post.account.bot) && isRussian(post) &&
+      (!following || (!post.boostedBy && Object.hasOwn(reader.follows, post.account.id))),
   );
   const moreAvailable = (
     following ? Object.keys(reader.follows) : tagged ? [key.slice(4)] : reader.topics
@@ -764,11 +760,10 @@ function renderFeed(key) {
       el(
         'div',
         { class: 'topic-chips' },
-        (tagged ? [] : TOPICS.filter((t) => reader.topics.includes(t.tag)).slice(0, 4)).map((t) =>
+        (tagged || following ? [] : TOPICS.filter((t) => reader.topics.includes(t.tag)).slice(0, 4)).map((t) =>
           routeLink(`tag/${t.tag}`, `#${t.tag}`, 'chip'),
         ),
       ),
-      languageSelect(),
     ]),
     el('div', { id: 'feed-updates', 'aria-live': 'polite' }),
     feed.error || feed.stale
@@ -792,9 +787,7 @@ function renderFeed(key) {
             following ? 'Соберите свой круг авторов' : 'Пока нет записей',
             following
               ? 'Добавляйте интересных людей в подборку — их публикации появятся здесь.'
-              : reader.language !== 'all'
-                ? 'На выбранном языке записей пока нет. Смените язык или загрузите следующую страницу.'
-                : 'Выберите другие темы или попробуйте обновить ленту.',
+              : 'Выберите другие темы или попробуйте обновить ленту.',
             following
               ? routeLink('authors', 'Найти авторов', 'button primary')
               : button('Настроить ленту', showPreferences, { className: 'button secondary' }),
@@ -1382,7 +1375,7 @@ function showGallery(images, start) {
 async function copyLink(post) {
   const url = post.local
     ? `${location.origin}${location.pathname}#/${postHref(post)}`
-    : post.url || `${API}/@${post.account.username}/${post.id}`;
+    : post.url || `https://${instanceForId(post.id)}/@${post.account.username}/${post.id.replace(/^ml:/, '')}`;
   try {
     await navigator.clipboard.writeText(url);
     toast('Ссылка скопирована');
@@ -1508,7 +1501,7 @@ async function renderProfile(id, version) {
       accountPosts(id, { pinned: true }),
     ]);
     if (results[0].status === 'rejected') throw results[0].reason;
-    const account = normalizeAccount(results[0].value.data);
+    const account = normalizeAccount(results[0].value.data, results[0].value.instance);
     accounts.set(id, account);
     const listing = results[1].status === 'fulfilled' ? results[1].value : { posts: [], next: '' };
     const pinned = !mediaOnly && results[2].status === 'fulfilled' ? results[2].value.posts : [];
@@ -1633,7 +1626,7 @@ async function renderDiscussion(id, version) {
         request(`/api/v1/statuses/${encodeURIComponent(id)}/context`),
       ]);
     if (results[0].status === 'fulfilled') {
-      post = normalizeMastodonStatus(results[0].value.data);
+      post = normalizeMastodonStatus(results[0].value.data, results[0].value.instance);
       if (post) remember([post]);
     }
     if (!post)
@@ -1641,8 +1634,12 @@ async function renderDiscussion(id, version) {
         ? results[0].reason
         : new Error('Запись больше недоступна');
     const context = results[1].status === 'fulfilled' ? results[1].value.data : {};
-    const ancestors = (context.ancestors || []).map(normalizeMastodonStatus).filter(Boolean);
-    const replies = (context.descendants || []).map(normalizeMastodonStatus).filter(Boolean);
+    const ancestors = (context.ancestors || [])
+      .map((raw) => normalizeMastodonStatus(raw, instanceForId(id)))
+      .filter(Boolean);
+    const replies = (context.descendants || [])
+      .map((raw) => normalizeMastodonStatus(raw, instanceForId(id)))
+      .filter(Boolean);
     remember([...ancestors, ...replies]);
       contexts.set(id, {
         ancestors,
@@ -1798,7 +1795,7 @@ function renderTopics() {
 async function renderAuthors(version) {
   if (accounts.size < 8) {
     try {
-      const result = await request('/api/v1/directory?local=false&order=active&limit=20');
+      const result = await request('/api/v1/directory?local=true&order=active&limit=20');
       if (Array.isArray(result.data))
         for (const raw of result.data) {
           const account = normalizeAccount(raw);
@@ -1868,8 +1865,10 @@ async function renderSearch(version) {
       const result = await request(
         `/api/v2/search?${new URLSearchParams({ q: query, resolve: 'false', limit: '20' })}`,
       );
-      const remotePosts = (result.data.statuses || []).map(normalizeMastodonStatus).filter(Boolean);
-      const people = (result.data.accounts || []).map(normalizeAccount);
+      const remotePosts = (result.data.statuses || [])
+        .map((raw) => normalizeMastodonStatus(raw))
+        .filter((post) => post && isRussian(post));
+      const people = (result.data.accounts || []).map((raw) => normalizeAccount(raw));
       remember(remotePosts);
       people.forEach((a) => accounts.set(a.id, a));
       searches.set(query, {
@@ -2392,7 +2391,7 @@ function showAbout() {
       text: 'Создайте профиль, собирайте интересные истории и присоединяйтесь к разговорам.',
     }),
     el('p', {
-      text: 'Публичные записи загружаются с mastodon.social, изображения и видео — из медиахранилищ источников. Доступность материалов зависит от источника.',
+      text: 'Публичные записи загружаются с mastodon.ml через сервер сайта, изображения и видео — из медиахранилищ источников. Доступность материалов зависит от источника.',
     }),
     externalLink('О Mastodon', 'https://joinmastodon.org', 'text-button'),
   );
@@ -2461,8 +2460,6 @@ window.addEventListener(
 window.addEventListener('storage', (event) => {
   if (event.key === `disguise:${AUTH_KEY}` && !document.querySelector('dialog[open]')) {
     reloadReader();
-    feeds.delete('following');
-    feeds.delete('overview');
     render();
   }
 });

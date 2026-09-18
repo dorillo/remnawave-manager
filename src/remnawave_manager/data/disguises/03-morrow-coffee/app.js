@@ -43,12 +43,8 @@ let account = null,
   feed = null,
   routeController = null,
   routeVersion = 0;
-let theme = "dark",
+let theme = "system",
   economy = false;
-try {
-  const old = JSON.parse(localStorage.getItem("morrow:appearance:v1"));
-  if (["system", "dark", "light"].includes(old?.theme)) theme = old.theme;
-} catch {}
 const themeMedia = matchMedia("(prefers-color-scheme: dark)");
 function applyTheme() {
   document.documentElement.dataset.theme =
@@ -79,8 +75,13 @@ function go(path) {
   if (location.hash === path) route();
   else location.hash = path;
 }
+function updateTitle() {
+  const page = (location.hash.slice(1).split('?')[0] || '/feed').split('/')[1];
+  const key = { feed: "forYou", following: "following", explore: "explore", search: "search", profile: "profile", settings: "settings", author: "profile", video: "myVideos" }[page] || "forYou";
+  document.title = t(key) + " — Morrow";
+}
 function renderChrome() {
-  document.title = t("brand") + " — " + t("tagline");
+  updateTitle();
   const logo = el(
     "a",
     { href: "#/feed", class: "brand", "aria-label": t("brand") },
@@ -133,6 +134,12 @@ function renderChrome() {
     },
     "language-button",
   );
+  language.setAttribute("aria-label", t("language"));
+  const appearanceButton = button(icon("appearance"), () => {
+    theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    applyTheme();
+  }, "language-button");
+  appearanceButton.setAttribute("aria-label", t("theme"));
   header.replaceChildren(
     el(
       "a",
@@ -144,6 +151,7 @@ function renderChrome() {
       "div",
       { class: "topbar-actions" },
       language,
+      appearanceButton,
       account
         ? button(
             store?.data.profile.name || account.login,
@@ -1097,21 +1105,10 @@ function settingsPage() {
     "div",
     { class: "settings-content" },
     el("h1", {}, t("settings")),
-    field(
-      t("language"),
-      select(
-        [
-          ["ru", "Русский"],
-          ["en", "English"],
-        ],
-        getLanguage(),
-        (v) => {
-          setLanguage(v);
-          renderChrome();
-          settingsPage();
-        },
-      ),
-    ),
+    field(t("language"), button(getLanguage() === "ru" ? "EN" : "RU", () => {
+      setLanguage(getLanguage() === "ru" ? "en" : "ru");
+      route();
+    }, "language-button")),
     field(
       t("theme"),
       select(
@@ -1191,6 +1188,7 @@ async function route() {
   const hash = location.hash.slice(1) || "/feed";
   const [path, queryString] = hash.split("?");
   const parts = path.split("/").filter(Boolean);
+  updateTitle();
   try {
     if (parts[0] === "feed" || !parts.length) {
       let page = 1;

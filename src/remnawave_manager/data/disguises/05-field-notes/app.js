@@ -680,7 +680,7 @@ async function articlePage(title, section, token, signal) {
     main.replaceChildren(el("div", { class: "article-layout" }, toc, body));
     tocState = { headings, buttons: [...tocNav.querySelectorAll("button")] };
     updateToc();
-    document.title = article.title + " — " + t("brand");
+    document.title = "Svod — " + article.title;
     const old = account
       ? await store
           .get("history", `${account.id}:${article.pageid}`)
@@ -1045,10 +1045,13 @@ async function flushReading() {
   }
 }
 async function render() {
+  const r = parseRoute();
+  document.title = "Svod — " + (r.path === "article" && r.q ? r.q : t(r.path));
   const token = ++epoch;
   controller?.abort();
   controller = new AbortController();
   tocState = null;
+  if (!main) shell();
   await flushReading();
   try {
     account = await store.current();
@@ -1059,8 +1062,7 @@ async function render() {
   }
   if (token !== epoch) return;
   shell();
-  const r = parseRoute();
-  document.title = t("brand") + " — " + t("article");
+
   if (lastRoute !== location.hash) {
     scrollTo(0, 0);
     lastRoute = location.hash;

@@ -1,3 +1,16 @@
+// Each visit starts with the system theme; a manual toggle applies to this visit.
+const appearanceMedia = matchMedia('(prefers-color-scheme: dark)');
+let appearance = 'system';
+function applyAppearance() {
+  document.documentElement.dataset.theme = appearance === 'system'
+    ? (appearanceMedia.matches ? 'dark' : 'light') : appearance;
+}
+appearanceMedia.addEventListener('change', applyAppearance);
+applyAppearance();
+function toggleTheme() {
+  appearance = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  applyAppearance();
+}
 import { feed, cachedFeed, search, spaces, detail } from './answers-data.js';
 import { read, change, newId, watch } from './answers-store.js';
 import { currentUser, register, login, logout } from './answers-auth.js';
@@ -45,7 +58,7 @@ function rememberRemoteProfile(person) {
 function restoreRemoteProfiles() {
   try { for (const person of JSON.parse(localStorage.getItem(REMOTE_PROFILES)||'[]')) if (Number.isSafeInteger(person?.id) && person.id>0 && typeof person.name==='string') remoteProfiles.set(String(person.id),{id:person.id,name:person.name.slice(0,80),avatar:typeof person.avatar==='string'?person.avatar:''}); } catch {}
 }
-const iconPaths = { home:'M3 10.8 12 3l9 7.8v9.7a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 20.5zM9 22v-6h6v6', file:'M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6', bookmark:'M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z', user:'M20 21a8 8 0 0 0-16 0M12 13a5 5 0 1 0 0-10 5 5 0 0 0 0 10z', plus:'M12 5v14M5 12h14', search:'m21 21-4.4-4.4M19 11a8 8 0 1 1-16 0 8 8 0 0 1 16 0z', arrow:'M5 12h14M13 6l6 6-6 6', up:'M12 4 4 12h5v8h6v-8h5z', down:'M12 20 4 12h5V4h6v8h5z', comment:'M21 11.5a8 8 0 0 1-8.5 8A9.7 9.7 0 0 1 8 18.4L3 20l1.6-4.3A8 8 0 1 1 21 11.5z', reply:'M9 8 4 12l5 4M4 12h9a7 7 0 0 1 7 7', edit:'M4 20h4l11-11a2.8 2.8 0 0 0-4-4L4 16zM13.5 6.5l4 4', trash:'M4 7h16M10 11v6M14 11v6M6 7l1 14h10l1-14M9 7V4h6v3', check:'m5 12 4 4L19 6', close:'M6 6l12 12M18 6 6 18', attach:'M21.4 11.6 12 21a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 1 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5' };
+const iconPaths = { appearance:'M21 13a9 9 0 0 1-10-10A9 9 0 1 0 21 13Z', globe:'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0M3 12h18M12 3a18 18 0 0 1 0 18 18 18 0 0 1 0-18', home:'M3 10.8 12 3l9 7.8v9.7a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 20.5zM9 22v-6h6v6', file:'M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6', bookmark:'M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z', user:'M20 21a8 8 0 0 0-16 0M12 13a5 5 0 1 0 0-10 5 5 0 0 0 0 10z', plus:'M12 5v14M5 12h14', search:'m21 21-4.4-4.4M19 11a8 8 0 1 1-16 0 8 8 0 0 1 16 0z', arrow:'M5 12h14M13 6l6 6-6 6', up:'M12 4 4 12h5v8h6v-8h5z', down:'M12 20 4 12h5V4h6v8h5z', comment:'M21 11.5a8 8 0 0 1-8.5 8A9.7 9.7 0 0 1 8 18.4L3 20l1.6-4.3A8 8 0 1 1 21 11.5z', reply:'M9 8 4 12l5 4M4 12h9a7 7 0 0 1 7 7', edit:'M4 20h4l11-11a2.8 2.8 0 0 0-4-4L4 16zM13.5 6.5l4 4', trash:'M4 7h16M10 11v6M14 11v6M6 7l1 14h10l1-14M9 7V4h6v3', check:'m5 12 4 4L19 6', close:'M6 6l12 12M18 6 6 18', attach:'M21.4 11.6 12 21a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 1 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5' };
 function icon(name) { return `<svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${iconPaths[name] || iconPaths.file}"/></svg>`; }
 
 function toast(message) {
@@ -116,11 +129,11 @@ function shell(page, content) {
   const nav = [['home','home',t('home')],['local','file',t('local')],['saved','bookmark',t('saved')],['profile','user',t('profile')]];
   const spacesHtml = spaceList.slice(0,8).map((x) => `<a class="space-link" href="#/space/${e(x.path)}">${e(x.name)}</a>`).join('');
   root.innerHTML = `<header class="site-head"><div class="head-inner">
-    <a class="brand" href="#/home" aria-label="Спрос"><span class="brand-mark">?</span><span class="brand-name">спр<b>ос</b></span></a>
+    <a class="brand" href="#/home" aria-label="Spros"><span class="brand-mark">?</span><span class="brand-name">Spr<b>os</b></span></a>
     <form class="head-search" data-form="search">${icon('search')}<input name="term" type="search" placeholder="${e(t('search'))}" maxlength="120" aria-label="${e(t('search'))}" value="${page.page === 'search' ? e(page.term) : ''}"><button aria-label="${e(t('searchButton'))}" title="${e(t('searchButton'))}">${icon('arrow')}</button></form>
-    <div class="head-actions"><select class="lang-select" data-change="language" aria-label="${e(t('language'))}"><option value="ru" ${lang()==='ru'?'selected':''}>RU</option><option value="en" ${lang()==='en'?'selected':''}>EN</option></select>
+    <div class="head-actions"><button class="icon-btn" data-action="language" aria-label="${e(t('language'))}">${lang() === 'ru' ? 'EN' : 'RU'}</button><button class="icon-btn" data-action="theme" aria-label="${lang()==='ru'?'Сменить тему':'Switch theme'}">${icon('appearance')}</button>
     ${person ? `<button class="ghost" data-action="profile" aria-label="${e(t('profile'))}">${e(person.name.slice(0,12))}</button>` : `<button class="ghost" data-action="login">${e(t('login'))}</button>`}</div></div></header>
-    <div class="layout"><aside class="side"><nav class="nav-box" aria-label="Navigation">${nav.map(([path,icon,label]) => navLink(path,icon,label,page.page===path)).join('')}</nav><button class="primary side-ask" data-action="ask">${icon('plus')}${e(t('ask'))}</button><h2 class="side-label">${e(t('explore'))}</h2>${spacesHtml}<div class="side-foot">© ${new Date().getFullYear()} Спрос</div></aside>
+    <div class="layout"><aside class="side"><nav class="nav-box" aria-label="Navigation">${nav.map(([path,icon,label]) => navLink(path,icon,label,page.page===path)).join('')}</nav><button class="primary side-ask" data-action="ask">${icon('plus')}${e(t('ask'))}</button><h2 class="side-label">${e(t('explore'))}</h2>${spacesHtml}<div class="side-foot">© ${new Date().getFullYear()} Spros</div></aside>
     <main class="main" id="main">${content}</main></div>
     <nav class="mobile-nav" aria-label="Mobile navigation">${nav.map(([path,icon,label]) => mobileLink(path,icon,label,page.page===path)).join('')}</nav>${modalHtml()}`;
   if (modal) root.querySelector('.modal [autofocus]')?.focus();
@@ -309,15 +322,15 @@ function restoreDrafts(drafts) {
   }
 }
 function render(preserveDrafts = true) {
+  const page = route();
+  document.title = `Spros — ${page.page==='question' ? (page.id.startsWith('local:') ? state.questions.find((x)=>x.id===page.id)?.title : details.get(page.id)?.question.title) || 'Spros' : page.page==='home' ? t('home') : page.page==='space' ? spaceList.find((x)=>x.path===page.slug)?.name || t('explore') : t(page.page==='search'?'searchButton':page.page==='user'?'profile':page.page)}`;
   const viewKey = JSON.stringify([location.hash || '#/home', modal, modalPayload?.item?.id || '', user()?.id || '']);
   if (preserveDrafts && modal && viewKey === renderedViewKey && root.querySelector('.modal')) return;
   const drafts = preserveDrafts && viewKey === renderedViewKey ? captureDrafts() : [];
-  const page = route();
   let content = page.page === 'home' ? renderHome() : page.page === 'local' ? renderLocal() : page.page === 'saved' ? renderSaved() : page.page === 'profile' ? renderProfile(page) : page.page === 'user' ? renderUser(page) : page.page === 'search' ? renderSearch(page.term) : page.page === 'space' ? renderSpace(page.slug) : renderDetail(page);
   shell(page, content);
   restoreDrafts(drafts);
   renderedViewKey = viewKey;
-  document.title = `${page.page==='question' ? (page.id.startsWith('local:') ? state.questions.find((x)=>x.id===page.id)?.title : details.get(page.id)?.question.title) || 'Спрос' : page.page==='home' ? 'Спрос' : t(page.page==='search'?'searchButton':page.page==='user'?'profile':page.page)} — ${lang()==='ru'?'вопросы и ответы':'questions and answers'}`;
 }
 function openModal(type, payload = null) { returnFocus = document.activeElement; modal = type; modalPayload = payload; render(); }
 function closeModal() { modal = ''; modalPayload = null; render(); returnFocus?.focus?.(); }
@@ -401,6 +414,8 @@ root.addEventListener('click', async (event) => {
   if (event.target.matches('[data-backdrop]')) { closeModal(); return; }
   const button = event.target.closest('[data-action]'); if (!button) return;
   const action = button.dataset.action;
+  if (action==='language') { setLang(lang()==='ru'?'en':'ru'); render(); return; }
+  if (action==='theme') { toggleTheme(); return; }
   if (action==='close') return closeModal();
   if (action==='switch-auth') return openModal(modal==='login'?'register':'login');
   if (action==='login') return openModal('login');
@@ -476,6 +491,7 @@ root.addEventListener('focusin', (event) => {
 });
 watch(async()=>{ try { state=await read(); render(); } catch {} });
 
+render();
 try { state = await read(); } catch { toast(t('noStorage')); }
 restoreRemoteProfiles();
 history.replaceState({ ...(history.state || {}), answersRouteIndex:routeIndex },'',location.href);

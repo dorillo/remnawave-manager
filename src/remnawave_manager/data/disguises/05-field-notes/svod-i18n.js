@@ -1,6 +1,6 @@
 const words = {
   storageTitle: ["Данные недоступны", "Data is unavailable"],
-  brand: ["Свод", "Svod"],
+  brand: ["Svod", "Svod"],
   tagline: ["Открывая знания", "Discovering knowledge"],
   home: ["Главная", "Home"],
   search: ["Поиск", "Search"],
@@ -98,7 +98,7 @@ const words = {
   geography: ["География", "Geography"],
   past: ["История", "History"],
   selected: ["Статьи для знакомства", "Explore these articles"],
-  selectedHint: ["Подборка редакции «Свода»", "Selected by the Svod editors"],
+  selectedHint: ["Подборка редакции Svod", "Selected by the Svod editors"],
   read: ["Читать статью →", "Read article →"],
   continue: ["Продолжить чтение", "Continue reading"],
   collection: ["Коллекция", "Collection"],
@@ -154,7 +154,7 @@ const words = {
   menu: ["Навигация", "Navigation"],
   reading: ["Чтение", "Reading"],
   aboutText: [
-    "«Свод» — пространство для чтения, исследования связей и создания собственной библиотеки знаний.",
+    "Svod — пространство для чтения, исследования связей и создания собственной библиотеки знаний.",
     "Svod is a place to read, explore connections and build your own library of knowledge.",
   ],
   russian: ["Статьи на русском языке", "Articles are in Russian"],
@@ -184,9 +184,7 @@ try {
 export let lang = preferences.lang === "en" ? "en" : "ru";
 export const t = (key) => words[key]?.[lang === "en" ? 1 : 0] || key;
 export const prefs = {
-  theme: ["light", "dark", "system"].includes(preferences.theme)
-    ? preferences.theme
-    : "system",
+  theme: "system",
   font: preferences.font === "large" ? "large" : "standard",
   width: preferences.width === "wide" ? "wide" : "standard",
 };

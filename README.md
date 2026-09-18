@@ -349,7 +349,7 @@ python3 scripts/preview_answers.py
 ```
 
 ASTER запускается отдельным preview-сервером с прокси поиска RUTUBE. По умолчанию
-он использует порт `5501`; preview Морроу по умолчанию работает на `5502`:
+он использует порт `5502`; preview Морроу по умолчанию работает на `5503`:
 
 ```bash
 python3 scripts/preview_aster.py
