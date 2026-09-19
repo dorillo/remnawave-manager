@@ -1,5 +1,9 @@
-import { escape as e, route } from "./fokus-data.js";
-import { t, date } from "./fokus-i18n.js";
+import {
+  escape as e,
+  route,
+  inert,
+} from "./fokus-data.js?v=20260919-release";
+import { t, date } from "./fokus-i18n.js?v=20260919-release";
 const paths = {
   search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/>',
   arrow: '<path d="M5 12h14m-6-6 6 6-6 6"/>',
@@ -20,12 +24,65 @@ const paths = {
 };
 export const icon = (name) =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.arrow}</svg>`;
+// Presentation only: keep source addresses in the data layer for fetching.
+export function cleanSourceText(value = "") {
+  return String(value)
+    .replace(/\s*[-–—]\s*(?:РИА Новости|RIA Novosti)\.\s*/gi, ". ")
+    .replace(/^(?:РИА Новости|RIA Novosti)\.\s*/i, "")
+    .replace(/(?:https?:\/\/)?(?:www\.)?ria\.ru(?:\/[^\s<>"«»]*)?/gi, "")
+    .replace(
+      /(?<![\p{L}\p{N}])(?:РИА(?:\s+Новости)?|RIA(?:\s+Novosti)?)(?![\p{L}\p{N}])/giu,
+      "",
+    )
+    .replace(/[ \t]+([,.;:!?])/g, "$1")
+    .replace(/[ \t]{2,}/g, " ");
+}
+export function cleanSourceMarkup(html) {
+  const fragment = inert(html);
+  const walker = document.createTreeWalker(fragment, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode())
+    walker.currentNode.textContent = cleanSourceText(
+      walker.currentNode.textContent,
+    );
+  for (const el of fragment.querySelectorAll("[alt],[title],[aria-label]")) {
+    for (const attr of ["alt", "title", "aria-label"]) {
+      if (el.hasAttribute(attr))
+        el.setAttribute(attr, cleanSourceText(el.getAttribute(attr)));
+    }
+  }
+  for (const link of fragment.querySelectorAll("a[href]")) {
+    try {
+      const url = new URL(link.getAttribute("href"), location.href);
+      if (url.hostname === "ria.ru" || url.hostname.endsWith(".ria.ru"))
+        link.replaceWith(...link.childNodes);
+    } catch {}
+  }
+  const template = document.createElement("template");
+  template.content.append(fragment);
+  return template.innerHTML;
+}
 export const button = (action, label, ico = "", cls = "", extra = "") =>
   `<button type="button" class="${cls}" data-action="${action}" ${extra}>${ico ? icon(ico) : ""}<span>${e(label)}</span></button>`;
 export const state = (message, action = "") =>
   `<div class="empty-state"><span class="state-symbol">${icon("chat")}</span><p>${e(message)}</p>${action ? button(action, t("retry"), "refresh", "secondary") : ""}</div>`;
 export function card(a, index = 0, kind = "card") {
-  return `<article class="${kind}"><a class="story-link" href="${e(route(a))}">${a.image ? `<div class="story-image"><img src="${e(a.image)}" alt="" loading="${index === 0 ? "eager" : "lazy"}" referrerpolicy="no-referrer"></div>` : ""}<div class="story-copy"><div class="eyebrow">${e(t(a.category) || t("source"))}</div><h2>${e(a.title)}</h2><div class="meta">${e(date(a.published)) || e(t("source"))}<span>${a.count !== undefined && a.count !== null ? icon("chat") + " " + e(a.count) : icon("arrow")}</span></div></div></a></article>`;
+  return `<article class="${kind}"><a class="story-link" href="${e(route(a))}">${a.image ? `<div class="story-image"><img src="${e(a.image)}" alt="" loading="${index === 0 ? "eager" : "lazy"}" referrerpolicy="no-referrer"></div>` : ""}<div class="story-copy"><div class="eyebrow">${e(t(a.category) || t("source"))}</div><h2>${e(cleanSourceText(a.title))}</h2><div class="meta">${e(date(a.published)) || e(t("source"))}<span>${a.count !== undefined && a.count !== null ? icon("chat") + " " + e(a.count) : icon("arrow")}</span></div></div></a></article>`;
+}
+// Pair short text stories in the same column as one illustrated story.
+export function newsGrid(items, kind = "card") {
+  const columns = [];
+  let textColumn = null;
+  items.forEach((item, index) => {
+    if (!item.image && textColumn) {
+      textColumn.push(card(item, index, kind));
+      textColumn = null;
+    } else {
+      const column = [card(item, index, kind)];
+      columns.push(column);
+      if (!item.image) textColumn = column;
+    }
+  });
+  return `<div class="news-grid">${columns.map((column) => `<div class="news-column">${column.join("")}</div>`).join("")}</div>`;
 }
 export const stale = (data) =>
   data?.stale
@@ -57,13 +114,16 @@ export function closeModal() {
   document.querySelector("#modal").close();
   returnFocus?.focus();
 }
-export function confirmAction(title, description = "") {
+export function confirmAction({ title, confirmLabel, description = "" }) {
+  if (!confirmLabel?.trim())
+    throw new Error("Confirmation action label is required");
   return new Promise((resolve) => {
     modal(
-      `<h2 id="dialog-title">${e(title)}</h2>${description ? `<p class="muted">${e(description)}</p>` : ""}<div class="dialog-actions">${button("close", t("cancel"), "", "secondary")}${button("confirm", t("submit"), "", "primary")}</div>`,
+      `<h2 id="dialog-title">${e(title)}</h2>${description ? `<p class="muted">${e(description)}</p>` : ""}<div class="dialog-actions">${button("close", t("cancel"), "", "secondary")}${button("confirm", confirmLabel, "", "primary")}</div>`,
     );
     const d = document.querySelector("#modal");
     const yes = d.querySelector('[data-action="confirm"]');
+    d.querySelector('.dialog-actions [data-action="close"]').focus();
     const close = () => {
       d.removeEventListener("close", close);
       resolve(false);

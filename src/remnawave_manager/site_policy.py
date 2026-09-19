@@ -438,6 +438,9 @@ FOKUS_RIA_PROXY = render_fokus_proxy()
 def upgrade_fokus_policy(text: str) -> str:
     """Add read-only Fokus routes to known managed configurations."""
     upgraded = _upgrade_known_policy(text)
+    previous = render_fokus_proxy(include_search=False)
+    if previous in upgraded:
+        return upgraded.replace(previous, FOKUS_RIA_PROXY)
     marker = f'add_header Content-Security-Policy "{NODE_CSP}" always;'
     if FOKUS_RIA_PROXY in upgraded or marker not in upgraded:
         return upgraded

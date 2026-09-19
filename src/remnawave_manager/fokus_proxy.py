@@ -9,6 +9,7 @@ CSP = "default-src 'self'; connect-src 'self'; img-src 'self' data: blob:; style
 ROUTES = [
     (r'/ria/feed', '/export/rss2/archive/index.xml', '', False),
     (r'/ria/home', '/', '', False),
+    (r'/ria/search', '/services/search/getmore/', r'query=(?:[A-Za-z0-9._~+*-]|%[A-Fa-f0-9]{2}){1,480}&offset=[0-9]{1,7}', False),
     (rf'/ria/section/({SECTIONS})', r'/\1/', '', False),
     (rf'/ria/more/({SECTIONS})', r'/services/\1/more.html', r'id=[0-9]{1,12}&date=[0-9]{8}T[0-9]{6}(?:&view=tags)?', False),
     (r'/ria/article/([0-9]{8})/([a-z0-9-]{1,160}-[0-9]{1,12}\.html)', r'/\1/\2', '', False),
@@ -31,9 +32,11 @@ def upstream(path: str, query: str) -> str | None:
     return None
 
 
-def render_proxy() -> str:
+def render_proxy(*, include_search: bool = True) -> str:
     blocks = []
     for pattern, target, args, media in ROUTES:
+        if not include_search and pattern == r'/ria/search':
+            continue
         # Named captures survive the query-validation regular expression.
         n = 0
         def capture(match: re.Match) -> str:
@@ -47,9 +50,10 @@ def render_proxy() -> str:
         content = '' if media else '''        proxy_hide_header Content-Type;
         add_header Content-Type "text/plain; charset=utf-8" always;
 '''
+        unsafe_uri = r'^[^?]*(?:%|\.\.|//)' if pattern == r'/ria/search' else r'(?:%|\.\.|//)'
         blocks.append(f'''    location ~ "^/_fokus{nginx_pattern}$" {{
         if ($request_method != GET) {{ return 405; }}
-        if ($request_uri ~ "(?:%|\\.\\.|//)") {{ return 400; }}
+        if ($request_uri ~ "{unsafe_uri}") {{ return 400; }}
         {query_check}
         rewrite ^ {destination} break;
         proxy_pass https://{host};

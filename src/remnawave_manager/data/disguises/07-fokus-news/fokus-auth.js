@@ -1,4 +1,4 @@
-import { change, read, signIn } from "./fokus-store.js";
+import { change, read, signIn } from "./fokus-store.js?v=20260919-release";
 const encode = (b) => btoa(String.fromCharCode(...b));
 async function derive(password, salt) {
   if (!crypto.subtle) throw new Error("secureError");

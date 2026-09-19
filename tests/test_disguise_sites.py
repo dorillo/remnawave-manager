@@ -100,8 +100,8 @@ class DisguiseSiteTests(unittest.TestCase):
                 else:
                     self.assertIn("connect-src 'none'", html)
                 self.assertEqual(parser.inline_scripts, 0)
-                self.assertEqual(parser.assets.count("styles.css"), 1)
-                self.assertEqual(parser.assets.count("app.js"), 1)
+                self.assertEqual([asset.split("?", 1)[0] for asset in parser.assets].count("styles.css"), 1)
+                self.assertEqual([asset.split("?", 1)[0] for asset in parser.assets].count("app.js"), 1)
                 self.assertGreater(len(javascript), 500)
                 self.assertNotRegex(css, r"@import|url\([\"']?https?://")
                 self.assertNotRegex(javascript, r"\bfetch\s*\(|XMLHttpRequest|WebSocket")

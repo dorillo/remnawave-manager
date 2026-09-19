@@ -7,7 +7,7 @@ const empty = () => ({
   history: [],
   cache: [],
 });
-let connection;
+let connection, opening;
 export let available = true;
 export const channel =
   typeof BroadcastChannel === "function" ? new BroadcastChannel(DB) : null;
@@ -31,6 +31,22 @@ export function signOut() {
   } catch {
     throw new Error("storage");
   }
+}
+// Remove the entire local thread, including replies from other local profiles.
+function removeThreads(state, ids) {
+  if (!ids.length) return;
+  const removed = new Set(ids.map((id) => `local:${id}`));
+  const children = new Map();
+  for (const c of state.comments) {
+    const parent = c.parent?.ref;
+    if (!children.has(parent)) children.set(parent, []);
+    children.get(parent).push(`local:${c.id}`);
+  }
+  for (const ref of removed) {
+    for (const child of children.get(ref) || []) removed.add(child);
+  }
+  state.comments = state.comments.filter((c) => !removed.has(`local:${c.id}`));
+  state.reactions = state.reactions.filter((r) => !removed.has(r.target));
 }
 function normalize(value) {
   const result = empty();
@@ -59,6 +75,15 @@ function normalize(value) {
       typeof x.text === "string" &&
       article(x.article),
   );
+  for (const comment of result.comments) {
+    if (
+      comment.parent &&
+      (typeof comment.parent.ref !== "string" ||
+        typeof comment.parent.name !== "string" ||
+        typeof comment.parent.text !== "string")
+    )
+      comment.parent = null;
+  }
   result.reactions = result.reactions.filter(
     (x) =>
       typeof x.accountId === "string" &&
@@ -76,29 +101,61 @@ function normalize(value) {
       x.value &&
       typeof x.value === "object",
   );
+  removeThreads(
+    result,
+    result.comments.filter((c) => c.deleted).map((c) => c.id),
+  );
   return result;
 }
 async function open() {
   if (connection) return connection;
-  connection = await new Promise((resolve, reject) => {
+  if (opening) return opening;
+  opening = new Promise((resolve, reject) => {
     const r = indexedDB.open(DB, 1);
+    let blocked = false;
     r.onupgradeneeded = () => r.result.createObjectStore("state");
-    r.onsuccess = () => resolve(r.result);
+    r.onsuccess = () => {
+      if (blocked) {
+        r.result.close();
+        return;
+      }
+      const db = r.result;
+      connection = db;
+      db.onversionchange = () => {
+        db.close();
+        connection = null;
+      };
+      db.onclose = () => {
+        if (connection === db) connection = null;
+      };
+      resolve(db);
+    };
     r.onerror = () => reject(r.error);
-    r.onblocked = () => reject(new Error("storage"));
+    r.onblocked = () => {
+      blocked = true;
+      reject(new Error("storage"));
+    };
   });
-  connection.onversionchange = () => {
-    connection.close();
-    connection = null;
-  };
-  return connection;
+  try {
+    return await opening;
+  } finally {
+    opening = null;
+  }
 }
 export async function read() {
   try {
     const db = await open();
     return await new Promise((resolve, reject) => {
       const r = db.transaction("state").objectStore("state").get("data");
-      r.onsuccess = () => resolve(normalize(r.result));
+      r.onsuccess = () => {
+        try {
+          const state = normalize(r.result);
+          available = true;
+          resolve(state);
+        } catch (error) {
+          reject(error);
+        }
+      };
       r.onerror = () => reject(r.error);
     });
   } catch {
@@ -207,7 +264,14 @@ export async function comment(article, text, parent = null, id = "") {
       if (!c) throw new Error("invalid");
       c.text = text;
       c.edited = Date.now();
-    } else
+    } else {
+      if (
+        parent?.ref?.startsWith("local:") &&
+        !s.comments.some(
+          (c) => `local:${c.id}` === parent.ref && c.articleId === article.id,
+        )
+      )
+        throw new Error("invalid");
       s.comments.push({
         id: crypto.randomUUID(),
         articleId: article.id,
@@ -217,6 +281,7 @@ export async function comment(article, text, parent = null, id = "") {
         parent,
         at: Date.now(),
       });
+    }
   });
 }
 export async function removeComment(id) {
@@ -224,8 +289,7 @@ export async function removeComment(id) {
     const a = requireAccount(s),
       c = s.comments.find((x) => x.id === id && x.authorId === a.id);
     if (!c) throw new Error("invalid");
-    c.text = "";
-    c.deleted = true;
+    removeThreads(s, [id]);
   });
 }
 export async function removeAccount() {
@@ -234,12 +298,10 @@ export async function removeAccount() {
     s.accounts = s.accounts.filter((x) => x.id !== a.id);
     for (const k of ["bookmarks", "history", "reactions"])
       s[k] = s[k].filter((x) => x.accountId !== a.id);
-    for (const c of s.comments)
-      if (c.authorId === a.id) {
-        c.text = "";
-        c.authorId = "";
-        c.deleted = true;
-      }
+    removeThreads(
+      s,
+      s.comments.filter((c) => c.authorId === a.id).map((c) => c.id),
+    );
   });
   signOut();
 }

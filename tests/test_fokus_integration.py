@@ -26,7 +26,11 @@ class FokusIntegrationTests(unittest.TestCase):
         self.assertEqual(upstream('/_fokus/ria/article/20260919/test-123.html', ''), 'https://ria.ru/20260919/test-123.html')
         self.assertEqual(upstream('/_fokus/ria/dynamics/20260919/123', ''), 'https://ria.ru/services/dynamics/20260919/123.html')
         self.assertIsNotNone(upstream('/_fokus/ria/comments', 'article_id=123&limit=20&date=1&date_usec=2&id_exc='+'a'*24))
+        self.assertEqual(upstream('/_fokus/ria/search', 'query=%D0%BC%D0%B8%D1%80&offset=0'), 'https://ria.ru/services/search/getmore/?query=%D0%BC%D0%B8%D1%80&offset=0')
         for route, query in [
+            ('/ria/search', 'query=x&offset=0&url=https://evil.test'),
+            ('/ria/search', 'query=%GG&offset=0'),
+            ('/ria/search', 'query=x&offset=-1'),
             ('/ria/comments', 'article_id=1&limit=9999'),
             ('/ria/comments', 'article_id=1&limit=20&url=https://evil.test'),
             ('/ria/article/20260919/../../services/article/like/', ''),
@@ -50,6 +54,12 @@ class FokusIntegrationTests(unittest.TestCase):
         self.assertIn(NODE_CSP, upgraded)
         self.assertIn(FOKUS_RIA_PROXY, upgraded)
         self.assertEqual(upgrade_fokus_policy(upgraded), upgraded)
+        from remnawave_manager.fokus_proxy import render_proxy
+        legacy = f'add_header Content-Security-Policy "{NODE_CSP}" always;\n\n{render_proxy(include_search=False)}'
+        migrated = upgrade_fokus_policy(legacy)
+        self.assertIn(FOKUS_RIA_PROXY, migrated)
+        self.assertEqual(migrated.count('location /_fokus/'), 1)
+        self.assertEqual(upgrade_fokus_policy(migrated), migrated)
         custom = 'add_header Content-Security-Policy "default-src custom" always;'
         self.assertEqual(upgrade_fokus_policy(custom), custom)
 
@@ -61,7 +71,7 @@ class FokusIntegrationTests(unittest.TestCase):
             self.assertTrue((target / "favicon.svg").is_file())
             for module in target.glob("*.js"):
                 for dependency in re.findall(r"from ['\"]([^'\"]+)['\"]", module.read_text()):
-                    self.assertTrue((module.parent / dependency).is_file(), dependency)
+                    self.assertTrue((module.parent / dependency.split("?", 1)[0]).is_file(), dependency)
             self.assertNotIn("site-runtime.js", (target / "index.html").read_text())
 
         for failure in (False, True):

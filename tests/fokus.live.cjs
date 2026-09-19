@@ -29,7 +29,12 @@ const port = Number(process.env.FOKUS_PORT || 15507),
       viewport: { width: 1440, height: 1000 },
     });
     const errors = [],
+      csp = [],
       external = [];
+    page.on("console", (message) => {
+      if (/Content Security Policy|violates.*directive/i.test(message.text()))
+        csp.push(message.text());
+    });
     page.on("pageerror", (e) => errors.push(e.message));
     page.on("request", (r) => {
       if (!r.url().startsWith(origin) && !r.url().startsWith("data:"))
@@ -56,6 +61,29 @@ const port = Number(process.env.FOKUS_PORT || 15507),
     console.log(
       "pagination",
       n,
+      await page.locator(".news-grid .card").count(),
+    );
+    await page.screenshot({
+      path: "/tmp/fokus-check/section-1440.png",
+      fullPage: true,
+    });
+    await page.locator("#search-input").fill("наука");
+    await page.locator("#search").press("Enter");
+    await page.waitForURL("**/#/search/**");
+    await page
+      .getByRole("heading", { name: "Результаты поиска", exact: true })
+      .waitFor();
+    await page.locator(".news-grid .card").first().waitFor({ timeout: 30000 });
+    const found = await page.locator(".news-grid .card").count();
+    await page.locator('[data-action="more"]').click();
+    await page.waitForFunction(
+      (n) => document.querySelectorAll(".news-grid .card").length > n,
+      found,
+      { timeout: 30000 },
+    );
+    console.log(
+      "archive search",
+      found,
       await page.locator(".news-grid .card").count(),
     );
     await page.goto(origin + "/#/article/20260918/bespilotnik-2118644196.html");
@@ -136,13 +164,95 @@ const port = Number(process.env.FOKUS_PORT || 15507),
     await page.screenshot({
       path: "/tmp/fokus-check/article-mobile-viewport.png",
     });
-    await page.waitForFunction(() => document.querySelector('.reaction strong')?.textContent !== '—');
-    await page.locator('.comment').first().waitFor();
+    await page.waitForFunction(
+      () => document.querySelector(".reaction strong")?.textContent !== "—",
+    );
+    await page.locator(".comment").first().waitFor();
     await page.locator("#reactions").scrollIntoViewIfNeeded();
     await page.screenshot({
       path: "/tmp/fokus-check/article-mobile-reactions.png",
     });
+    const originalHash = new URL(page.url()).hash;
+    await page.locator("#next-article").scrollIntoViewIfNeeded();
+    await page
+      .locator(".continued-story .article-body")
+      .first()
+      .waitFor({ timeout: 30000 });
+    const following = page.locator(".continued-story").first();
+    assert.equal(await following.locator(".reaction").count(), 6);
+    await page.waitForFunction(
+      () => {
+        const panel = document.querySelector(
+          ".continued-story .comments-panel",
+        );
+        return panel?.getAttribute("aria-busy") === "false";
+      },
+      null,
+      { timeout: 30000 },
+    );
+    console.log(
+      "continued discussion",
+      await following.locator(".comments-panel").innerText(),
+    );
+    assert.equal(
+      await following
+        .locator(
+          '.comments-panel .empty-state [data-action="comments-refresh"]',
+        )
+        .count(),
+      0,
+      "continued discussion loaded successfully",
+    );
+    await page.waitForFunction(
+      () =>
+        document.querySelector(".continued-story .reaction strong")
+          ?.textContent !== "—",
+      null,
+      { timeout: 30000 },
+    );
+    assert.equal(new URL(page.url()).hash, originalHash);
+    assert.equal(await page.locator("#discussion").count(), 1);
+    await page
+      .locator(".continued-story")
+      .first()
+      .evaluate((el) => el.scrollIntoView());
+    await page.screenshot({ path: "/tmp/fokus-check/continued-mobile.png" });
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page
+      .locator(".continued-story")
+      .first()
+      .evaluate((el) => el.scrollIntoView());
+    const rail = await page.locator(".article-aside-sticky").boundingBox();
+    assert(rail.y >= 0 && rail.y < 50, "news rail follows reading position");
+    await page.screenshot({ path: "/tmp/fokus-check/continued-desktop.png" });
+    console.log(
+      "continued story",
+      await page.locator(".continued-story .article-title").first().innerText(),
+    );
     assert.equal(await page.locator("input[type=search]").count(), 1);
+    // The user's article points first to a photolenta, not a text article.
+    await page.goto(origin + "/#/article/20260919/den-2118777953.html");
+    await page
+      .locator(".article-stream > .reader .article-body")
+      .waitFor({ timeout: 30000 });
+    await page.locator("#next-article").scrollIntoViewIfNeeded();
+    const gallery = page.locator(
+      '.continued-story[data-article-id="2118738169"]',
+    );
+    await gallery
+      .locator(".article-body figure")
+      .first()
+      .waitFor({ timeout: 30000 });
+    assert((await gallery.locator(".article-body figure").count()) >= 8);
+    assert(
+      (await gallery.locator("figcaption").first().innerText()).length > 0,
+    );
+    await page.goto(origin + "/#/article/20260919/vrubel-2118424619.html");
+    await page.locator(".article-body h3").first().waitFor({ timeout: 30000 });
+    assert((await page.locator(".article-body .paragraph").count()) >= 15);
+    assert((await page.locator(".article-body figure").count()) >= 8);
+    console.log("User article → photo gallery and longread passed");
+    assert.deepEqual(csp, []);
     assert.deepEqual(errors, []);
     assert.deepEqual(external, []);
     console.log("Live checks passed; screenshots: /tmp/fokus-check");

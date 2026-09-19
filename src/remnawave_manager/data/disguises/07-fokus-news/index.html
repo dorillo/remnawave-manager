@@ -1,23 +1,29 @@
 <!doctype html>
 <html lang="ru">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-src 'none'">
-<meta name="color-scheme" content="light dark">
-<title>Fokus — новости и обсуждения</title>
-<link rel="icon" href="favicon.svg">
-<link rel="stylesheet" href="styles.css">
-<script type="module" src="app.js"></script>
-</head>
-<body data-app="fokus">
-<a class="skip-link" href="#content" data-action="skip">К содержимому</a>
-<header id="header"></header>
-<main id="content" tabindex="-1" aria-live="polite"></main>
-<footer id="footer"></footer>
-<dialog id="modal" aria-labelledby="dialog-title"></dialog>
-<div id="toast" role="status" hidden></div>
-<noscript>Fokus requires JavaScript / Для работы Fokus нужен JavaScript.</noscript>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; connect-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-src 'none'"
+    />
+    <meta name="color-scheme" content="light dark" />
+    <title>Fokus — новости и обсуждения</title>
+    <link rel="icon" href="favicon.svg" />
+    <link rel="stylesheet" href="styles.css?v=20260919-home" />
+    <script type="module" src="app.js?v=20260919-home"></script>
+  </head>
+  <body data-app="fokus">
+    <a class="skip-link" href="#content" data-action="skip">К содержимому</a>
+    <header id="header"></header>
+    <main id="content" tabindex="-1" aria-live="polite"></main>
+    <footer id="footer"></footer>
+    <dialog id="mobile-navigation" aria-label="Меню"></dialog>
+    <dialog id="modal" aria-labelledby="dialog-title"></dialog>
+    <div id="toast" role="status" hidden></div>
+    <noscript
+      >Fokus requires JavaScript / Для работы Fokus нужен JavaScript.</noscript
+    >
+  </body>
 </html>

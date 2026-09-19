@@ -1,4 +1,4 @@
-import { cached, cache } from "./fokus-store.js";
+import { cached, cache } from "./fokus-store.js?v=20260919-release";
 export const sections = [
   "politics",
   "world",
@@ -16,13 +16,87 @@ export const escape = (s) =>
         c
       ],
   );
-// A template's document is inert: even images never load while inspecting upstream HTML.
+// This lexical pass only neutralizes style attributes before the HTML parser
+// checks CSP. It is not a sanitizer; upstream nodes are never mounted, and
+// safeInline below still reconstructs the small allowed subset from scratch.
+function withoutInlineStyles(html) {
+  const tags = /<!--[\s\S]*?(?:--!?>|$)|<([a-z][^\t\n\f\r />]*)/gi;
+  const space = /[\t\n\f\r ]/;
+  const parts = [];
+  let copied = 0,
+    match;
+  while ((match = tags.exec(html))) {
+    if (!match[1]) continue;
+    let pos = tags.lastIndex;
+    while (pos < html.length && html[pos] !== ">") {
+      if (space.test(html[pos]) || html[pos] === "/") {
+        pos++;
+        continue;
+      }
+      const start = pos;
+      while (
+        pos < html.length &&
+        !space.test(html[pos]) &&
+        !"/=>".includes(html[pos])
+      )
+        pos++;
+      // An unexpected '=' is itself an attribute-name character in HTML.
+      if (pos === start) pos++;
+      if (html.slice(start, pos).toLowerCase() === "style") {
+        parts.push(html.slice(copied, start), "data-fokus-inline-style");
+        copied = pos;
+      }
+      while (space.test(html[pos] || "") && pos < html.length) pos++;
+      if (html[pos] === "=") {
+        pos++;
+        while (pos < html.length && space.test(html[pos])) pos++;
+        const quote = html[pos];
+        if (quote === '"' || quote === "'") {
+          const end = html.indexOf(quote, pos + 1);
+          pos = end < 0 ? html.length : end + 1;
+        } else {
+          while (
+            pos < html.length &&
+            !space.test(html[pos]) &&
+            html[pos] !== ">"
+          )
+            pos++;
+        }
+      }
+    }
+    tags.lastIndex = pos + 1;
+    const name = match[1].toLowerCase();
+    if (
+      [
+        "script",
+        "style",
+        "textarea",
+        "title",
+        "xmp",
+        "iframe",
+        "noembed",
+        "noframes",
+      ].includes(name)
+    ) {
+      const close = new RegExp(`</${name}(?=[\\t\\n\\f\\r />])`, "gi");
+      close.lastIndex = tags.lastIndex;
+      const end = close.exec(html);
+      tags.lastIndex = end ? end.index : html.length;
+    }
+  }
+  parts.push(html.slice(copied));
+  return parts.join("");
+}
+// A template keeps upstream scripts and resources inert during inspection.
 export function inert(html) {
   const t = document.createElement("template");
-  t.innerHTML = html;
+  t.innerHTML = withoutInlineStyles(String(html));
   t.content
     .querySelectorAll("script,style,iframe,object,embed,link,base,form")
     .forEach((x) => x.remove());
+  t.content
+    .querySelectorAll("[data-fokus-inline-style]")
+    .forEach((x) => x.removeAttribute("data-fokus-inline-style"));
   return t.content;
 }
 export function articleRef(value) {
@@ -62,11 +136,21 @@ export function media(value) {
   }
 }
 const text = (root, s) => root.querySelector(s)?.textContent.trim() || "";
-const image = (root) =>
-  media(
-    root.querySelector("img")?.getAttribute("src") ||
-      root.querySelector("source")?.getAttribute("srcset")?.split(" ")[0],
+const image = (root) => {
+  const img = root.querySelector("img"),
+    source = root.querySelector("source");
+  // RIA lazy images often carry a data: placeholder in src.
+  return (
+    [
+      img?.getAttribute("data-src"),
+      img?.getAttribute("src"),
+      source?.getAttribute("data-srcset")?.split(/[\s,]/)[0],
+      source?.getAttribute("srcset")?.split(/[\s,]/)[0],
+    ]
+      .map(media)
+      .find(Boolean) || ""
   );
+};
 export function summary(ref, title, img = "", date = "", category = "") {
   return {
     ...ref,
@@ -103,7 +187,16 @@ function cards(raw, section = "") {
   const items = [...d.querySelectorAll(".list-item")].map((x) => {
     const a = x.querySelector(".list-item__title"),
       r = articleRef(a?.getAttribute("href"));
-    return r && summary(r, a.textContent.trim(), image(x), "", section);
+    return (
+      r &&
+      summary(
+        r,
+        a.textContent.trim(),
+        image(x),
+        x.querySelector("time")?.getAttribute("datetime") || "",
+        section,
+      )
+    );
   });
   const next =
     d.querySelector("[data-next-url]")?.getAttribute("data-next-url") ||
@@ -121,7 +214,35 @@ function cards(raw, section = "") {
   } catch {}
   if (!items.length && !raw.includes("list-items-loaded"))
     throw new Error("schema");
-  return { items: unique(items), cursor };
+  return { items: unique(items), cursor: items.length ? cursor : "" };
+}
+function search(raw, query, offset) {
+  const d = inert(raw),
+    root = d.querySelector(".list-items-loaded");
+  if (!root) throw new Error("schema");
+  const result = cards(raw);
+  let cursor = "";
+  const next = root.getAttribute("data-next-url");
+  if (next) {
+    const u = new URL(next, "https://ria.ru");
+    const value = u.searchParams.get("offset");
+    if (
+      u.origin === "https://ria.ru" &&
+      u.pathname === "/services/search/getmore/" &&
+      u.searchParams.get("query") === query &&
+      /^\d{1,7}$/.test(value || "") &&
+      Number(value) > Number(offset) &&
+      result.items.length
+    )
+      cursor = value;
+  }
+  const count = root.getAttribute("data-count");
+  if (/^\d+$/.test(count || "") && Number(cursor) >= Number(count)) cursor = "";
+  return {
+    ...result,
+    cursor,
+    total: /^\d+$/.test(count || "") ? Number(count) : null,
+  };
 }
 function home(raw) {
   const d = inert(raw),
@@ -202,17 +323,49 @@ function article(raw, ref) {
   if (!body) throw new Error("schema");
   const blocks = [],
     related = [];
-  for (const x of body.querySelectorAll(".article__block")) {
+  for (const x of body.querySelectorAll(
+    ".article__block, .white-longread__block",
+  )) {
     const type = x.getAttribute("data-type");
     if (type === "text" || type === "quote") {
       const node = x.querySelector(
-        type === "text" ? ".article__text" : ".article__quote-text",
+        type === "text"
+          ? ".article__text, .white-longread__text-body"
+          : ".article__quote-text, .white-longread__quote-text",
       );
-      if (node) blocks.push({ type, html: safeInline(node) });
-    } else if (type === "image") {
+      if (node?.textContent.trim())
+        blocks.push({ type, html: safeInline(node) });
+    } else if (["h2", "h3"].includes(type)) {
+      const heading = x.querySelector(".white-longread__width") || x;
+      if (heading.textContent.trim())
+        blocks.push({
+          type: "text",
+          html: `<${type}>${safeInline(heading)}</${type}>`,
+        });
+    } else if (type === "image" || type === "media-image") {
       const src = image(x);
       if (src)
-        blocks.push({ type: "image", src, caption: text(x, ".media__title") });
+        blocks.push({
+          type: "image",
+          src,
+          caption:
+            text(x, ".media__title, .white-longread__media-description") ||
+            x.querySelector("img")?.getAttribute("alt") ||
+            "",
+        });
+    } else if (type === "photolenta") {
+      for (const item of x.querySelectorAll(".article__photo-item")) {
+        const src = image(item);
+        if (src)
+          blocks.push({
+            type: "image",
+            src,
+            caption:
+              text(item, ".article__photo-item-text") ||
+              item.querySelector("img")?.getAttribute("alt") ||
+              "",
+          });
+      }
     } else if (type === "article") {
       const a = x.querySelector('a[href*=".html"]'),
         r = articleRef(a?.getAttribute("href"));
@@ -224,11 +377,10 @@ function article(raw, ref) {
             image(x),
           ),
         );
-    } else if (type === "video" || type === "embed")
+    } else if (["video", "embed", "media-video", "media-embed"].includes(type))
       blocks.push({ type: "unsupported" });
   }
-  if (!blocks.some((x) => x.type === "text" || x.type === "quote"))
-    throw new Error("schema");
+  if (!blocks.length) throw new Error("schema");
   const meta = (name) =>
     d.querySelector(`meta[property="${name}"]`)?.getAttribute("content") || "";
   return {
@@ -236,8 +388,12 @@ function article(raw, ref) {
       ref,
       text(d, ".article__title") || meta("og:title"),
       image(
-        d.querySelector(".article__announce") || document.createElement("div"),
-      ) || media(meta("og:image")),
+        d.querySelector(".article__announce, .white-longread__header-media") ||
+          document.createElement("div"),
+      ) ||
+        (body.querySelector('[data-type="photolenta"]')
+          ? ""
+          : media(meta("og:image"))),
       published ||
         d.querySelector("time")?.getAttribute("datetime") ||
         meta("article:published_time"),
@@ -245,10 +401,14 @@ function article(raw, ref) {
     ),
     blocks,
     related: unique(related).slice(0, 4),
-    author: text(d, ".article__author-name"),
+    author: text(d, ".article__author-name, .white-longread__header-author"),
     caption:
       text(d, ".article__announce .media__title") ||
-      d.querySelector(".article__announce img")?.getAttribute("title") ||
+      d
+        .querySelector(
+          ".article__announce img, .white-longread__header-media img",
+        )
+        ?.getAttribute("title") ||
       "",
     updated: modified || meta("article:modified_time"),
   };
@@ -312,30 +472,15 @@ function comments(raw, id) {
         : null,
     }));
   let cursor = "";
-  if (c.last_date && /^[a-f0-9]{24}$/.test(c.last_id || ""))
+  if (
+    items.length &&
+    c.last_date &&
+    Number.isFinite(Number(c.last_date.sec)) &&
+    Number.isFinite(Number(c.last_date.usec)) &&
+    /^[a-f0-9]{24}$/.test(c.last_id || "")
+  )
     cursor = `&date=${Number(c.last_date.sec)}&date_usec=${Number(c.last_date.usec)}&id_exc=${c.last_id}`;
   return { items, cursor };
-}
-function rooms(raw) {
-  const d = inert(raw);
-  return {
-    items: unique(
-      [...d.querySelectorAll(".r-list__item")].map((x) => {
-        const r = articleRef(x.dataset.url),
-          value = text(x, ".r-list__item-stat-messages");
-        return r
-          ? {
-              ...summary(
-                r,
-                x.dataset.title || text(x, ".r-list__item-title"),
-                image(x),
-              ),
-              count: /^\d+$/.test(value) ? Number(value) : null,
-            }
-          : null;
-      }),
-    ),
-  };
 }
 async function request(path, signal) {
   const controller = new AbortController(),
@@ -401,6 +546,11 @@ async function request(path, signal) {
       pos += b.length;
     }
     return new TextDecoder().decode(data);
+  } catch (error) {
+    // A request timeout is a retryable failure, not navigation cancellation.
+    if (controller.signal.aborted && !signal?.aborted)
+      throw new Error("network");
+    throw error;
   } finally {
     clearTimeout(timer);
     signal?.removeEventListener("abort", abort);
@@ -408,7 +558,7 @@ async function request(path, signal) {
 }
 export async function load(
   kind,
-  { ref, section = "", cursor = "", signal, force = false } = {},
+  { ref, section = "", cursor = "", query = "", signal, force = false } = {},
 ) {
   let path,
     parser,
@@ -421,6 +571,10 @@ export async function load(
     case "home":
       path = "/ria/home";
       parser = home;
+      break;
+    case "search":
+      path = `/ria/search?${new URLSearchParams({ query, offset: cursor || "0" })}`;
+      parser = (x) => search(x, query, cursor || "0");
       break;
     case "section":
       path = cursor
@@ -442,10 +596,6 @@ export async function load(
       path = `/ria/comments?article_id=${ref.id}&limit=20${cursor}`;
       parser = (x) => comments(x, ref.id);
       ttl = 30000;
-      break;
-    case "rooms":
-      path = "/ria/rooms";
-      parser = rooms;
       break;
     default:
       throw new Error("invalid");
