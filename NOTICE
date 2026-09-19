@@ -63,7 +63,7 @@ licenses and terms of the corresponding upstream projects.
 Disguise photographs
 ====================
 
-Five local disguise photographs are used under the Unsplash License:
+Local disguise photographs are used under the Unsplash License:
 https://unsplash.com/license
 
 Attribution and source pages are listed in:
@@ -77,3 +77,11 @@ src/remnawave_manager/data/disguises/05-field-notes/purify.es.js.
 Source: https://github.com/cure53/DOMPurify
 License: Apache-2.0 OR MPL-2.0; full text is provided alongside the module
 in DOMPurify-LICENSE.md.
+
+Fokus news source
+=================
+
+Fokus reads anonymous RIA Novosti feeds and web-client endpoints at https://ria.ru/.
+News, photographs and comments are not bundled or covered by this project's MIT
+license. Rights remain with their respective holders. Local actions are never
+sent to the source. The interface and favicon are original project assets.

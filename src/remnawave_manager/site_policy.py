@@ -1,5 +1,6 @@
 """Known node CSP revisions and narrowly scoped template upgrades."""
 
+from .fokus_proxy import render_proxy as render_fokus_proxy
 from .loop_proxy import render_proxy as render_loop_proxy
 from .northline_proxy import render_proxy
 
@@ -430,3 +431,14 @@ def upgrade_loop_policy(text: str) -> str:
     if LOOP_GIFS_PROXY in upgraded or marker not in upgraded:
         return upgraded
     return upgraded.replace(marker, f"{marker}\n\n{LOOP_GIFS_PROXY}")
+
+
+FOKUS_RIA_PROXY = render_fokus_proxy()
+
+def upgrade_fokus_policy(text: str) -> str:
+    """Add read-only Fokus routes to known managed configurations."""
+    upgraded = _upgrade_known_policy(text)
+    marker = f'add_header Content-Security-Policy "{NODE_CSP}" always;'
+    if FOKUS_RIA_PROXY in upgraded or marker not in upgraded:
+        return upgraded
+    return upgraded.replace(marker, f"{marker}\n\n{FOKUS_RIA_PROXY}")

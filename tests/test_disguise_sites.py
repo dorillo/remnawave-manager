@@ -81,9 +81,7 @@ class DisguiseSiteTests(unittest.TestCase):
                 self.assertIn('name="viewport"', html)
                 self.assertIn('name="referrer" content="no-referrer"', html)
                 self.assertIn('http-equiv="Content-Security-Policy"', html)
-                if template_id == "07-fokus-news":
-                    self.assertIn("connect-src 'self' https://api.gdeltproject.org", html)
-                elif template_id == "01-northline":
+                if template_id == "01-northline":
                     self.assertIn("connect-src 'self';", html)
                     self.assertIn('rel="icon" href="favicon.svg"', html)
                     self.assertTrue((site / "favicon.svg").is_file())
@@ -94,7 +92,7 @@ class DisguiseSiteTests(unittest.TestCase):
                 elif template_id == "03-morrow-coffee":
                     self.assertIn("connect-src 'self'", html)
                     self.assertNotIn("site-runtime.js", html)
-                elif template_id in {"04-signal-works", "05-field-notes", "06-loop-archive"}:
+                elif template_id in {"04-signal-works", "05-field-notes", "06-loop-archive", "07-fokus-news"}:
                     self.assertIn("connect-src 'self'", html)
                     self.assertNotIn("site-runtime.js", html)
                     self.assertIn('rel="icon" href="favicon.svg"', html)
@@ -125,7 +123,7 @@ class DisguiseSiteTests(unittest.TestCase):
         tags = ("aside", "article", "section", "table", "figure", "form", "nav")
         for template_id in EXPECTED_IDS:
             html = (SITES_ROOT / template_id / "index.html").read_text(encoding="utf-8")
-            if template_id in {"01-northline", "02-aster-observatory", "03-morrow-coffee", "04-signal-works", "05-field-notes", "06-loop-archive"}:
+            if template_id in {"01-northline", "02-aster-observatory", "03-morrow-coffee", "04-signal-works", "05-field-notes", "06-loop-archive", "07-fokus-news"}:
                 # App shells render their distinct structures in browser tests.
                 self.assertIn('data-app="', html)
                 continue
@@ -159,6 +157,8 @@ class DisguiseSiteTests(unittest.TestCase):
                     self.assertIn('data-app="svod"', html)
                 elif template_id == "06-loop-archive":
                     self.assertIn('data-app="loop"', html)
+                elif template_id == "07-fokus-news":
+                    self.assertIn('data-app="fokus"', html)
                 else:
                     self.assertIn("data-auth", html)
                     self.assertIn('type="email"', html)

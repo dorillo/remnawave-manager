@@ -2,9 +2,8 @@
 
 Фотографии сохранены локально и используются по [Unsplash License](https://unsplash.com/license). Эти фотографии не загружаются с Unsplash во время работы. Источники динамического контента описаны отдельно.
 
-- [Crew](https://unsplash.com/photos/wy9X4c0rX4M), photo id `1497366811353-6870744d04b2`: `01-northline/hero.jpg`, `07-fokus-news/news-1.jpg`.
-- [Greg Rakozy](https://unsplash.com/photos/oMpAz-DN-9I), photo id `1419242902214-272b3f66ee7a`: `02-aster-observatory/hero.jpg`, `07-fokus-news/news-2.jpg`.
-- [Alberto Restifo](https://unsplash.com/photos/cFplR9ZGnAk), photo id `1500530855697-b586d89ba3ee`: `07-fokus-news/news-4.jpg`.
+- [Crew](https://unsplash.com/photos/wy9X4c0rX4M), photo id `1497366811353-6870744d04b2`: `01-northline/hero.jpg`.
+- [Greg Rakozy](https://unsplash.com/photos/oMpAz-DN-9I), photo id `1419242902214-272b3f66ee7a`: `02-aster-observatory/hero.jpg`.
 
 Файлы `08-vector-docs/flow.svg`, `09-pulse-monitor/topology.svg` и `10-dev-circle/community.svg` созданы специально для проекта и распространяются вместе с ним по MIT License.
 
@@ -30,3 +29,10 @@
 - `06-loop-archive/loop-gif-reader.js` — декодер из [omggif](https://github.com/deanm/omggif), Dean McNamee; адаптирован к ES modules, кодировщик исключён.
 - `06-loop-archive/loop-webm-duration.js` — [fix-webm-duration](https://github.com/yusitnikov/fix-webm-duration) 1.0.6; адаптирован к ES modules.
 Полные лицензии сохранены в начале соответствующих файлов.
+
+## Fokus
+
+`07-fokus-news` — собственное оформление и favicon проекта. Новости, изображения
+и внешние комментарии загружаются с https://ria.ru/ через ограниченный nginx-прокси
+и не включаются в дистрибутив. Права остаются у правообладателей. В статьях
+доступна ссылка на оригинал; пользовательские действия сохраняются локально.
