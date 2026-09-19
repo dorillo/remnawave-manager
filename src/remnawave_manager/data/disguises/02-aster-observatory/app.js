@@ -879,7 +879,10 @@ function watch(main, id, uploaded = null) {
       el('p', {}, video.description || t('noDescription')),
     ),
   );
-  primary.append(comments(video, guard));
+  const commentsController = new AbortController();
+  primary.append(comments(video, guard, commentsController.signal));
+  const stopPlayer = disposePlayer;
+  disposePlayer = () => { commentsController.abort(); stopPlayer(); };
   rail.append(el('h2', {}, t('related')));
   grid(
     rail,

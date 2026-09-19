@@ -15,6 +15,10 @@ let browser;
   let failFeed=false,failAnswers=false,emptyAnswers=false,emptyFeed=false;
   await context.route('**/*',async(route)=>{
     const request=route.request(),url=new URL(request.url()),p=url.pathname;
+    if (url.pathname === '/shared/image-proxy.js')
+      return route.fulfill({ contentType: 'text/javascript', body: await fs.readFile(path.resolve(root, '../shared/image-proxy.js')) });
+    if (url.pathname.startsWith('/_images/'))
+      return route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="green"/></svg>' });
     if(request.method()!=='GET'){ writes.push(`${request.method()} ${p}`); return route.fulfill({status:405,body:''}); }
     if(p.startsWith('/_answers/mail/')){
       mailRequests.push(request.url());

@@ -48,6 +48,7 @@ from .runner import (
 )
 from .state import StateStore
 from .site_policy import NODE_CSP, upgrade_northline_policy
+from .site_assets import revision, versioned
 
 POSTGRES_IMAGE = (
     "postgres:18.4@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636"
@@ -1725,8 +1726,11 @@ def _install_node_site(source: Path, target: Path) -> bool:
         return False
     shared = target / "shared"
     shared.mkdir(exist_ok=True, mode=0o755)
-    for name in ("date-utils.js", "storage.js"):
-        atomic_copy(northline.parent / "shared" / name, shared / name, mode=0o644)
+    _install_static_site(northline.parent / "shared", shared)
+    asset_revision = revision(northline, northline.parent / "shared")
+    for asset in target.rglob("*"):
+        if asset.is_file() and asset.suffix in {".html", ".js"}:
+            atomic_write_text(asset, versioned(asset.read_bytes(), asset.suffix, asset_revision).decode(), mode=0o644)
     return True
 
 

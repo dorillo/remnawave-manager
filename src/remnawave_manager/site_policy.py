@@ -1,12 +1,18 @@
 """Known node CSP revisions and narrowly scoped template upgrades."""
 
+from .aster_proxy import render_proxy as render_aster_comments_proxy, render_search_proxy
 from .fokus_proxy import render_proxy as render_fokus_proxy
+from .image_proxy import HOSTS as IMAGE_HOSTS, render_proxy as render_image_proxy
 from .loop_proxy import render_proxy as render_loop_proxy
+from .proxy_policy import harden_proxy
 from .northline_proxy import render_proxy
 
 
+ASTER_COMMENTS_PROXY = render_aster_comments_proxy()
+IMAGE_PROXY = render_image_proxy()
+LEGACY_IMAGE_PROXY = render_image_proxy(tuple(host for host in IMAGE_HOSTS if host != "filin.mail.ru"), secure=False)
 NORTHLINE_PROXY = render_proxy()
-LEGACY_NORTHLINE_PROXY = render_proxy(legacy=True)
+LEGACY_NORTHLINE_PROXY = render_proxy(legacy=True, secure=False)
 
 LEGACY_NODE_CSP = (
     "default-src 'self'; img-src 'self' data: blob: https:; "
@@ -45,6 +51,10 @@ def _upgrade_known_policy(text: str) -> str:
     new = f'add_header Content-Security-Policy "{NODE_CSP}" always;'
     for policy in (LEGACY_NODE_CSP, ASTER_NODE_CSP, MORROW_AI_NODE_CSP):
         text = text.replace(f'add_header Content-Security-Policy "{policy}" always;', new)
+    for previous, current in _PROXY_REVISIONS:
+        text = text.replace(previous, current)
+    if new in text and IMAGE_PROXY not in text:
+        text = text.replace(new, f"{new}\n\n{IMAGE_PROXY}")
     return text
 
 
@@ -52,9 +62,12 @@ def upgrade_aster_policy(text: str) -> str:
     """Upgrade known policies and preserve already installed Morrow routes."""
     upgraded = _upgrade_known_policy(text)
     new = f'add_header Content-Security-Policy "{NODE_CSP}" always;'
-    if ASTER_SEARCH_PROXY in upgraded or new not in upgraded:
+    if new not in upgraded:
         return upgraded
-    return upgraded.replace(new, f"{new}\n\n{ASTER_SEARCH_PROXY}")
+    for proxy in (ASTER_SEARCH_PROXY, ASTER_COMMENTS_PROXY):
+        if proxy not in upgraded:
+            upgraded = upgraded.replace(new, f"{new}\n\n{proxy}")
+    return upgraded
 
 
 def upgrade_morrow_policy(text: str) -> str:
@@ -445,3 +458,27 @@ def upgrade_fokus_policy(text: str) -> str:
     if FOKUS_RIA_PROXY in upgraded or marker not in upgraded:
         return upgraded
     return upgraded.replace(marker, f"{marker}\n\n{FOKUS_RIA_PROXY}")
+
+
+# Exact, known revisions only. Keep unrelated/custom nginx configuration untouched.
+# Every apply upgrades all installed proxy groups, including routes retained when
+# switching templates. The raw renderers preserve pre-audit upgrade compatibility.
+_PROXY_REVISIONS = [
+    (render_image_proxy(secure=False), IMAGE_PROXY),
+    (LEGACY_IMAGE_PROXY, IMAGE_PROXY),
+    (render_aster_comments_proxy(secure=False), ASTER_COMMENTS_PROXY),
+    (render_proxy(secure=False), NORTHLINE_PROXY),
+    (LEGACY_NORTHLINE_PROXY, NORTHLINE_PROXY),
+    (render_loop_proxy(secure=False), LOOP_GIFS_PROXY),
+    (render_fokus_proxy(secure=False), FOKUS_RIA_PROXY),
+    (render_fokus_proxy(include_search=False, secure=False), FOKUS_RIA_PROXY),
+    (render_fokus_proxy(include_search=False), FOKUS_RIA_PROXY),
+]
+_raw_proxies = (ASTER_SEARCH_PROXY, ANSWERS_MAIL_PROXY, MORROW_YAPPY_PROXY, SVOD_WIKIPEDIA_PROXY)
+ASTER_SEARCH_PROXY = render_search_proxy()
+ANSWERS_MAIL_PROXY = harden_proxy(ANSWERS_MAIL_PROXY, 'answers')
+MORROW_YAPPY_PROXY = harden_proxy(MORROW_YAPPY_PROXY, 'morrow')
+SVOD_WIKIPEDIA_PROXY = harden_proxy(SVOD_WIKIPEDIA_PROXY, 'svod')
+_PROXY_REVISIONS.extend(zip(_raw_proxies, (
+    ASTER_SEARCH_PROXY, ANSWERS_MAIL_PROXY, MORROW_YAPPY_PROXY, SVOD_WIKIPEDIA_PROXY,
+)))

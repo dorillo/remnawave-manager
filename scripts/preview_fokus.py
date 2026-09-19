@@ -4,7 +4,7 @@ import argparse
 import gzip
 import sys
 from pathlib import Path
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from http.server import ThreadingHTTPServer
 from urllib.parse import urlsplit
 from urllib.request import Request, HTTPRedirectHandler, build_opener
 from urllib.error import HTTPError
@@ -12,13 +12,15 @@ from urllib.error import HTTPError
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
 from remnawave_manager.fokus_proxy import upstream, CSP
+from remnawave_manager.site_assets import FreshAssetsHandler
+
 SITE = ROOT / 'src/remnawave_manager/data/disguises/07-fokus-news'
 LIMIT = 8 * 1024 * 1024
 
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, *args, **kwargs): return None
 
-class FokusPreviewHandler(SimpleHTTPRequestHandler):
+class FokusPreviewHandler(FreshAssetsHandler):
     upstream = staticmethod(upstream)
     def __init__(self, *args, **kwargs): super().__init__(*args, directory=str(SITE), **kwargs)
     def end_headers(self):
@@ -45,6 +47,7 @@ class FokusPreviewHandler(SimpleHTTPRequestHandler):
                 content = response.headers.get('Content-Type', '')
                 if '/media/' in request.path and content.split(';')[0] not in {'image/jpeg','image/png','image/webp'}: raise ValueError('unsupported media')
         except HTTPError as error:
+            error.close()
             self.send_error(error.code if error.code in (404,429) else 502); return
         except (OSError, ValueError): self.send_error(502); return
         self.send_response(200)

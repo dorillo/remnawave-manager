@@ -1,12 +1,57 @@
 import { el, button, link, confirmAction } from './aster-ui.js';
 import { user, library, updateUser } from './aster-store.js';
 import { t, relativeDate } from './aster-i18n.js';
-import { normalizeList } from './aster-data.js';
+import { normalizeList, loadComments } from './aster-data.js';
 
-export function comments(video, guard) {
+export function comments(video, guard, signal) {
   const section = el('section', { class: 'comments', id: 'comments' });
   let inlineForm = null;
   let visiblePublic = 10;
+  let loading = !video.local, failed = false, hasNext = false, cursor = '';
+  const replyPages = new Map();
+  async function fetchPage(more = false) {
+    loading = true;
+    failed = false;
+    draw();
+    try {
+      const result = await loadComments(video.id, { cursor: more ? cursor : '', signal });
+      if (signal?.aborted) return;
+      const roots = new Set(result.rows.map(row => row.id));
+      const old = more ? video.publicComments || []
+        : (video.publicComments || []).filter(row => row.parentId && roots.has(row.parentId));
+      video.publicComments = [...new Map([...old, ...result.rows].map(row => [row.id, row])).values()];
+      if (result.count !== null) video.commentsCount = result.count;
+      hasNext = result.hasNext && !!result.cursor && result.cursor !== cursor;
+      cursor = result.cursor;
+      if (more) visiblePublic = Math.max(visiblePublic, video.publicComments.length);
+    } catch {
+      if (signal?.aborted) return;
+      failed = true;
+    } finally {
+      loading = false;
+      if (!signal?.aborted) draw();
+    }
+  }
+  async function fetchReplies(row) {
+    const state = replyPages.get(row.id) || { cursor: '', hasNext: true };
+    if (state.loading) return;
+    replyPages.set(row.id, state);
+    state.loading = true;
+    state.failed = false;
+    draw();
+    try {
+      const result = await loadComments(video.id, { parent: row.id.slice(3), cursor: state.cursor, signal });
+      if (signal?.aborted) return;
+      video.publicComments = [...new Map([...(video.publicComments || []), ...result.rows].map(item => [item.id, item])).values()];
+      state.hasNext = result.hasNext && !!result.cursor && result.cursor !== state.cursor;
+      state.cursor = result.cursor;
+    } catch {
+      state.failed = true;
+    } finally {
+      state.loading = false;
+      if (!signal?.aborted) draw();
+    }
+  }
   const authorAvatar = (name, source) => {
     const node = el(
       'span',
@@ -200,6 +245,7 @@ export function comments(video, guard) {
     );
   }
   function publicItem(row, publicRows, localRows) {
+    const replies = replyPages.get(row.id);
     const reacted = library().commentLikes.includes(row.id);
     const author = row.authorId
       ? link(row.author, `#/user/${row.authorId}`)
@@ -254,6 +300,9 @@ export function comments(video, guard) {
             ...localRows
               .filter((reply) => reply.parentId === row.id)
               .map((reply) => localItem(reply)),
+            row.repliesCount > 0 && (!replies || replies.hasNext || replies.failed)
+              ? button(t(replies?.failed ? 'commentsRetry' : replies?.loading ? 'loading' : 'loadReplies'), () => fetchReplies(row), { disabled: replies?.loading })
+              : null,
           ]
         : null,
     );
@@ -280,15 +329,20 @@ export function comments(video, guard) {
           ),
         ),
     );
-    if (!publicRows.length && !localRows.length)
+    if (!publicRows.length && !localRows.length && !loading && !failed)
       list.append(el('p', { class: 'meta' }, t('firstComment')));
-    if (visiblePublic < publicParents.length)
+    if (loading) list.append(el('p', { class: 'meta', role: 'status' }, t('loadingComments')));
+    if (failed) list.append(el('p', { class: 'meta', role: 'status' }, t('commentsUnavailable')),
+      button(t('commentsRetry'), () => fetchPage(!!cursor)));
+    if (visiblePublic < publicParents.length || (!loading && !failed && hasNext))
       list.append(
         button(
           t('moreComments'),
           () => {
-            visiblePublic += 10;
-            draw();
+            if (visiblePublic < publicParents.length) {
+              visiblePublic += 10;
+              draw();
+            } else fetchPage(true);
           },
           { class: 'comments-more' },
         ),
@@ -300,5 +354,6 @@ export function comments(video, guard) {
     list,
   );
   draw();
+  if (!video.local) queueMicrotask(() => { if (!signal?.aborted) fetchPage(); });
   return section;
 }

@@ -19,6 +19,21 @@ from remnawave_manager.site_policy import (
 
 
 class AsterIntegrationTests(unittest.TestCase):
+    def test_live_comments_proxy_validation_and_upgrade(self):
+        from remnawave_manager.aster_proxy import upstream_url
+        from remnawave_manager.site_policy import ASTER_COMMENTS_PROXY
+        video = 'a' * 32
+        path = '/_aster/rutube-comments/' + video
+        self.assertIn('/api/v2/comments/video/' + video, upstream_url(path, ''))
+        self.assertTrue(upstream_url(path, 'comment_id=123&parent_id=456').endswith('&comment_id=123&parent_id=456'))
+        for query in ['url=https://evil.test', 'parent_id=-1', 'comment_id=x', 'parent_id=1&parent_id=2']:
+            self.assertIsNone(upstream_url(path, query))
+        self.assertIsNone(upstream_url('/_aster/rutube-comments/../../admin', ''))
+        existing = f'add_header Content-Security-Policy "{NODE_CSP}" always;\n{ASTER_SEARCH_PROXY}'
+        upgraded = upgrade_aster_policy(existing)
+        self.assertIn(ASTER_COMMENTS_PROXY, upgraded)
+        self.assertEqual(upgrade_aster_policy(upgraded), upgraded)
+
     def test_policy_upgrade_is_narrow_and_idempotent(self) -> None:
         old = f'add_header Content-Security-Policy "{LEGACY_NODE_CSP}" always;'
         updated = upgrade_aster_policy(old)

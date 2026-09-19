@@ -11,7 +11,7 @@ function toggleTheme() {
   appearance = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
   applyAppearance();
 }
-import { feed, cachedFeed, search, spaces, detail } from './answers-data.js';
+import { feed, cachedFeed, search, spaces, detail, safeImage } from './answers-data.js';
 import { read, change, newId, watch } from './answers-store.js';
 import { currentUser, register, login, logout } from './answers-auth.js';
 import { t, lang, setLang, dateText } from './answers-i18n.js';
@@ -116,11 +116,11 @@ function route() {
 }
 
 function avatar(person, name) {
-  if (person?.avatar) return `<img class="author-avatar" src="${e(person.avatar)}" alt="" loading="lazy">`;
+  if (person?.avatar) return `<img class="author-avatar" src="${e(safeImage(person.avatar))}" alt="" loading="lazy">`;
   return `<span class="author-avatar avatar-small" aria-hidden="true">${e((name || '?').slice(0,1).toUpperCase())}</span>`;
 }
 function profileAvatar(person, className = 'profile-avatar') {
-  return person?.avatar ? `<img class="${className}" src="${e(person.avatar)}" alt="">` : `<div class="${className}" aria-hidden="true">${e((person?.name || '?').slice(0,1).toUpperCase())}</div>`;
+  return person?.avatar ? `<img class="${className}" src="${e(safeImage(person.avatar))}" alt="">` : `<div class="${className}" aria-hidden="true">${e((person?.name || '?').slice(0,1).toUpperCase())}</div>`;
 }
 function navLink(path, name, label, active) { return `<a class="nav-link ${active ? 'active' : ''}" href="#/${path}"><span class="nav-icon">${icon(name)}</span>${e(label)}</a>`; }
 function mobileLink(path, name, label, active) { return `<a class="${active ? 'active' : ''}" href="#/${path}"><span class="nav-icon">${icon(name)}</span>${e(label)}</a>`; }
@@ -205,7 +205,7 @@ function answerCard(answer, question, local) {
 }
 function media(item) {
   return Array.isArray(item.images) && item.images.length
-    ? `<div class="media-grid">${item.images.slice(0,4).map((src)=>`<img src="${e(src)}" alt="" loading="lazy">`).join('')}</div>`
+    ? `<div class="media-grid">${item.images.slice(0,4).map((src)=>`<img src="${e(safeImage(src))}" alt="" loading="lazy">`).join('')}</div>`
     : '';
 }
 function renderDetail(page) {

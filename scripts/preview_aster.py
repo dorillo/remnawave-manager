@@ -1,15 +1,23 @@
-"""Serve the ASTER template locally with its narrow RUTUBE search proxy."""
+"""Preview ASTER with fixed Rutube search, comment and image routes."""
 
 from __future__ import annotations
 
 import argparse
 import json
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+import sys
+from http.server import ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import parse_qs, unquote, urlencode, urlsplit
-from urllib.request import Request, urlopen
+from urllib.parse import unquote, urlsplit
+from urllib.request import Request
 
+
+# Shared image proxy for development; installed sites use fixed nginx locations.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from remnawave_manager.image_preview import OPENER, serve_preview_asset  # noqa: E402
+
+from remnawave_manager.site_assets import FreshAssetsHandler
+from remnawave_manager.aster_proxy import PREFIX as COMMENTS_PREFIX, upstream_url, search_upstream, SEARCH_PATH
 
 SITE = (
     Path(__file__).resolve().parents[1]
@@ -20,55 +28,67 @@ SITE = (
     / "02-aster-observatory"
 )
 SHARED = SITE.parent / "shared"
-SEARCH_PATH = "/_aster/rutube-search"
-SEARCH_URL = "https://rutube.ru/api/search/video/"
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 
 
-class AsterPreviewHandler(SimpleHTTPRequestHandler):
+class AsterPreviewHandler(FreshAssetsHandler):
     def __init__(self, *args: object, **kwargs: object) -> None:
         super().__init__(*args, directory=str(SITE), **kwargs)
 
     def do_GET(self) -> None:  # noqa: N802 - inherited HTTP handler name
+        if serve_preview_asset(self):
+            return
         request = urlsplit(self.path)
+        if request.path.startswith(COMMENTS_PREFIX):
+            self._serve_comments(request)
+            return
         if request.path != SEARCH_PATH:
             self._serve_static()
             return
 
-        params = parse_qs(request.query, keep_blank_values=True)
-        query = params.get("query", [""])[0].strip()[:200]
-        if not query:
-            self._json_error(400, "Search query is required")
+        upstream = search_upstream(request.path, request.query)
+        if upstream is None:
+            self._json_error(400, "Invalid search request")
             return
+        self._serve_json(upstream)
 
-        upstream = f"{SEARCH_URL}?{urlencode({'query': query, 'client': 'wdp'})}"
-        request_headers = {
-            "Accept": "application/json",
-            "User-Agent": "Mozilla/5.0 (compatible; AsterVideoPreview/1.0)",
-        }
+    def _serve_comments(self, target) -> None:
+        upstream = upstream_url(target.path, target.query)
+        if upstream is None:
+            self._json_error(400, "Invalid comments request")
+            return
+        self._serve_json(upstream)
+
+    def _serve_json(self, upstream: str) -> None:
         try:
-            with urlopen(Request(upstream, headers=request_headers), timeout=15) as response:
-                length = response.headers.get("Content-Length")
-                if length and int(length) > MAX_RESPONSE_BYTES:
-                    raise ValueError("RUTUBE response is too large")
+            request = Request(upstream, headers={"Accept": "application/json", "User-Agent": "Mozilla/5.0", "Referer": "https://rutube.ru/"})
+            with OPENER.open(request, timeout=15) as response:
                 payload = response.read(MAX_RESPONSE_BYTES + 1)
                 if len(payload) > MAX_RESPONSE_BYTES:
-                    raise ValueError("RUTUBE response is too large")
+                    raise ValueError("RUTUBE response too large")
                 json.loads(payload)
-        except (HTTPError, URLError, TimeoutError, ValueError, json.JSONDecodeError) as error:
-            self.log_error("RUTUBE search failed: %s", error)
-            self._json_error(502, "RUTUBE search is temporarily unavailable")
+        except (HTTPError, URLError, TimeoutError, OSError, ValueError) as error:
+            status = error.code if isinstance(error, HTTPError) and error.code in {404, 429} else 502
+            if isinstance(error, HTTPError):
+                error.close()
+            self._json_error(status, "RUTUBE is temporarily unavailable")
             return
-
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Security-Policy", "default-src 'none'; sandbox")
+        self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Content-Length", str(len(payload)))
         self.end_headers()
-        self.wfile.write(payload)
+        self._write(payload)
 
     def do_HEAD(self) -> None:  # noqa: N802 - inherited HTTP handler name
         """Keep the preview's static files out of a different site's cache."""
+        if serve_preview_asset(self):
+            return
+        if urlsplit(self.path).path.startswith("/_aster/"):
+            self.send_error(405)
+            return
         self._serve_static(head_only=True)
 
     def _serve_static(self, *, head_only: bool = False) -> None:
@@ -111,7 +131,13 @@ class AsterPreviewHandler(SimpleHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(payload)))
         self.end_headers()
-        self.wfile.write(payload)
+        self._write(payload)
+
+    def _write(self, payload: bytes) -> None:
+        try:
+            self.wfile.write(payload)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
 
 def main() -> None:

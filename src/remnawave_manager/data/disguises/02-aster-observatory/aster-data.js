@@ -1,3 +1,4 @@
+import { imageURL } from '../shared/image-proxy.js';
 import { storage } from '../shared/storage.js';
 
 export const TOPICS = [
@@ -20,21 +21,9 @@ const MAX_VIDEOS = 500;
 export const validId = (value) =>
   typeof value === 'string' && /^[a-f0-9]{32}$/.test(value);
 export function safeImage(value) {
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:' &&
-      !url.username &&
-      !url.password &&
-      ['pic.rtbcdn.ru', 'pic.rutube.ru', 'static.rutubelist.ru'].includes(
-        url.hostname,
-      )
-      ? url.href
-      : '';
-  } catch {
-    return '';
-  }
+  return imageURL(value);
 }
-function normalizePublicComment(raw) {
+export function normalizePublicComment(raw) {
   const selectedId = String(raw?.id || '').replace(/^rt:/, '');
   if (
     !raw ||
@@ -58,11 +47,12 @@ function normalizePublicComment(raw) {
     authorId: /^\d{1,20}$/.test(String(raw.authorId || author.id || ''))
       ? String(raw.authorId || author.id)
       : '',
-    avatar: safeImage(raw.avatar || author.avatar),
+    avatar: safeImage(raw.avatar || author.avatar_url || author.avatar),
     likes: counter(raw.likes ?? raw.likes_number) || 0,
     dislikes: counter(raw.dislikes ?? raw.dislikes_number) || 0,
     parentId: /^\d{1,24}$/.test(selectedParent) ? `rt:${selectedParent}` : null,
     pinned: raw.pinned === true || raw.is_pinned === true,
+    repliesCount: counter(raw.repliesCount ?? raw.replies_number) || 0,
   };
 }
 export function normalize(raw, topic = 'general') {
@@ -199,5 +189,24 @@ export async function searchRutube(query, page = 1, signal) {
     videos: normalizeList(result.results, 200),
     hasNext: result.has_next === true && selectedPage < 20,
     page: selectedPage,
+  };
+}
+
+export async function loadComments(videoId, { cursor = '', parent = '', signal } = {}) {
+  if (!validId(videoId)) throw new Error('Invalid video ID');
+  const params = new URLSearchParams();
+  for (const [key, value] of [['comment_id', cursor], ['parent_id', parent]]) {
+    if (value && !/^\d{1,24}$/.test(value)) throw new Error('Invalid comment ID');
+    if (value) params.set(key, value);
+  }
+  const result = await json('/_aster/rutube-comments/' + videoId + (params.size ? '?' + params : ''), signal);
+  if (!Array.isArray(result.results)) throw new Error('Invalid comments response');
+  const rows = [...(result.pinned_comment && !parent && !cursor ? [result.pinned_comment] : []), ...result.results]
+    .map(normalizePublicComment).filter(Boolean);
+  return {
+    rows: [...new Map(rows.map(row => [row.id, row])).values()],
+    count: counter(result.comments_count),
+    hasNext: result.has_next === true,
+    cursor: String(result.results.at(-1)?.id || ''),
   };
 }

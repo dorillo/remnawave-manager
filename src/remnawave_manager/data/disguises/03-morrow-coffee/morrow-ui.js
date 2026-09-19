@@ -1,3 +1,4 @@
+import { imageURL } from '../shared/image-proxy.js';
 import { t } from "./morrow-i18n.js";
 export function el(tag, attributes = {}, ...children) {
   const node = document.createElement(tag);
@@ -6,6 +7,8 @@ export function el(tag, attributes = {}, ...children) {
       node.addEventListener(key.slice(2), value);
     else if (key === "class") node.className = value;
     else if (key === "value") node.value = value;
+    else if ((tag === 'img' && key === 'src') || key === 'poster')
+      node.setAttribute(key, imageURL(value));
     else if (value !== false && value != null)
       node.setAttribute(key, value === true ? "" : value);
   }

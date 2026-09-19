@@ -23,6 +23,7 @@ from .runner import (
     read_stable_regular_file,
     sha256_file,
 )
+from .site_assets import revision, versioned
 from .site_policy import (
     upgrade_answers_policy,
     upgrade_aster_policy,
@@ -104,6 +105,7 @@ def copy_template(template_id: str, target: Path) -> None:
     file_count = 0
     total_size = 0
     try:
+        asset_revision = revision(source, shared)
         resources = [
             (item, item.relative_to(source)) for item in sorted(source.rglob("*"), key=str)
         ]
@@ -125,6 +127,8 @@ def copy_template(template_id: str, target: Path) -> None:
                 raise ValidationError("Шаблон маскировочного сайта слишком большой.")
             destination.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
             atomic_copy(item, destination, mode=0o644)
+            if destination.suffix in {".js", ".html"}:
+                destination.write_bytes(versioned(destination.read_bytes(), destination.suffix, asset_revision))
             total_size += destination.stat().st_size
             if total_size > 100 * 1024 * 1024:
                 raise ValidationError("Шаблон маскировочного сайта слишком большой.")

@@ -25,6 +25,10 @@ const html = `<p><b>Земля</b> — третья планета Солнеч�
     errors = [];
   await context.route("**/*", async (route) => {
     const u = new URL(route.request().url());
+    if (u.pathname === '/shared/image-proxy.js')
+      return route.fulfill({ contentType: 'text/javascript', body: await fs.readFile(path.resolve(root, '../shared/image-proxy.js')) });
+    if (u.pathname.startsWith('/_images/'))
+      return route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="green"/></svg>' });
     assert.equal(route.request().method(), "GET");
     if (u.pathname.startsWith("/_svod/")) {
       if (delayedArticle && u.pathname.endsWith("/article"))

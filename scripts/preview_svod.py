@@ -4,12 +4,19 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import re
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from http.server import ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlencode, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
+
+# Shared image proxy for development; installed sites use fixed nginx locations.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from remnawave_manager.image_preview import serve_preview_asset  # noqa: E402
+
+from remnawave_manager.site_assets import FreshAssetsHandler
 
 SITE = Path(__file__).resolve().parents[1] / "src/remnawave_manager/data/disguises/05-field-notes"
 PREFIX = "/_svod/wikipedia/"
@@ -25,7 +32,7 @@ class NoRedirect(HTTPRedirectHandler):
 OPENER = build_opener(NoRedirect)
 
 
-class SvodPreviewHandler(SimpleHTTPRequestHandler):
+class SvodPreviewHandler(FreshAssetsHandler):
     def __init__(self, *args: object, **kwargs: object) -> None:
         super().__init__(*args, directory=str(SITE), **kwargs)
 
@@ -39,7 +46,14 @@ class SvodPreviewHandler(SimpleHTTPRequestHandler):
             return str(SITE / "__not_found__")
         return str(result)
 
+    def do_HEAD(self) -> None:
+        if serve_preview_asset(self):
+            return
+        super().do_HEAD()
+
     def do_GET(self) -> None:  # noqa: N802
+        if serve_preview_asset(self):
+            return
         request = urlsplit(self.path)
         if not request.path.startswith(PREFIX):
             super().do_GET()
@@ -60,6 +74,7 @@ class SvodPreviewHandler(SimpleHTTPRequestHandler):
                 json.loads(payload)
                 retry_after = response.headers.get("Retry-After")
         except HTTPError as error:
+            error.close()
             status = error.code if error.code in {404, 429} else 502
             self._json_error(status, "Wikipedia is unavailable", retry_after=error.headers.get("Retry-After") if status == 429 else None)
             return

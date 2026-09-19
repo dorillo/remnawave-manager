@@ -1,6 +1,8 @@
 """Fixed anonymous RIA reads. Configuration generation, not a web service."""
 from __future__ import annotations
 
+from .proxy_policy import harden_proxy
+
 import re
 
 SECTIONS = 'politics|world|economy|society|science|culture'
@@ -32,7 +34,7 @@ def upstream(path: str, query: str) -> str | None:
     return None
 
 
-def render_proxy(*, include_search: bool = True) -> str:
+def render_proxy(*, include_search: bool = True, secure: bool = True) -> str:
     blocks = []
     for pattern, target, args, media in ROUTES:
         if not include_search and pattern == r'/ria/search':
@@ -80,4 +82,5 @@ def render_proxy(*, include_search: bool = True) -> str:
         proxy_read_timeout 15s;
     }}''')
     blocks.append('    location /_fokus/ { return 404; }')
-    return '\n\n'.join(blocks)
+    result = "\n\n".join(blocks)
+    return harden_proxy(result, "fokus") if secure else result

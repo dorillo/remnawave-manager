@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .proxy_policy import harden_proxy
+
 import re
 
 PREFIX = "/_northline/"
@@ -36,7 +38,7 @@ def upstream_url(path: str, query: str) -> str | None:
     return None
 
 
-def render_proxy(*, legacy: bool = False) -> str:
+def render_proxy(*, legacy: bool = False, secure: bool = True) -> str:
     """Render static upstreams, so user input can never select a destination."""
     blocks = []
     for source, host in HOSTS.items():
@@ -76,4 +78,5 @@ def render_proxy(*, legacy: bool = False) -> str:
         "    location @northline_upstream_error { return 502; }",
         "    location /_northline/ { return 404; }",
     ])
-    return "\n\n".join(blocks)
+    result = "\n\n".join(blocks)
+    return harden_proxy(result, "northline") if secure else result

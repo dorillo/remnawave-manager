@@ -58,6 +58,10 @@ class AnswersIntegrationTests(unittest.TestCase):
             self.assertTrue((target / "favicon.svg").is_file())
             for module in target.glob("*.js"):
                 for dependency in re.findall(r"from ['\"]([^'\"]+)['\"]", module.read_text()):
+                    dependency = dependency.split("?", 1)[0]
+                    # At the installed site's URL root, ../shared resolves to /shared.
+                    if dependency.startswith("../shared/"):
+                        dependency = dependency[3:]
                     self.assertTrue((module.parent / dependency).is_file(), dependency)
             self.assertNotIn("site-runtime.js", (target / "index.html").read_text())
 

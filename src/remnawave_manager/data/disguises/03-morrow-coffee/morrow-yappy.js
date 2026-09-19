@@ -1,3 +1,4 @@
+import { imageURL } from '../shared/image-proxy.js';
 // Untrusted provider data is reduced to this explicit, text-only schema.
 export const validId = (value) =>
   typeof value === "string" && /^[a-f0-9]{32}$/.test(value);
@@ -7,11 +8,10 @@ export const cleanId = (value) =>
     .toLowerCase();
 const text = (v, max = 5000) => (typeof v === "string" ? v.slice(0, max) : "");
 export function safeURL(value, media = false) {
+  if (!media) return imageURL(value);
   try {
     const u = new URL(value);
-    const hosts = media
-      ? ["vb-rtb.uma.media"]
-      : ["cdn-st.rutubelist.ru", "cdn-st.yappy.media", "pic.rtbcdn.ru"];
+    const hosts = ["vb-rtb.uma.media"];
     return u.protocol === "https:" &&
       !u.username &&
       !u.password &&

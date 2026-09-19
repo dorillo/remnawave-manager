@@ -307,7 +307,7 @@ const EN = new Map(Object.entries({
   'О Mastodon': 'About Mastodon',
   'Line собирает публичные записи, фотографии и обсуждения из Mastodon. Имена авторов, даты и счётчики берутся из оригинальных публикаций.': 'Line brings together public posts, photos, and discussions from Mastodon. Author names, dates, and counts come from the original posts.',
   'Создайте профиль, собирайте интересные истории и присоединяйтесь к разговорам.': 'Create an account, collect interesting stories, and join conversations.',
-  'Публичные записи загружаются с mastodon.ml через сервер сайта, изображения и видео — из медиахранилищ источников. Доступность материалов зависит от источника.': 'Public posts are loaded from mastodon.ml through this site’s server; images and videos come from the sources’ media storage. Availability depends on the source.',
+  'Публичные записи и изображения загружаются через сервер сайта, видео — из медиахранилищ источников. Доступность материалов зависит от источника.': 'Public posts and images are loaded through this site’s server; videos come from the sources’ media storage. Availability depends on the source.',
 }));
 
 const PATTERNS = [

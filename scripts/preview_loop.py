@@ -5,7 +5,7 @@ import argparse
 import json
 import re
 import sys
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from http.server import ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, Request, build_opener
@@ -13,6 +13,7 @@ from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from remnawave_manager.loop_proxy import MEDIA_PATTERN, ROUTES
+from remnawave_manager.site_assets import FreshAssetsHandler
 
 SITE = Path(__file__).resolve().parents[1] / "src/remnawave_manager/data/disguises/06-loop-archive"
 
@@ -22,7 +23,7 @@ class NoRedirect(HTTPRedirectHandler):
 
 OPENER = build_opener(NoRedirect)
 
-class LoopPreviewHandler(SimpleHTTPRequestHandler):
+class LoopPreviewHandler(FreshAssetsHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(SITE), **kwargs)
 
@@ -101,6 +102,7 @@ class LoopPreviewHandler(SimpleHTTPRequestHandler):
                     try: self.wfile.write(payload)
                     except (BrokenPipeError, ConnectionResetError): pass
         except HTTPError as error:
+            error.close()
             self.send_error(error.code if error.code in (404, 429, 416) else 502)
         except (URLError, TimeoutError, OSError, ValueError): self.send_error(502)
 

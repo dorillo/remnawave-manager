@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from http.server import ThreadingHTTPServer
 from importlib.resources import files
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -17,6 +17,11 @@ SOURCE = Path(__file__).resolve().parents[1] / "src"
 if SOURCE.is_dir():
     sys.path.insert(0, str(SOURCE))
 from remnawave_manager.northline_proxy import PREFIX, upstream_url  # noqa: E402
+
+# Shared image proxy for development; installed sites use fixed nginx locations.
+from remnawave_manager.image_preview import serve_preview_asset
+
+from remnawave_manager.site_assets import FreshAssetsHandler
 
 SITE = Path(str(files("remnawave_manager").joinpath("data/disguises/01-northline")))
 
@@ -31,7 +36,7 @@ class NoRedirect(HTTPRedirectHandler):
 OPENER = build_opener(NoRedirect)
 
 
-class NorthlinePreviewHandler(SimpleHTTPRequestHandler):
+class NorthlinePreviewHandler(FreshAssetsHandler):
     def __init__(self, *args: object, **kwargs: object) -> None:
         super().__init__(*args, directory=str(SITE), **kwargs)
 
@@ -41,7 +46,7 @@ class NorthlinePreviewHandler(SimpleHTTPRequestHandler):
 
     def translate_path(self, path):
         resource = urlsplit(path).path
-        if resource in {"/shared/date-utils.js", "/shared/storage.js"}:
+        if resource in {"/shared/date-utils.js", "/shared/storage.js", "/shared/image-proxy.js"}:
             return str(SITE.parent / resource.lstrip("/"))
         result = Path(super().translate_path(path)).resolve()
         if not result.is_relative_to(SITE.resolve()):
@@ -49,6 +54,8 @@ class NorthlinePreviewHandler(SimpleHTTPRequestHandler):
         return str(result)
 
     def do_GET(self) -> None:  # noqa: N802
+        if serve_preview_asset(self):
+            return
         request = urlsplit(self.path)
         if not request.path.startswith(PREFIX):
             super().do_GET()
@@ -72,6 +79,7 @@ class NorthlinePreviewHandler(SimpleHTTPRequestHandler):
                 json.loads(payload)
                 retry_after = response.headers.get("Retry-After")
         except HTTPError as error:
+            error.close()
             status = error.code if error.code in {404, 429} else 502
             retry_after = error.headers.get("Retry-After") if status == 429 else None
             error.close()
@@ -92,6 +100,8 @@ class NorthlinePreviewHandler(SimpleHTTPRequestHandler):
             self._write(payload)
 
     def do_HEAD(self) -> None:  # noqa: N802
+        if serve_preview_asset(self):
+            return
         if urlsplit(self.path).path.startswith(PREFIX):
             self._json_error(405, "Only GET is allowed")
         else:

@@ -39,6 +39,11 @@ let browser;
   const searchPages = [];
   await context.route(`${origin}/**`, async (route) => {
     const url = new URL(route.request().url());
+    if (url.pathname.startsWith('/_aster/rutube-comments/')) {
+      const fixture = JSON.parse(await fs.readFile(path.join(root, '02-aster-observatory/data/catalog.json'), 'utf8'));
+      const video = fixture.videos.find(video => video.id === url.pathname.split('/').at(-1));
+      return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ results: video?.publicComments || [], comments_count: video?.commentsCount || 0, has_next: false }) });
+    }
     if (url.pathname === '/_aster/rutube-search') {
       searchCalls += 1;
       const page = Math.max(1, Number(url.searchParams.get('page')) || 1);

@@ -1,14 +1,19 @@
+import { imageURL } from '../shared/image-proxy.js';
 const API = '/_answers/mail/';
 const CACHE = 'answers:feed:v1';
 const MAX_TEXT = 12000;
-const imageHosts = new Set(['otvet.cdn-vk.net', 'otvet-static.cdn-vk.net']);
 let cooldown = 0;
 
 export function safeImage(value) {
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:' && !url.username && !url.password && imageHosts.has(url.hostname) ? url.href : '';
-  } catch { return ''; }
+  if (typeof value !== 'string' || !value) return '';
+  if (/^(?:blob:|data:image\/[a-z0-9.+-]+;base64,)/i.test(value)) return imageURL(value);
+  // Mail supplies both bare gallery filenames and relative avatar URLs.
+  // The optional leading slash also repairs URLs saved by older versions.
+  const file = value.match(/^(?:\/api\/pictures\/images\/|\/)?([a-f0-9]{64,128}\.(?:jpg|jpeg|png|webp)(?:\?size=(?:small|medium|large|origin))?)$/);
+  if (file) value = 'https://otvet.cdn-vk.net/api/pictures/images/' + file[1];
+  if (!/^(?:https:\/\/|\/_images\/)/.test(value)) return '';
+  const url = imageURL(value);
+  return /^\/_images\/(?:otvet\.cdn-vk\.net|otvet-static\.cdn-vk\.net|filin\.mail\.ru)\//.test(url) ? url : '';
 }
 
 export function plainDoc(doc, limit = MAX_TEXT) {
@@ -39,9 +44,7 @@ export function images(doc) {
     if (typeof node !== 'object') return;
     if (node.type === 'imageGallery' && Array.isArray(node.attrs?.gallery)) {
       for (const item of node.attrs.gallery.slice(0, 4)) {
-        let url = safeImage(item?.src);
-        if (!url && /^[a-f0-9]{64,128}\.(?:jpg|jpeg|png|webp)(?:\?size=(?:small|medium|large|origin))?$/.test(String(item?.src || '')))
-          url = safeImage(`https://otvet.cdn-vk.net/api/pictures/images/${item.src}`);
+        const url = safeImage(item?.src);
         if (url && !found.includes(url)) found.push(url);
       }
     }

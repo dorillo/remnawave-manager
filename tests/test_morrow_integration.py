@@ -81,6 +81,10 @@ class MorrowIntegrationTests(unittest.TestCase):
             for module in target.glob('*.js'):
                 source = module.read_text(encoding='utf-8')
                 for dependency in re.findall(r"from ['\"]([^'\"]+)['\"]", source):
+                    dependency = dependency.split("?", 1)[0]
+                    # At the installed site's URL root, ../shared resolves to /shared.
+                    if dependency.startswith("../shared/"):
+                        dependency = dependency[3:]
                     self.assertTrue((module.parent / dependency).is_file(), dependency)
             html = (target / 'index.html').read_text(encoding='utf-8')
             self.assertNotIn('site-runtime.js', html)

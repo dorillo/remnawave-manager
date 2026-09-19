@@ -1,9 +1,6 @@
-﻿import { safeUrl } from './northline-data.js';
+import { imageURL } from '../shared/image-proxy.js';
+import { safeUrl } from './northline-data.js';
 import { translate } from './northline-i18n.js';
-const safeMediaUrl = (value) => {
-  const remote = safeUrl(value);
-  return remote || (/^data:(?:image|video)\/[a-z0-9.+-]+;base64,/i.test(String(value || '')) ? String(value) : '');
-};
 export function el(tag, attrs = {}, children = []) {
   const node = document.createElement(tag);
   for (const [key, value] of Object.entries(attrs)) {
@@ -11,6 +8,7 @@ export function el(tag, attrs = {}, children = []) {
     if (key === 'class') node.className = value;
     else if (key === 'text') node.textContent = translate(value);
     else if (key.startsWith('on')) node.addEventListener(key.slice(2).toLowerCase(), value);
+    else if (key === 'poster') node.setAttribute(key, imageURL(value));
     else node.setAttribute(key, value === true ? '' : String(['aria-label', 'title', 'placeholder', 'alt'].includes(key) ? translate(value) : value));
   }
   for (const child of [children].flat(Infinity))
@@ -90,7 +88,7 @@ export function externalLink(label, url, className = '') {
 }
 export function picture(url, alt = '', className = '') {
   const img = el('img', {
-    src: safeMediaUrl(url),
+    src: imageURL(url),
     alt,
     class: className,
     loading: 'lazy',
@@ -117,7 +115,7 @@ export function avatar(account, large = false) {
     { class: `avatar${large ? ' avatar-large' : ''}`, 'aria-hidden': 'true' },
     (account?.name || 'L').slice(0, 1).toUpperCase(),
   );
-  if (safeMediaUrl(account?.avatar)) {
+  if (imageURL(account?.avatar)) {
     const image = picture(account.avatar, '', 'avatar-image');
     image.addEventListener('error', () => {
       box.textContent = (account.name || 'L').slice(0, 1).toUpperCase();

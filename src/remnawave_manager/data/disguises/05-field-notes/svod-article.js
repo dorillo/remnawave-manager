@@ -1,3 +1,4 @@
+import { imageURL } from '../shared/image-proxy.js';
 import DOMPurify from "./purify.es.js";
 import { el, route, dialog } from "./svod-ui.js";
 import { t } from "./svod-i18n.js";
@@ -237,7 +238,7 @@ export function renderArticle(article) {
       if (!Number.isFinite(size) || size <= 0 || size > 4096)
         img.removeAttribute(key);
     }
-    img.src = url.href;
+    img.src = imageURL(url.href);
     img.loading = "lazy";
     img.decoding = "async";
     img.referrerPolicy = "no-referrer";
@@ -255,7 +256,7 @@ export function renderArticle(article) {
       img.setAttribute("aria-label", t("zoom"));
       const zoom = () =>
         dialog(img.alt || t("zoom"), [
-          el("img", { src: url.href, alt: img.alt, class: "zoom-image" }),
+          el("img", { src: imageURL(url.href), alt: img.alt, class: "zoom-image" }),
         ]);
       img.addEventListener("click", (e) => {
         e.preventDefault();

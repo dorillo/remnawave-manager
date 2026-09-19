@@ -1,5 +1,7 @@
 """Fixed anonymous GIFS read routes. No upstream write/auth endpoints."""
 
+from .proxy_policy import harden_proxy
+
 MEDIA_PATTERN = r"[a-f0-9]{32,64}(?:_(?:150|300|500|preview))?\.(?:gif|webp|mp4|png|jpg)"
 # name -> (method, upstream path, exact allowed query expression)
 ROUTES = {
@@ -40,7 +42,7 @@ def _upstream(host: str, *, media: bool = False, post: bool = False) -> str:
 ''' if media else "")
 
 
-def render_proxy() -> str:
+def render_proxy(*, secure: bool = True) -> str:
     blocks = []
     for name, (method, path, query) in ROUTES.items():
         guard = f'if ($args !~ "^{query}$") {{ return 400; }}' if query else 'if ($args != "") { return 400; }'
@@ -60,4 +62,5 @@ def render_proxy() -> str:
         rewrite ^ /$loop_file break;
 {_upstream("media.gifs.ru", media=True)}    }}''')
     blocks.extend(['    location @loop_upstream_error { return 502; }', '    location /_loop/ { return 404; }'])
-    return "\n\n".join(blocks)
+    result = "\n\n".join(blocks)
+    return harden_proxy(result, "loop") if secure else result
