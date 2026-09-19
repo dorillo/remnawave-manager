@@ -1,3 +1,4 @@
+import { guestPrompt } from '../shared/guest-state.js';
 import { loadingNode } from '../shared/feedback.js';
 import { t, preference } from "./loop-i18n.js";
 import {
@@ -1129,21 +1130,8 @@ async function detailPage(id, signal, token) {
     }
   }
 }
-function gated() {
-  main.append(
-    state(
-      t("signInNeeded"),
-      t("signInHelp"),
-      button(
-        t("login"),
-        () => {
-          pendingAction = null;
-          openAuth();
-        },
-        { className: "primary" },
-      ),
-    ),
-  );
+function gated(kind = 'profile') {
+  main.append(guestPrompt(kind, () => { pendingAction = null; openAuth(); }));
 }
 const localPageSizes = new Map();
 function localList(items, draw, className = "gallery") {
@@ -1187,7 +1175,7 @@ async function libraryPage(r, token) {
     main.append(
       pageIntro(t(isLikes ? "likes" : "collections"), t("libraryIntro")),
     );
-    gated();
+    gated(isLikes ? 'likedMedia' : 'collections');
     return;
   }
   const collections = await store.owned("collections");
@@ -1493,7 +1481,7 @@ function uploadsPage() {
     ),
   );
   if (!account) {
-    gated();
+    gated('uploadsMedia');
     return;
   }
   main.append(

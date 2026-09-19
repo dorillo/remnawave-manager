@@ -54,7 +54,7 @@ const sites = [
           await link.hover();
           assert.equal(await link.evaluate(node => getComputedStyle(node).textDecorationLine), 'none');
           if (brand === 'Line') {
-            const surface = await page.locator('.empty-state').evaluate(node => getComputedStyle(node).backgroundColor);
+            const surface = await page.locator('.guest-prompt').evaluate(node => getComputedStyle(node).backgroundColor);
             const rgb = surface.match(/\d+/g).slice(0, 3).map(Number);
             assert.equal(rgb.every(value => value < 80), theme === 'dark', 'Line empty state uses the current palette');
           }

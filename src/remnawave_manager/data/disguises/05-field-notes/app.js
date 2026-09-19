@@ -1,3 +1,4 @@
+import { guestPrompt } from '../shared/guest-state.js';
 import { loadingNode } from '../shared/feedback.js';
 import { t, lang, setting, prefs, date } from "./svod-i18n.js";
 import {
@@ -401,11 +402,7 @@ function accountDialog() {
 function requireAccount(historyMode = false) {
   main.append(
     heading(t(historyMode ? "history" : "library")),
-    empty(
-      "accountNeeded",
-      "accountNeededHint",
-      button(t("login"), () => authDialog(), "primary"),
-    ),
+    guestPrompt(historyMode ? 'historyReading' : 'library', () => authDialog()),
   );
 }
 async function home(token, signal) {

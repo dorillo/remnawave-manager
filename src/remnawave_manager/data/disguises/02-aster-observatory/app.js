@@ -1,3 +1,4 @@
+import { guestPrompt } from '../shared/guest-state.js';
 import { loadingNode } from '../shared/feedback.js';
 // Each visit starts with the system theme; a manual toggle applies to this visit.
 const appearanceMedia = matchMedia('(prefers-color-scheme: dark)');
@@ -1373,14 +1374,7 @@ function render() {
     !user()
   ) {
     heading(main, t(page));
-    main.append(
-      el(
-        'section',
-        { class: 'signin-prompt' },
-        el('h2', {}, t('needLogin')),
-        button(t('login'), () => auth(), { class: 'primary' }),
-      ),
-    );
+    main.append(guestPrompt(({ subscriptions: 'subscriptions', history: 'historyVideo', likes: 'likedVideos', later: 'later' })[page] || 'profile', () => auth()));
     return;
   }
   if (page === 'profile') { profile(main); return; }

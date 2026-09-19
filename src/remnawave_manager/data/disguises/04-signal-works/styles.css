@@ -47,3 +47,8 @@
 @media (prefers-reduced-motion: reduce) { .brand b { transition: none; } }
 
 body:has(.modal-backdrop) { overflow: hidden; }
+
+.guest-prompt { background: #fff; border-color: #dce3ed; color: #182438; }
+.guest-prompt p { color: #65758b; }
+[data-theme="dark"] .guest-prompt { background: #1e293b; border-color: #35465e; color: #dce5f3; }
+[data-theme="dark"] .guest-prompt p { color: #a7b8d0; }

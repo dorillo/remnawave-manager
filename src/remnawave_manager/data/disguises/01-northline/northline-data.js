@@ -226,7 +226,7 @@ export async function request(path, { force = false, ttl = 180000 } = {}) {
               ? 'Запись или профиль больше недоступны'
               : response.status === 429
                 ? 'Слишком много запросов. Попробуйте немного позже'
-                : 'Не удалось загрузить данные Mastodon',
+                : 'Не удалось загрузить публикации. Попробуйте ещё раз.',
         );
       const data = await response.json();
       cache(key, data);

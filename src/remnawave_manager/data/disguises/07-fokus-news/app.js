@@ -1,3 +1,4 @@
+import { guestMarkup } from '../shared/guest-state.js';
 import * as store from "./fokus-store.js?v=20260919-release";
 import { authenticate } from "./fokus-auth.js?v=20260919-release";
 import {
@@ -73,14 +74,14 @@ function accountGate(fn) {
 }
 function header() {
   document.querySelector("#header").innerHTML =
-    `<div class="masthead wrap"><a class="brand" href="#/home" aria-label="Fokus">Fokus<span class="brand-dot"></span></a><form id="search" role="search"><label class="sr-only" for="search-input">${e(t("search"))}</label>${icon("search")}<input id="search-input" name="q" type="search" placeholder="${e(t("search"))}" value="${e(query)}" maxlength="120" autocomplete="off"><button type="submit" aria-label="${e(t("searchAction"))}">${icon("arrow")}</button></form><div class="header-actions">${button("language", lang === "ru" ? "EN" : "RU", "", "language-button", `aria-label="${lang === "ru" ? "English" : "Русский"}"`)}${button("theme", t(theme === "dark" ? "light" : "dark"), theme === "dark" ? "sun" : "moon", "icon-button")}${me() ? `<a class="account-link" href="#/profile" aria-label="${e(t("profile"))}">${avatar(me())}<span>${e(me().name)}</span></a>` : button("auth", t("login"), "user", "login-button")}${button("menu", t("menu"), "menu", "icon-button menu-toggle", `aria-expanded="${menu}" aria-controls="mobile-navigation"`)}</div></div><div class="nav-border"><nav id="navigation" class="wrap ${menu ? "open" : ""}" aria-label="${e(t("menu"))}">${["home", ...sections].map((s) => `<a href="#/${s === "home" ? s : "section/" + s}" ${view.kind === s || view.section === s ? 'aria-current="page"' : ""}>${e(t(s))}</a>`).join("")}<a class="nav-saved" href="#/profile/saved">${icon("bookmark")}${e(t("saved"))}</a></nav></div>`;
+    `<div class="masthead wrap"><a class="brand" href="#/home" aria-label="Fokus"><img class="brand-logo" src="favicon.svg" alt="" width="40" height="40"><span>Fokus<span class="brand-dot"></span></span></a><form id="search" role="search"><label class="sr-only" for="search-input">${e(t("search"))}</label>${icon("search")}<input id="search-input" name="q" type="search" placeholder="${e(t("search"))}" value="${e(query)}" maxlength="120" autocomplete="off"><button type="submit" aria-label="${e(t("searchAction"))}">${icon("arrow")}</button></form><div class="header-actions">${button("language", lang === "ru" ? "EN" : "RU", "", "language-button", `aria-label="${lang === "ru" ? "English" : "Русский"}"`)}${button("theme", t(theme === "dark" ? "light" : "dark"), theme === "dark" ? "sun" : "moon", "icon-button")}${me() ? `<a class="account-link" href="#/profile" aria-label="${e(t("profile"))}">${avatar(me())}<span>${e(me().name)}</span></a>` : button("auth", t("login"), "user", "login-button")}${button("menu", t("menu"), "menu", "icon-button menu-toggle", `aria-expanded="${menu}" aria-controls="mobile-navigation"`)}</div></div><div class="nav-border"><nav id="navigation" class="wrap ${menu ? "open" : ""}" aria-label="${e(t("menu"))}">${["home", ...sections].map((s) => `<a href="#/${s === "home" ? s : "section/" + s}" ${view.kind === s || view.section === s ? 'aria-current="page"' : ""}>${e(t(s))}</a>`).join("")}<a class="nav-saved" href="#/profile/saved">${icon("bookmark")}${e(t("saved"))}</a></nav></div>`;
   const drawer = document.querySelector("#mobile-navigation");
   const activeDrawerLink = drawer.contains(document.activeElement)
     ? document.activeElement.getAttribute("href")
     : null;
   drawer.setAttribute("aria-label", t("menu"));
   drawer.innerHTML = menu
-    ? `<div class="drawer-heading"><span class="brand">Fokus</span>${button("menu-close", t("close"), "close", "icon-button")}</div><nav aria-label="${e(t("menu"))}">${document.querySelector("#navigation").innerHTML}</nav>`
+    ? `<div class="drawer-heading"><span class="brand"><img class="brand-logo" src="favicon.svg" alt="" width="40" height="40"><span>Fokus</span></span>${button("menu-close", t("close"), "close", "icon-button")}</div><nav aria-label="${e(t("menu"))}">${document.querySelector("#navigation").innerHTML}</nav>`
     : "";
   if (menu && !drawer.open) drawer.showModal();
   if (menu && activeDrawerLink)
@@ -93,7 +94,7 @@ function header() {
   document.documentElement.lang = lang;
   document.querySelector(".skip-link").textContent = t("skip");
   document.querySelector("#footer").innerHTML =
-    `<div class="wrap"><a class="brand" href="#/home">Fokus<span class="brand-dot"></span></a><span>${e(t("footer"))}</span></div>`;
+    `<div class="wrap"><a class="brand" href="#/home"><img class="brand-logo" src="favicon.svg" alt="" width="40" height="40"><span>Fokus<span class="brand-dot"></span></span></a><span>${e(t("footer"))}</span></div>`;
 }
 function pageHead(title, subtitle = "", refresh = true) {
   return `<div class="page-head"><div><div class="eyebrow">${e(t("edition"))}</div><h1>${e(title)}</h1>${subtitle ? `<p class="muted">${e(subtitle)}</p>` : ""}</div>${refresh ? button("refresh", t("refresh"), "refresh", "secondary") : ""}</div>`;
@@ -137,7 +138,7 @@ function listing(items, title, subtitle = "", canMore = false) {
 }
 function personal(kind) {
   if (!me())
-    return `${pageHead(t(kind), "", false)}<div class="account-gate">${icon("bookmark")}<h2>${e(t("localAccount"))}</h2>${button("auth", t("login"), "user", "primary")}</div>`;
+    return `${pageHead(t(kind), "", false)}${guestMarkup(({ saved: "savedNews", history: "historyNews", ownComments: "comments", ownReactions: "reactions" })[kind] || "profile", "auth")}`;
   const items = db[kind === "saved" ? "bookmarks" : "history"]
     .filter((b) => b.accountId === me().id)
     .map((b) => b.article);
@@ -444,7 +445,7 @@ function avatarPreview() {
     !profileEdit.avatar;
 }
 function profileView() {
-  if (!me()) return personal("profile");
+  if (!me()) return personal(view.tab || "profile");
   const a = me(),
     tab = view.tab || "settings";
   return `${pageHead(t("profile"), "", false)}<div class="profile-heading">${avatar(a)}<div><h2>${e(a.name)}</h2><span class="muted">@${e(a.login)}</span></div></div><nav class="profile-tabs">${["settings", "saved", "history", "ownComments", "ownReactions"].map((x) => `<a href="#/profile/${x}" ${tab === x ? 'aria-current="page"' : ""} aria-label="${e(t(x))}" title="${e(t(x))}">${icon({ settings: "user", saved: "bookmark", history: "clock", ownComments: "chat", ownReactions: "heart" }[x])}<span>${e(t(x))}</span></a>`).join("")}</nav>${

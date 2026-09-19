@@ -309,8 +309,17 @@ let browser;
     fill: getComputedStyle(control.querySelector('svg')).fill,
   }));
   assert(savedStyle.selected);
-  assert.notEqual(savedStyle.background, 'rgba(0, 0, 0, 0)');
+  assert.equal(savedStyle.background, 'rgba(0, 0, 0, 0)');
   assert.notEqual(savedStyle.fill, 'none');
+  async function checkReactionBackground(control) {
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
+      await control.hover();
+      assert.equal(await control.evaluate(node => getComputedStyle(node).backgroundColor), 'rgba(0, 0, 0, 0)');
+      assert.notEqual(await control.locator('svg').evaluate(node => getComputedStyle(node).fill), 'none');
+    }
+  }
+  await checkReactionBackground(first.getByRole('button', { name: 'Убрать из сохранённого' }));
   await page.locator('.post[data-post-id="ml:102"]').getByRole('button', { name: 'Проголосовать' }).click();
   await page.getByRole('dialog').getByLabel('Утро').check();
   await page.getByRole('dialog').getByRole('button', { name: 'Проголосовать' }).click();
@@ -324,6 +333,7 @@ let browser;
   await page.locator('.post').getByRole('button', { name: 'Действия с записью' }).click();
   await page.getByRole('button', { name: 'Добавить в избранное' }).click();
   assert(await page.locator('.post[data-post-id="ml:101"] .post-action[aria-label^="Нравится"]').evaluate((control) => control.classList.contains('selected')));
+  await checkReactionBackground(page.locator('.post[data-post-id="ml:101"] .post-action[aria-label^="Нравится"]'));
   await page.locator('.my-line-tabs a[href="#/me?tab=likes"]').click();
   assert.equal(await page.locator('.post').count(), 1);
   await page.locator('.post').getByRole('link', { name: 'Открыть обсуждение, 2 ответов' }).click();
@@ -595,13 +605,14 @@ let browser;
   const repostTarget = page.locator('.post[data-post-id="ml:101"]');
   await repostTarget.waitFor();
   await repostTarget.getByRole('button', { name: /Поделиться в Line, / }).click();
+  await checkReactionBackground(repostTarget.getByRole('button', { name: /Поделиться в Line, / }));
   await page.locator('.primary-nav').getByText('Профиль', { exact: true }).click();
   await page.locator('.my-line-tabs a[href="#/me?tab=reposts"]').click();
   await page.locator('.post[data-post-id="ml:101"]').waitFor();
   await page.getByRole('button', { name: 'Выйти', exact: true }).click();
   await page.getByRole('dialog').getByRole('heading', { name: 'Выйти из профиля?' }).waitFor();
   await page.getByRole('dialog').getByRole('button', { name: 'Выйти', exact: true }).click();
-  await page.getByRole('heading', { name: 'Ваш профиль ждёт' }).waitFor();
+  await page.locator('.guest-prompt').waitFor();
   assert.equal(await page.locator('.mini-profile strong').textContent(), 'Гость Line');
   // Hash navigation retains the same application instance and exposes stale session caches.
   await page.evaluate(() => { location.hash = '#/feed?tab=following'; });

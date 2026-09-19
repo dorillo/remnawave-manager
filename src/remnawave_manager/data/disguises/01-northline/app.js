@@ -1,3 +1,4 @@
+import { guestPrompt } from '../shared/guest-state.js';
 // Each visit starts with the system theme; a manual toggle applies to this visit.
 const appearanceMedia = matchMedia('(prefers-color-scheme: dark)');
 let appearance = 'system';
@@ -12,7 +13,6 @@ function toggleTheme() {
   applyAppearance();
 }
 import {
-  INSTANCE,
   instanceForId,
   isRussian,
   TOPICS,
@@ -502,7 +502,7 @@ function renderRail() {
             el('span', { class: 'trend-index', text: String(index + 1).padStart(2, '0') }),
             el('div', {}, [
               el('strong', { text: `#${tag.name}` }),
-              el('small', { text: tag.caption || 'Обсуждают в Mastodon' }),
+              el('small', { text: tag.caption || 'Сейчас обсуждают' }),
             ]),
           ],
           'trend-row',
@@ -518,7 +518,6 @@ function renderRail() {
           ...people.map(personRow),
         ])
       : null,
-    el('p', { class: 'rail-footnote', text: `Публичные истории из Mastodon · ${INSTANCE}` }),
   );
 }
 function heading(title, subtitle, action) {
@@ -708,6 +707,10 @@ function renderFeed(key) {
   const feed = getFeed(key);
   const tagged = key.startsWith('tag:');
   const following = key === 'following';
+  if (following && !signedIn()) {
+    replace(main, heading('Ваши авторы', 'Новые записи людей, которых вы выбрали'), guestPrompt('authors', () => showAuthDialog()));
+    return;
+  }
   const items = feed.posts.filter(
     (post) => (key !== 'overview' || !post.account.bot) && isRussian(post) &&
       (!following || (!post.boostedBy && Object.hasOwn(reader.follows, post.account.id))),
@@ -1541,7 +1544,7 @@ async function renderProfile(id, version) {
         ),
       ),
       account.joined &&
-        el('p', { class: 'muted', text: `В Mastodon с ${formatDate(account.joined)}` }),
+        el('p', { class: 'muted', text: `Дата регистрации: ${formatDate(account.joined)}` }),
       account.fields.length
         ? el(
             'dl',
@@ -1793,7 +1796,8 @@ function renderTopics() {
   );
 }
 async function renderAuthors(version) {
-  if (accounts.size < 8) {
+  const selected = route().params.get('tab') === 'selected';
+  if (!selected && accounts.size < 8) {
     try {
       const result = await request('/api/v1/directory?local=true&order=active&limit=20');
       if (Array.isArray(result.data))
@@ -1809,7 +1813,6 @@ async function renderAuthors(version) {
     }
   }
   if (version !== renderVersion) return;
-  const selected = route().params.get('tab') === 'selected';
   const people = selected
     ? Object.values(reader.follows)
     : [...accounts.values()].filter((a) => !a.bot);
@@ -1823,7 +1826,7 @@ async function renderAuthors(version) {
       ],
       selected ? 'selected' : 'all',
     ),
-    people.length
+    selected && !signedIn() ? guestPrompt('authors', () => showAuthDialog()) : people.length
       ? el(
           'section',
           { class: 'authors-grid' },
@@ -1835,7 +1838,7 @@ async function renderAuthors(version) {
                 el('small', { text: `@${account.username}` }),
               ]),
               el('p', {
-                text: plainText(account.bio).slice(0, 160) || 'Публичный профиль Mastodon',
+                text: plainText(account.bio).slice(0, 160) || 'Откройте профиль, чтобы узнать автора лучше.',
               }),
               followButton(account),
             ]),
@@ -1979,11 +1982,7 @@ function renderMe() {
     replace(
       main,
       heading('Профиль', 'Войдите, чтобы создать своё пространство'),
-      empty(
-        'Ваш профиль ждёт',
-        'После входа вы сможете ставить реакции, писать комментарии, собирать авторов и публиковать истории.',
-        button('Войти или создать профиль', () => showAuthDialog(), { className: 'button primary', symbol: 'user' }),
-      ),
+      guestPrompt(({ posts: 'posts', reposts: 'reposts', likes: 'likedPosts', saved: 'savedPosts', drafts: 'drafts' })[route().params.get('tab')] || 'profile', () => showAuthDialog()),
     );
     return;
   }
@@ -2385,15 +2384,11 @@ function showAbout() {
   const modal = dialog('Line — люди и истории');
   modal.content.append(
     el('p', {
-      text: 'Line собирает публичные записи, фотографии и обсуждения из Mastodon. Имена авторов, даты и счётчики берутся из оригинальных публикаций.',
+      text: 'Line — место для историй, фотографий и разговоров с интересными людьми.',
     }),
     el('p', {
       text: 'Создайте профиль, собирайте интересные истории и присоединяйтесь к разговорам.',
     }),
-    el('p', {
-      text: 'Публичные записи и изображения загружаются через сервер сайта, видео — из медиахранилищ источников. Доступность материалов зависит от источника.',
-    }),
-    externalLink('О Mastodon', 'https://joinmastodon.org', 'text-button'),
   );
 }
 async function render() {
@@ -2487,7 +2482,7 @@ request('/api/v1/trends/tags?limit=8', { ttl: 900000 })
         name: tag.name,
         caption: tag.history?.[0]?.accounts
           ? `${number(tag.history[0].accounts)} участников за день`
-          : 'Обсуждают в Mastodon',
+          : 'Сейчас обсуждают',
       }));
     renderRail();
     if (route().page === 'topics') renderTopics();

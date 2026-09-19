@@ -211,8 +211,8 @@ let browser;
     await page.setViewportSize({ width, height: 965 });
     for (const screen of ["following", "profile"]) {
       await open("#/" + screen);
-      const layout = await page.locator(".empty-state").evaluate((section) => {
-        const actions = section.querySelector(".empty-actions");
+      const layout = await page.locator(".guest-prompt").evaluate((section) => {
+        const actions = section;
         const bounds = [section, actions, ...actions.querySelectorAll("button")].map(
           (node) => node.getBoundingClientRect(),
         );
@@ -222,7 +222,7 @@ let browser;
           labels: [...actions.querySelectorAll("button")].map((b) => b.textContent),
         };
       });
-      assert.deepEqual(layout.labels, ["Смотреть видео", "Войти"]);
+      assert.deepEqual(layout.labels, ["Войти или создать профиль"]);
       assert.equal(layout.viewportWidth <= width, true, `${screen} overflow at ${width}`);
       assert.ok(
         Math.abs(layout.centers[0] - layout.centers[1]) < 1,

@@ -1,3 +1,4 @@
+import { guestMarkup } from '../shared/guest-state.js';
 import { loadingMarkup } from '../shared/feedback.js';
 // Each visit starts with the system theme; a manual toggle applies to this visit.
 const appearanceMedia = matchMedia('(prefers-color-scheme: dark)');
@@ -176,18 +177,18 @@ function renderSpace(slug) {
 function loadingMore() { return loadingMarkup(t('loadingMore')); }
 function renderLocal() {
   const person = user();
-  if (!person) return locked();
+  if (!person) return locked('questions');
   const items = state.questions.filter((item) => item.authorId === person.id).sort((a,b) => Date.parse(b.created)-Date.parse(a.created));
   return `<div class="section-title"><h2>${e(t('myQuestions'))}</h2><button class="primary" data-action="ask">＋ ${e(t('ask'))}</button></div>${list(items,true)}`;
 }
 function renderSaved() {
   const person = user();
-  if (!person) return locked();
+  if (!person) return locked('savedQuestions');
   const ids = state.saves[person.id] || [];
   const items = ids.map((id) => state.questions.find((x) => x.id === id) || publicFeed.find((x) => x.id === id) || details.get(id)?.question || state.snapshots?.[id]).filter(Boolean);
   return `<div class="section-title"><h2>${e(t('saved'))}</h2></div>${items.length ? items.map((x)=>questionCard(x,x.id.startsWith('local:'))).join('') : `<div class="empty">${e(t('noQuestions'))}</div>`}`;
 }
-function locked() { return `<div class="empty"><h3>${e(t('authNeeded'))}</h3><button class="primary" data-action="login">${e(t('login'))}</button></div>`; }
+function locked(kind = 'profile') { return guestMarkup(kind, 'login'); }
 function renderSearch(term) {
   let items = searchItems;
   const local = state.questions.filter((x) => `${x.title} ${x.body}`.toLowerCase().includes(term.toLowerCase()));
@@ -238,7 +239,7 @@ function answerList(items) {
   return items.length ? items.map((x) => `<article class="card question-card profile-answer"><a href="${qurl(x.questionId)}"><strong>${e(x.body.slice(0,180))}</strong></a><div class="muted">${e(dateText(x.created))}</div></article>`).join('') : `<div class="empty">${e(t('noAnswers'))}</div>`;
 }
 function renderProfile(page) {
-  const person = user(); if (!person) return locked();
+  const person = user(); if (!person) return locked(({ questions: 'questions', answers: 'answers', notifications: 'notifications' })[page.tab] || 'profile');
   const tab = page.tab || 'questions';
   const myQuestions = state.questions.filter((x) => x.authorId===person.id);
   const myAnswers = state.answers.filter((x) => x.authorId===person.id);

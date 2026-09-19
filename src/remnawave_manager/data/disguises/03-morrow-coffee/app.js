@@ -1,3 +1,4 @@
+import { guestPrompt } from '../shared/guest-state.js';
 import { t, getLanguage, setLanguage, number } from "./morrow-i18n.js";
 import {
   el,
@@ -898,7 +899,7 @@ function profilePage() {
       el(
         "div",
         { class: "page-container" },
-        empty(t("profile"), t("emptyHint"), emptyActions(true)),
+        guestPrompt(({ likes: 'likedVideos', saved: 'savedVideos', following: 'following', history: 'historyVideo', myVideos: 'uploadsVideo' })[new URLSearchParams(location.hash.split('?')[1] || '').get('tab')] || 'profile', () => authDialog()),
       ),
     );
     return;
@@ -1233,7 +1234,7 @@ async function route() {
           el(
             "div",
             { class: "page-container" },
-            empty(t("noFollowing"), t("emptyHint"), emptyActions(!store)),
+            !store ? guestPrompt('following', () => authDialog()) : empty(t("noFollowing"), t("emptyHint"), emptyActions()),
           ),
         );
         return;

@@ -2309,3 +2309,5 @@ small {
 [data-theme="dark"] :is(.thread-ancestors,.thread-reply.nested,.rich-text blockquote) { border-color: var(--line); }
 [data-theme="dark"] .auth-error { border-color: #80504a; }
 [data-theme="dark"] .primary:hover { background: #1c624b; }
+
+.post-action:is(:hover, :focus-visible, .selected), .save-button:is(:hover, :focus-visible, .selected) { background: transparent; }

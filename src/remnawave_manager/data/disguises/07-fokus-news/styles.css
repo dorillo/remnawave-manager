@@ -1844,3 +1844,8 @@ body.mobile-nav-open {
     display: none;
   }
 }
+
+.brand { align-items: center; gap: 10px; transition: color .18s ease; }
+.brand-logo { display: block; flex: 0 0 auto; width: 1em; height: 1em; }
+a.brand:is(:hover, :focus-visible) { color: var(--accent); }
+@media (prefers-reduced-motion: reduce) { .brand { transition: none; } }
