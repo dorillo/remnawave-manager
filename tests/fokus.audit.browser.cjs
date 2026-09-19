@@ -26,7 +26,7 @@ const root = path.resolve(
           contentType: "text/plain",
         });
       return r.fulfill({
-        body: await fs.readFile(path.join(root, p === "/" ? "index.html" : p)),
+        body: await fs.readFile(path.join(p.startsWith("/shared/") ? path.dirname(root) : root, p === "/" ? "index.html" : p)),
         contentType: p.endsWith(".js")
           ? "text/javascript"
           : p.endsWith(".css")

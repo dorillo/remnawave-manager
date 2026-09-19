@@ -1,3 +1,4 @@
+import { loadingNode } from '../shared/feedback.js';
 import { t, preference } from "./loop-i18n.js";
 import {
   el,
@@ -363,8 +364,7 @@ function loading() {
   return el(
     "div",
     { class: "loading", role: "status" },
-    el("span", { class: "spinner" }),
-    t("loading"),
+    loadingNode(t("loading")),
   );
 }
 function errorState(error, retry) {
@@ -1433,7 +1433,7 @@ function uploadDialog() {
       if (submit.disabled) return;
       submit.disabled = true;
       error.textContent = "";
-      submit.textContent = t("uploading");
+      submit.replaceChildren(loadingNode(t("uploading")));
       form.setAttribute("aria-busy", "true");
       for (const input of form.querySelectorAll("input, select"))
         input.disabled = true;
@@ -1648,7 +1648,7 @@ async function render() {
   );
   const r = route(),
     renderedAccount = account;
-  main = el("main", { id: "main", tabindex: -1 });
+  main = el("main", { id: "main", tabindex: -1 }, loading());
   app.replaceChildren(
     el(
       "a",
@@ -1697,6 +1697,7 @@ async function render() {
       if (token === generation) notice(t("storageError"));
     }
     if (token !== generation) return;
+    main.replaceChildren();
     if (r.path === "/uploads") uploadsPage();
     else if (r.path === "/explore" || r.path === "/search")
       await galleryPage(r, signal, token);
@@ -1759,9 +1760,4 @@ document.addEventListener("visibilitychange", () => {
     }
   }
 });
-try {
-  await refreshAccount();
-} catch {
-  notice(t("storageError"));
-}
 await render();

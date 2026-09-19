@@ -1,3 +1,4 @@
+import { loadingNode } from '../shared/feedback.js';
 import { imageURL } from '../shared/image-proxy.js';
 import { safeUrl } from './northline-data.js';
 import { translate } from './northline-i18n.js';
@@ -68,7 +69,7 @@ export function icon(name) {
 export function button(label, action, { symbol, className = 'button', ...attrs } = {}) {
   return el('button', { type: 'button', class: className, onclick: action, ...attrs }, [
     symbol && icon(symbol),
-    el('span', { text: label }),
+    attrs.disabled && label === 'Загружаем…' ? loadingNode(translate(label)) : el('span', { text: label }),
   ]);
 }
 export function iconButton(label, symbol, action, attrs = {}) {

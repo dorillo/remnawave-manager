@@ -1,4 +1,5 @@
 import { el, button } from "./loop-ui.js";
+import { loadingNode } from '../shared/feedback.js';
 import { t } from "./loop-i18n.js";
 
 // Cache only the last derived video, never replace the downloadable original.
@@ -143,7 +144,7 @@ export function gifVideoPlayer(item, { title, signal, blob }) {
     video.removeAttribute("src");
     video.load();
     if (!status.isConnected) root.append(status);
-    status.replaceChildren(t("preparingPlayer"));
+    status.replaceChildren(loadingNode(t("preparingPlayer")));
     root.setAttribute("aria-busy", "true");
     try {
       const source = blob

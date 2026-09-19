@@ -1,3 +1,4 @@
+import { loadingNode } from '../shared/feedback.js';
 import { el, button, link, confirmAction } from './aster-ui.js';
 import { user, library, updateUser } from './aster-store.js';
 import { t, relativeDate } from './aster-i18n.js';
@@ -301,7 +302,7 @@ export function comments(video, guard, signal) {
               .filter((reply) => reply.parentId === row.id)
               .map((reply) => localItem(reply)),
             row.repliesCount > 0 && (!replies || replies.hasNext || replies.failed)
-              ? button(t(replies?.failed ? 'commentsRetry' : replies?.loading ? 'loading' : 'loadReplies'), () => fetchReplies(row), { disabled: replies?.loading })
+              ? button(replies?.loading ? loadingNode(t('loading')) : t(replies?.failed ? 'commentsRetry' : 'loadReplies'), () => fetchReplies(row), { disabled: replies?.loading })
               : null,
           ]
         : null,
@@ -331,7 +332,7 @@ export function comments(video, guard, signal) {
     );
     if (!publicRows.length && !localRows.length && !loading && !failed)
       list.append(el('p', { class: 'meta' }, t('firstComment')));
-    if (loading) list.append(el('p', { class: 'meta', role: 'status' }, t('loadingComments')));
+    if (loading) list.append(el('p', { class: 'meta', role: 'status' }, loadingNode(t('loadingComments'))));
     if (failed) list.append(el('p', { class: 'meta', role: 'status' }, t('commentsUnavailable')),
       button(t('commentsRetry'), () => fetchPage(!!cursor)));
     if (visiblePublic < publicParents.length || (!loading && !failed && hasNext))

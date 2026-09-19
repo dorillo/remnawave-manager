@@ -56,7 +56,7 @@ const sites = [
           assert.equal(await page.getByRole('button', { name: /Язык интерфейса|^Язык$/ }).first().innerText(), 'EN');
           assert.ok(await page.locator('nav').count(), `${brand}: navigation before API response`);
           const initialTitle = { Line: 'Обзор', Aster: 'Главная', Morrow: 'Для вас', Spros: 'Главная', Svod: 'Главная' }[brand];
-          await page.waitForFunction(([title, brand]) => document.title === (['Aster', 'Spros', 'Svod'].includes(brand) ? `${brand} — ${title}` : `${title} — ${brand}`), [initialTitle, brand]);
+          await page.waitForFunction(([title, brand]) => document.title === `${brand} — ${title}`, [initialTitle, brand]);
           const controls = { Line: '.interface-language button', Morrow: '.topbar-actions .language-button', Spros: '.head-actions .icon-btn', Svod: '.header-actions .quiet' }[brand];
           if (controls) {
             const buttons = page.locator(controls);
@@ -78,15 +78,15 @@ const sites = [
 
           assert.doesNotMatch(await page.locator('body').innerText(), /Loading Line|Loading Aster/);
           await page.evaluate(hash => { location.hash = hash; }, hash);
-          await page.waitForFunction(([title, brand]) => document.title === (['Aster', 'Spros', 'Svod'].includes(brand) ? `${brand} — ${title}` : `${title} — ${brand}`), [ru, brand]);
+          await page.waitForFunction(([title, brand]) => document.title === `${brand} — ${title}`, [ru, brand]);
           await page.getByRole('button', { name: /Язык интерфейса|^Язык$/ }).first().click();
-          await page.waitForFunction(([title, brand]) => document.title === (['Aster', 'Spros', 'Svod'].includes(brand) ? `${brand} — ${title}` : `${title} — ${brand}`), [en, brand]);
+          await page.waitForFunction(([title, brand]) => document.title === `${brand} — ${title}`, [en, brand]);
           assert.equal(await page.getByRole('button', { name: /Interface language|^Language$/ }).first().innerText(), 'RU');
           if (['Aster', 'Spros'].includes(brand)) {
             await page.evaluate(() => { location.hash = '#/home'; });
             await page.waitForFunction(brand => document.title === `${brand} — Home`, brand);
             await page.evaluate(hash => { location.hash = hash; }, hash);
-            await page.waitForFunction(([title, brand]) => document.title === (['Aster', 'Spros', 'Svod'].includes(brand) ? `${brand} — ${title}` : `${title} — ${brand}`), [en, brand]);
+            await page.waitForFunction(([title, brand]) => document.title === `${brand} — ${title}`, [en, brand]);
           }
           assert.ok((await page.locator('body').innerText()).includes(brand));
           if (brand === 'Svod') {

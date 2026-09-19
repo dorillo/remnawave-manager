@@ -104,7 +104,7 @@ const comment = {
       }
       try {
         const file = path.join(
-          root,
+          u.pathname.startsWith("/shared/") ? path.dirname(root) : root,
           u.pathname === "/" ? "index.html" : u.pathname,
         );
         await r.fulfill({
@@ -161,6 +161,12 @@ const comment = {
         .innerText(),
       "10",
     );
+    assert.equal(await page.title(), 'Заголовок проверяемой статьи');
+    await page.locator('#comment-text').fill('Гостевой черновик');
+    await page.locator('#comment-form [type=submit]').click();
+    await page.locator('#auth-form').waitFor();
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#comment-text').inputValue(), 'Гостевой черновик');
     async function register(login, name) {
       await page.locator('[data-action="auth"]').first().click();
       const secondary = page.locator('[data-action="register"]');

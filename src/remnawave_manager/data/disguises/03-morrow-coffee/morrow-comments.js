@@ -129,7 +129,7 @@ export function openComments(video, { getStore, mutate, gate, openAuthor }) {
       children.get(parent).push(c);
     }
     list.replaceChildren();
-    if (!all.length && !busy)
+    if (!all.length && !busy && !error.textContent)
       list.append(el("p", { class: "empty-note" }, t("noComments")));
     function row(c, depth) {
       const liked = d?.commentLikes.includes(c.id),
@@ -233,6 +233,7 @@ export function openComments(video, { getStore, mutate, gate, openAuthor }) {
     loadMore.disabled = true;
     loading.hidden = false;
     error.textContent = "";
+    render();
     try {
       let loaded = 0;
       while (next && loaded < 5) {
@@ -240,6 +241,7 @@ export function openComments(video, { getStore, mutate, gate, openAuthor }) {
         const known = new Set(publicItems.map((c) => c.id));
         const fresh = result.items.filter((c) => !known.has(c.id));
         publicItems.push(...fresh);
+        render();
         loaded++;
         page++;
         next =
@@ -248,7 +250,6 @@ export function openComments(video, { getStore, mutate, gate, openAuthor }) {
           !!result.items.length &&
           publicItems.length < 1000;
       }
-      render();
       loadMore.hidden = !next;
     } catch (e) {
       if (e.name !== "AbortError") error.textContent = t(e.message);
@@ -256,6 +257,7 @@ export function openComments(video, { getStore, mutate, gate, openAuthor }) {
       busy = false;
       loadMore.disabled = false;
       loading.hidden = true;
+      if (!controller.signal.aborted) render();
     }
   }
   load();

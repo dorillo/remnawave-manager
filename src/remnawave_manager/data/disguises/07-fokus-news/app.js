@@ -25,7 +25,7 @@ import {
   cleanSourceMarkup,
   cleanSourceText,
 } from "./fokus-ui.js?v=20260919-release";
-let db = await store.read(),
+let db = store.empty(),
   view = {},
   controller,
   token = 0,
@@ -292,7 +292,7 @@ function commentsPanel(context = view) {
     inlineTarget = all.some(
       (c) => c.ref === (reply?.ref || (editing ? `local:${editing}` : "")),
     );
-  return `<div class="section-title"><h2>${e(t("discussion"))}</h2></div><p class="fine-print">${e(t("loaded"))}: ${list.length + locals.length}</p>${stale(context.comments)}${me() && !inlineTarget ? composer(context) : me() ? "" : `<div class="comment-gate">${button("auth", t("loginComment"), "user", "secondary")}</div>`}${context.commentsError ? state(err(context.commentsError), "comments-refresh") : !context.comments ? state(t("loading")) : !list.length && !locals.length ? state(t("commentsEmpty")) : ""}${threads(all, context)}${context.comments?.cursor ? `<div class="load-more">${button("comments-more", t(context.commentsMore ? "loading" : "more"), "arrow", "secondary", context.commentsMore ? "disabled" : "")}</div>` : ""}`;
+  return `<div class="section-title"><h2>${e(t("discussion"))}</h2></div><p class="fine-print">${e(t("loaded"))}: ${list.length + locals.length}</p>${stale(context.comments)}${!inlineTarget ? composer(context) : ""}${context.commentsError ? state(err(context.commentsError), "comments-refresh") : !context.comments ? state(t("loading")) : !list.length && !locals.length ? state(t("commentsEmpty")) : ""}${threads(all, context)}${context.comments?.cursor ? `<div class="load-more">${button("comments-more", t(context.commentsMore ? "loading" : "more"), "arrow", "secondary", context.commentsMore ? "disabled" : "")}</div>` : ""}`;
 }
 function storyContent(a, continued = false) {
   const saved = db.bookmarks.some(
@@ -532,7 +532,7 @@ function render(preserve = true) {
   }
   observeNext();
   document.title = view.article
-    ? `${cleanSourceText(view.article.title)} — Fokus`
+    ? cleanSourceText(view.article.title)
     : `Fokus — ${t(view.section || view.kind || "home")}`;
 }
 async function sync() {
@@ -978,6 +978,10 @@ document.addEventListener("submit", async (event) => {
   )
     return;
   event.preventDefault();
+  if (form.matches(".comment-form") && !me()) {
+    authModal();
+    return;
+  }
   const submittedAt = token;
   const formContext = form.matches(".comment-form")
     ? articleState(form.dataset.article)
@@ -1198,4 +1202,7 @@ matchMedia("(max-width: 650px)").addEventListener("change", (event) => {
   if (!event.matches) closeNavigation();
 });
 
+view = { kind: "home", loading: true };
+render(false);
+db = await store.read();
 await navigate();

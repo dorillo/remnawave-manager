@@ -1,5 +1,5 @@
 const DB = "fokus:ria:v1";
-const empty = () => ({
+export const empty = () => ({
   accounts: [],
   comments: [],
   reactions: [],

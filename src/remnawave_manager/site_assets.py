@@ -4,12 +4,13 @@ from __future__ import annotations
 import hashlib
 import io
 import re
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 from http.server import SimpleHTTPRequestHandler
 from pathlib import Path
 
 MODULE = re.compile(r'''((?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s*)["'])(\.{1,2}/[^"'?]+\.js)(?:\?[^"']*)?(["'])''')
 HTML_ASSET = re.compile(r'''((?:src|href)=["'])(?!https?:|//)([^"'?]+\.(?:js|css))(?:\?[^"']*)?(["'])''')
+PREVIEW_SHARED = frozenset({'date-utils.js', 'storage.js', 'image-proxy.js', 'feedback.js', 'feedback.css'})
 
 
 def revision(site: Path, shared: Path) -> str:
@@ -66,9 +67,17 @@ class FreshAssetsHandler(SimpleHTTPRequestHandler):
         return None
 
     def send_head(self):
-        path = Path(self.translate_path(self.path))
         site = Path(self.directory).resolve()
         shared = site.parent / 'shared'
+        request_path = unquote(urlsplit(self.path).path)
+        if request_path.startswith('/shared/'):
+            resource = request_path.removeprefix('/shared/')
+            if resource not in PREVIEW_SHARED:
+                self.send_error(404)
+                return None
+            path = shared / resource
+        else:
+            path = Path(self.translate_path(self.path))
         roots = (site, shared.resolve()) if not shared.is_symlink() else (site,)
         if path.is_dir():
             path = next((path / name for name in ('index.html', 'index.htm')

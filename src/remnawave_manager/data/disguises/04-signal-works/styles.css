@@ -45,3 +45,5 @@
 .brand b { transition: color .18s ease; }
 .brand:is(:hover, :focus-visible) b { color: inherit; }
 @media (prefers-reduced-motion: reduce) { .brand b { transition: none; } }
+
+body:has(.modal-backdrop) { overflow: hidden; }

@@ -1,0 +1,7 @@
+/* Shared feedback for sites 1–7. Colours follow each site's current theme. */
+a, a *, button, button * { text-decoration-line: none !important; }
+.ui-loading { display: inline-flex; align-items: center; justify-content: center; gap: .65em; vertical-align: middle; }
+.ui-loading[hidden] { display: none; }
+.ui-spinner { display: inline-block; box-sizing: border-box; width: 1.15em; height: 1.15em; flex: 0 0 1.15em; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: ui-spin .8s linear infinite; }
+@keyframes ui-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ui-spinner { animation: none; } }

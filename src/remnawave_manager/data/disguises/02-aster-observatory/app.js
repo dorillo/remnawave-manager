@@ -1,3 +1,4 @@
+import { loadingNode } from '../shared/feedback.js';
 // Each visit starts with the system theme; a manual toggle applies to this visit.
 const appearanceMedia = matchMedia('(prefers-color-scheme: dark)');
 let appearance = 'system';
@@ -665,7 +666,7 @@ function searchResults(main, query) {
   if (videos.length) grid(main, videos, false);
   else if (!searchState.loading) empty(main);
   if (searchState.loading)
-    main.append(el('div', { class: 'loading search-loading', role: 'status' }, t('loading')));
+    main.append(el('div', { class: 'loading search-loading', role: 'status' }, loadingNode(t('loading'))));
   else if (searchState.hasNext)
     main.append(
       button(
@@ -900,7 +901,7 @@ function watch(main, id, uploaded = null) {
 
 async function watchUploaded(main, id) {
   const account = user();
-  main.append(el('div', { class: 'loading', role: 'status' }, t('loading')));
+  main.append(el('div', { class: 'loading', role: 'status' }, loadingNode(t('loading'))));
   if (!account) {
     main.replaceChildren();
     empty(main, 'notFound');
@@ -1116,7 +1117,7 @@ function uploadVideo(account) {
           return;
         }
         submit.disabled = true;
-        submit.textContent = t('uploading');
+        submit.replaceChildren(loadingNode(t('uploading')));
         try {
           if (user()?.id !== account.id) throw new Error('videoError');
           await saveVideo(account.id, file.files[0], title.value, description.value);
@@ -1260,7 +1261,7 @@ function profile(main) {
       el('h2', { id: 'profile-videos-title' }, t('profileVideos')),
       button(t('uploadVideo'), () => uploadVideo(account), { class: 'primary' }),
     ),
-    el('div', { class: 'profile-videos-loading', role: 'status' }, t('loading')),
+    el('div', { class: 'profile-videos-loading', role: 'status' }, loadingNode(t('loading'))),
   );
   main.append(
     el(
@@ -1361,24 +1362,6 @@ function render() {
   const pageTitle = page === 'watch' ? findVideo(id)?.title || t('watch')
     : t(navigation.includes(page) ? page : page === 'channel' ? 'channel' : page === 'user' ? 'profile' : 'home');
   document.title = `Aster — ${pageTitle}`;
-  if (loading) {
-    main.append(
-      el('div', { class: 'loading', role: 'status' }, t('loading')),
-      el(
-        'div',
-        { class: 'skeleton-grid', 'aria-hidden': true },
-        Array.from({ length: 6 }, () => el('div')),
-      ),
-    );
-    return;
-  }
-  if (failed) {
-    main.append(
-      el('p', { role: 'alert' }, t('unavailable')),
-      button(t('retry'), initialize),
-    );
-    return;
-  }
   if (
     [
       'profile',
@@ -1400,6 +1383,26 @@ function render() {
     );
     return;
   }
+  if (page === 'profile') { profile(main); return; }
+  if (loading) {
+    heading(main, pageTitle);
+    main.append(
+      el('div', { class: 'loading', role: 'status' }, loadingNode(t('loading'))),
+      el(
+        'div',
+        { class: 'skeleton-grid', 'aria-hidden': true },
+        Array.from({ length: 6 }, () => el('div')),
+      ),
+    );
+    return;
+  }
+  if (failed) {
+    main.append(
+      el('p', { role: 'alert' }, t('unavailable')),
+      button(t('retry'), initialize),
+    );
+    return;
+  }
   if (page === 'watch') {
     const known = findVideo(id);
     if (known) watch(main, id);
@@ -1407,7 +1410,6 @@ function render() {
   }
   else if (page === 'channel') channel(main, id);
   else if (page === 'user') publicUser(main, id);
-  else if (page === 'profile') profile(main);
   else if (['subscriptions', 'history', 'likes', 'later'].includes(page))
     collection(main, page);
   else if (page === 'catalog') {

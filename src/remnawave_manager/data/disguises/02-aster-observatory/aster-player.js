@@ -1,3 +1,4 @@
+import { loadingNode } from '../shared/feedback.js';
 import { el, button } from './aster-ui.js';
 import { t } from './aster-i18n.js';
 import { validId } from './aster-data.js';
@@ -20,7 +21,7 @@ export function mountPlayer(
   const status = el(
     'p',
     { class: 'player-status', role: 'status' },
-    t('loading'),
+    loadingNode(t('loading')),
   );
   const retry = button(t('retry'), start);
   const actions = el(
@@ -36,7 +37,7 @@ export function mountPlayer(
     playing = false;
     completed = false;
     actions.hidden = true;
-    status.textContent = t('loading');
+    status.replaceChildren(loadingNode(t('loading')));
     status.hidden = false;
     const url = new URL(`https://rutube.ru/play/embed/${video.id}/`);
     url.searchParams.set('t', String(Math.floor(current)));

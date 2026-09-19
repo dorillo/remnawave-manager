@@ -95,10 +95,10 @@ let browser,
     }
     try {
       const file = path.join(
-        root,
+        u.pathname.startsWith("/shared/") ? path.dirname(root) : root,
         u.pathname === "/" ? "index.html" : decodeURIComponent(u.pathname),
       );
-      assert(file.startsWith(root));
+      assert(file.startsWith(root) || file.startsWith(path.join(path.dirname(root), "shared") + path.sep));
       return route.fulfill({
         body: await fs.readFile(file),
         contentType: file.endsWith(".js")

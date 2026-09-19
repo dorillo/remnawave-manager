@@ -2401,7 +2401,7 @@ async function render() {
   const current = route();
   renderNavigation();
   renderRail();
-  document.title = translate(`${{ feed: 'Обзор', topics: 'Темы', authors: 'Авторы', saved: 'Сохранённое', me: 'Профиль', search: 'Поиск', profile: 'Профиль', post: 'Обсуждение', tag: '#' + current.id }[current.page] || 'Line'} — Line`);
+  document.title = `Line — ${translate({ feed: 'Обзор', topics: 'Темы', authors: 'Авторы', saved: 'Сохранённое', me: 'Профиль', search: 'Поиск', profile: 'Профиль', post: 'Обсуждение', tag: '#' + current.id }[current.page] || 'Line')}`;
   if (current.page !== 'search') searchInput.value = '';
   try {
     if (current.page === 'feed' || current.page === 'tag') renderFeed(feedKey());

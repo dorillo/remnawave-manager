@@ -794,7 +794,7 @@ let browser;
   await page.getByRole('link', { name: 'Explore', exact: true }).waitFor();
   assert.equal(await page.locator('html').getAttribute('lang'), 'en');
   assert.equal(await page.locator('html').getAttribute('lang'), 'en');
-  assert.equal(await page.title(), 'Explore — Line');
+  assert.equal(await page.title(), 'Line — Explore');
   for (const width of [320, 390, 720, 768, 1440]) {
     await page.setViewportSize({ width, height: 844 });
     for (const route of ['feed', 'topics', 'authors', 'profile/ml:1', 'post/ml:101', 'me']) {

@@ -78,7 +78,7 @@ function go(path) {
 function updateTitle() {
   const page = (location.hash.slice(1).split('?')[0] || '/feed').split('/')[1];
   const key = { feed: "forYou", following: "following", explore: "explore", search: "search", profile: "profile", settings: "settings", author: "profile", video: "myVideos" }[page] || "forYou";
-  document.title = t(key) + " — Morrow";
+  document.title = "Morrow — " + t(key);
 }
 function renderChrome() {
   updateTitle();
@@ -1269,6 +1269,7 @@ async function route() {
 window.addEventListener("hashchange", route);
 window.addEventListener("pagehide", () => pauseAll());
 renderChrome();
+main.replaceChildren(el("div", { class: "empty-state" }, loadingIndicator()));
 try {
   account = await restoreSession();
   if (account) {

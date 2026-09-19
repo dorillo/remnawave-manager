@@ -83,7 +83,7 @@ const dictionary = {
     "Найдите то, что вам по душе, в ленте «Для вас».",
     "Find something you love in your For you feed.",
   ],
-  noComments: ["Начните обсуждение", "Start the conversation"],
+  noComments: ["Комментариев пока нет. Начните обсуждение", "No comments yet. Start the conversation"],
   loading: ["Загрузка…", "Loading…"],
   retry: ["Повторить", "Try again"],
   network: [

@@ -28,8 +28,8 @@ let browser;
   let content;
   await context.route("**/*", async (route) => {
     const u = new URL(route.request().url());
-    if (u.pathname === '/shared/image-proxy.js')
-      return route.fulfill({ contentType: 'text/javascript', body: await fs.readFile(path.resolve(root, '../shared/image-proxy.js')) });
+    if (u.pathname.startsWith('/shared/'))
+      return route.fulfill({ contentType: u.pathname.endsWith('.css') ? 'text/css' : 'text/javascript', body: await fs.readFile(path.resolve(root, '..' + u.pathname)) });
     if (u.pathname.startsWith('/_images/'))
       return route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="200"><rect width="300" height="200" fill="#d9e2da"/></svg>' });
     if (u.pathname.startsWith("/_svod/"))

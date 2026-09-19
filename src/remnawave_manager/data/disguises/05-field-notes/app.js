@@ -1,3 +1,4 @@
+import { loadingNode } from '../shared/feedback.js';
 import { t, lang, setting, prefs, date } from "./svod-i18n.js";
 import {
   el,
@@ -474,7 +475,7 @@ async function home(token, signal) {
   const list = el(
     "div",
     { class: "discovery-list" },
-    el("p", { class: "load-status", role: "status" }, t("loading")),
+    el("p", { class: "load-status", role: "status" }, loadingNode(t("loading"))),
   );
   main.append(
     el(
@@ -519,12 +520,12 @@ async function searchPage(q, token, signal, isCategory = false) {
     ),
   );
   const results = el("div", { class: "results-list" }),
-    status = el("div", { class: "load-status", role: "status" }, t("loading"));
+    status = el("div", { class: "load-status", role: "status" }, loadingNode(t("loading")));
   main.append(results, status);
   let next = isCategory ? "" : 0;
   const seen = new Set();
   const load = async () => {
-    status.replaceChildren(el("p", {}, t("loading")));
+    status.replaceChildren(el("p", {}, loadingNode(t("loading"))));
     try {
       const result = isCategory
         ? await data.category(q, next, signal)
@@ -588,7 +589,7 @@ async function articlePage(title, section, token, signal) {
   const loading = el(
     "div",
     { class: "load-status", role: "status" },
-    t("loading"),
+    loadingNode(t("loading")),
   );
   main.append(loading);
   try {
@@ -1051,7 +1052,10 @@ async function render() {
   controller?.abort();
   controller = new AbortController();
   tocState = null;
-  if (!main) shell();
+  if (!main) {
+    shell();
+    main.append(loadingNode(t("loading")));
+  }
   await flushReading();
   try {
     account = await store.current();
@@ -1076,7 +1080,7 @@ async function render() {
       await personalPage(r.path === "history", token);
     else if (r.path === "random") {
       main.append(
-        el("p", { class: "load-status", role: "status" }, t("loading")),
+        el("p", { class: "load-status", role: "status" }, loadingNode(t("loading"))),
       );
       const title = await data.random(controller.signal);
       if (token === epoch) location.replace(route("article", title));

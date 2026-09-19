@@ -94,8 +94,8 @@ let browser;
   const routeHandler = async (route) => {
     const req = route.request(),
       u = new URL(req.url());
-    if (u.pathname === '/shared/image-proxy.js')
-      return route.fulfill({ contentType: 'text/javascript', body: await fs.readFile(path.resolve(root, '../shared/image-proxy.js')) });
+    if (u.pathname.startsWith('/shared/'))
+      return route.fulfill({ contentType: u.pathname.endsWith('.css') ? 'text/css' : 'text/javascript', body: await fs.readFile(path.resolve(root, '..' + u.pathname)) });
     if (u.pathname.startsWith('/_images/'))
       return route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="green"/></svg>' });
     if (req.method() !== "GET") writes.push(req.url());

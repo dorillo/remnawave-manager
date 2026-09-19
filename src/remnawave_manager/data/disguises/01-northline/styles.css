@@ -3,7 +3,12 @@
   --bg: #f4f6f5;
   --surface: #fff;
   --ink: #202d28;
-  --muted: #7a8580;
+  --muted: #637169;
+  --field: #fafcfb;
+  --warning-bg: #f4f0df;
+  --warning-ink: #736237;
+  --danger-bg: #fceeee;
+  --danger-ink: #9f3535;
   --line: #e5ebe7;
   --brand: #24735b;
   --brand-dark: #18573f;
@@ -169,8 +174,8 @@ small {
   width: 100%;
 }
 .danger {
-  color: #9f3535;
-  background: #fceeee;
+  color: var(--danger-ink);
+  background: var(--danger-bg);
 }
 .skip-link {
   position: fixed;
@@ -193,7 +198,7 @@ small {
   align-items: center;
   height: 76px;
   padding: 0 max(28px, calc((100vw - 1336px) / 2));
-  background: #ffffffed;
+  background: var(--surface);
   border-bottom: 1px solid var(--line);
   backdrop-filter: blur(18px);
 }
@@ -531,7 +536,7 @@ small {
   white-space: nowrap;
   padding: 4px 9px;
   border-radius: 6px;
-  background: #eaf0ec;
+  background: var(--soft);
   color: #728477;
 }
 .chip:hover {
@@ -662,7 +667,7 @@ small {
   border-radius: 10px;
   overflow: hidden;
   margin: 14px 0 3px;
-  background: #eff3f0;
+  background: var(--soft);
 }
 .media-count-2,
 .media-count-3,
@@ -719,7 +724,7 @@ small {
   padding: 20px;
   min-height: 150px;
   color: var(--muted);
-  background: #edf2ee;
+  background: var(--soft);
   font-size: 12px;
 }
 .media-error {
@@ -1041,8 +1046,8 @@ small {
   display: flex;
   align-items: center;
   gap: 10px;
-  background: #f4f0df;
-  color: #84744a;
+  background: var(--warning-bg);
+  color: var(--warning-ink);
   padding: 12px 15px;
   border-radius: 10px;
   font-size: 12px;
@@ -1070,15 +1075,15 @@ small {
 .load-more {
   margin: 20px 0 0;
   width: 100%;
-  background: #eaf0ec;
+  background: var(--soft);
   color: #60816a;
 }
 .empty-state {
   text-align: center;
   padding: 48px 28px;
-  border: 1px dashed #d8e2db;
+  border: 1px dashed var(--line);
   border-radius: 14px;
-  background: #f9fbf9;
+  background: var(--surface);
   margin: 10px 0;
 }
 .empty-icon {
@@ -1273,7 +1278,7 @@ small {
   gap: 12px;
 }
 .profile-top .avatar {
-  border: 4px solid #fff;
+  border: 4px solid var(--surface);
   width: 86px;
   height: 86px;
 }
@@ -1565,7 +1570,7 @@ small {
   width: 100%;
   max-height: 65dvh;
   object-fit: contain;
-  background: #f0f3f0;
+  background: var(--soft);
   border-radius: 8px;
 }
 .gallery-caption {
@@ -1610,8 +1615,8 @@ small {
 .copy-input {
   width: 100%;
   padding: 12px;
-  border: 1px solid #dbe4dc;
-  background: #fafcfb;
+  border: 1px solid var(--line);
+  background: var(--field);
   border-radius: 9px;
 }
 .form-actions {
@@ -1650,7 +1655,7 @@ small {
 }
 .comment-form .compose-text,
 .story-edit-form .compose-text {
-  border: 1px solid #dbe4dc;
+  border: 1px solid var(--line);
 }
 .confirm-actions {
   margin-top: 22px;
@@ -1666,8 +1671,8 @@ small {
   padding: 10px 12px;
   border: 1px solid #e5aaa3;
   border-radius: 9px;
-  background: #fff1ef;
-  color: #9c3e35;
+  background: var(--danger-bg);
+  color: var(--danger-ink);
   font-size: 12px;
   line-height: 1.45;
 }
@@ -1730,7 +1735,7 @@ small {
   padding: 16px;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: #fbfcfb;
+  background: var(--field);
 }
 .story-editor .compose-text { min-height: 210px; }
 .editor-dialog .composer-author,
@@ -1809,7 +1814,7 @@ small {
   resize: vertical;
   min-height: 180px;
   border: none;
-  background: #fafcfb;
+  background: var(--field);
   border-radius: 8px;
   padding: 13px;
   line-height: 1.7;
@@ -2025,7 +2030,7 @@ small {
     min-height: 0;
     height: auto;
     padding: 7px 9px max(8px, env(safe-area-inset-bottom));
-    background: #ffffffed;
+    background: var(--surface);
     border-top: 1px solid var(--line);
     backdrop-filter: blur(16px);
   }
@@ -2291,3 +2296,16 @@ small {
 
 .interface-language button:is(:hover,:focus-visible) { background: var(--soft); color: var(--brand); }
 @media (prefers-reduced-motion: reduce) { .interface-language button { transition: none; } }
+
+/* Use the current palette for every empty state, editor and mobile surface. */
+[data-theme="dark"] {
+  --field: #202f27; --warning-bg: #3c3523; --warning-ink: #e8d18c;
+  --danger-bg: #402725; --danger-ink: #ffb4aa;
+}
+[data-theme="dark"] .banner-button { background: var(--surface); }
+[data-theme="dark"] :is(.chip,.load-more,.empty-icon,.banner-button) { color: var(--brand); }
+[data-theme="dark"] :is(.nav-item:hover,.nav-item.active,.chip:hover) { background: var(--soft); }
+[data-theme="dark"] :is(.nav-item,.sidebar-caption,.sidebar-link,.legal,.post-meta,.post-actions,.post-action,.trend-row small,.rail-footnote,.end-note) { color: var(--muted); }
+[data-theme="dark"] :is(.thread-ancestors,.thread-reply.nested,.rich-text blockquote) { border-color: var(--line); }
+[data-theme="dark"] .auth-error { border-color: #80504a; }
+[data-theme="dark"] .primary:hover { background: #1c624b; }

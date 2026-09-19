@@ -71,7 +71,7 @@ class FokusIntegrationTests(unittest.TestCase):
             self.assertTrue((target / "favicon.svg").is_file())
             for module in target.glob("*.js"):
                 for dependency in re.findall(r"from ['\"]([^'\"]+)['\"]", module.read_text()):
-                    self.assertTrue((module.parent / dependency.split("?", 1)[0]).is_file(), dependency)
+                    self.assertTrue((module.parent / dependency.split("?", 1)[0].replace("../shared/", "shared/")).is_file(), dependency)
             self.assertNotIn("site-runtime.js", (target / "index.html").read_text())
 
         for failure in (False, True):
