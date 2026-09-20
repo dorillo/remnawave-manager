@@ -4,6 +4,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from root_fixture import root_owned_fixture
+
 from remnawave_manager.certificates import (
     assert_no_active_certbot_renewal,
     configure_adopted_certbot,
@@ -310,11 +312,13 @@ class SystemNginxCertbotTests(unittest.TestCase):
             self.assertIn('if [ -n "$marker" ]; then', phase_scripts["post"])
             self.assertIn('rm -f "$marker"', phase_scripts["post"])
 
+    @root_owned_fixture
     def test_active_certbot_marker_blocks_manager_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             marker_root = Path(temporary)
             marker = marker_root / "remnawave-manager-certbot-nginx-4321"
             marker.write_text("restart\n", encoding="utf-8")
+            marker.chmod(0o600)
 
             with mock.patch(
                 "remnawave_manager.certificates.os.kill"
@@ -325,11 +329,13 @@ class SystemNginxCertbotTests(unittest.TestCase):
 
             process_exists.assert_called_once_with(4321, 0)
 
+    @root_owned_fixture
     def test_stale_certbot_marker_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             marker_root = Path(temporary)
             marker = marker_root / "remnawave-manager-certbot-nginx-4321"
             marker.write_text("restart\n", encoding="utf-8")
+            marker.chmod(0o600)
 
             with mock.patch(
                 "remnawave_manager.certificates.os.kill",
@@ -342,6 +348,7 @@ class SystemNginxCertbotTests(unittest.TestCase):
             marker_root = Path(temporary)
             marker = marker_root / "remnawave-manager-certbot-nginx-unexpected"
             marker.write_text("restart\n", encoding="utf-8")
+            marker.chmod(0o600)
 
             with self.assertRaisesRegex(ValidationError, "неожиданным именем"):
                 assert_no_active_certbot_renewal(marker_root=marker_root)

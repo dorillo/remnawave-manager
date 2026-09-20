@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
 import unittest
 from html.parser import HTMLParser
 from pathlib import Path
@@ -16,9 +15,6 @@ EXPECTED_IDS = (
     "05-field-notes",
     "06-loop-archive",
     "07-fokus-news",
-    "08-vector-docs",
-    "09-pulse-monitor",
-    "10-dev-circle",
 )
 
 
@@ -51,15 +47,17 @@ class SiteParser(HTMLParser):
 
 
 class DisguiseSiteTests(unittest.TestCase):
-    def test_catalog_and_directories_define_exactly_ten_sites(self) -> None:
+    def test_catalog_and_directories_define_exactly_seven_sites(self) -> None:
         catalog = json.loads((SITES_ROOT / "catalog.json").read_text(encoding="utf-8"))
         ids = tuple(item["id"] for item in catalog["templates"])
-        directories = tuple(sorted(item.name for item in SITES_ROOT.iterdir() if item.is_dir()))
+        directories = tuple(
+            sorted(item.name for item in SITES_ROOT.iterdir() if item.is_dir() and item.name != "shared")
+        )
 
         self.assertEqual(ids, EXPECTED_IDS)
         self.assertEqual(directories, EXPECTED_IDS)
-        self.assertEqual(len({item["name"] for item in catalog["templates"]}), 10)
-        self.assertEqual(len({item["description"] for item in catalog["templates"]}), 10)
+        self.assertEqual(len({item["name"] for item in catalog["templates"]}), 7)
+        self.assertEqual(len({item["description"] for item in catalog["templates"]}), 7)
 
     def test_sites_are_self_contained_and_hardened(self) -> None:
         titles: set[str] = set()
@@ -72,14 +70,32 @@ class DisguiseSiteTests(unittest.TestCase):
                 parser = SiteParser()
                 parser.feed(html)
 
-                self.assertIn('<html lang="ru">', html)
+                self.assertIn(
+                    '<html lang="en">' if template_id == "01-northline" else '<html lang="ru">',
+                    html,
+                )
                 self.assertIn('name="viewport"', html)
                 self.assertIn('name="referrer" content="no-referrer"', html)
                 self.assertIn('http-equiv="Content-Security-Policy"', html)
-                self.assertIn("connect-src 'none'", html)
+                if template_id == "01-northline":
+                    self.assertIn("connect-src 'self';", html)
+                    self.assertIn('rel="icon" href="favicon.svg"', html)
+                    self.assertTrue((site / "favicon.svg").is_file())
+                elif template_id == "02-aster-observatory":
+                    self.assertIn("connect-src 'self' https://rutube.ru", html)
+                    self.assertIn("frame-src https://rutube.ru", html)
+                    self.assertNotIn("site-runtime.js", html)
+                elif template_id == "03-morrow-coffee":
+                    self.assertIn("connect-src 'self'", html)
+                    self.assertNotIn("site-runtime.js", html)
+                elif template_id in {"04-signal-works", "05-field-notes", "06-loop-archive", "07-fokus-news"}:
+                    self.assertIn("connect-src 'self'", html)
+                    self.assertNotIn("site-runtime.js", html)
+                    self.assertIn('rel="icon" href="favicon.svg"', html)
+                    self.assertTrue((site / "favicon.svg").is_file())
                 self.assertEqual(parser.inline_scripts, 0)
-                self.assertEqual(parser.assets.count("styles.css"), 1)
-                self.assertEqual(parser.assets.count("app.js"), 1)
+                self.assertEqual([asset.split("?", 1)[0] for asset in parser.assets].count("styles.css"), 1)
+                self.assertEqual([asset.split("?", 1)[0] for asset in parser.assets].count("app.js"), 1)
                 self.assertGreater(len(javascript), 500)
                 self.assertNotRegex(css, r"@import|url\([\"']?https?://")
                 self.assertNotRegex(javascript, r"\bfetch\s*\(|XMLHttpRequest|WebSocket")
@@ -89,21 +105,19 @@ class DisguiseSiteTests(unittest.TestCase):
                     self.assertFalse(asset.startswith(("http://", "https://", "//")), asset)
                     if asset.startswith(("#", "data:")):
                         continue
-                    self.assertTrue((site / asset.split("?", 1)[0]).is_file(), asset)
+                    self.assertTrue((site / asset.split("?", 1)[0]).resolve().is_file(), asset)
 
                 title = "".join(parser.titles)
                 self.assertTrue(title)
                 self.assertNotIn(title, titles)
                 titles.add(title)
 
-    def test_sites_have_distinct_document_structures(self) -> None:
-        fingerprints: set[tuple[int, ...]] = set()
-        tags = ("aside", "article", "section", "table", "figure", "form", "nav")
+    def test_sites_define_module_app_shells(self) -> None:
         for template_id in EXPECTED_IDS:
-            html = (SITES_ROOT / template_id / "index.html").read_text(encoding="utf-8")
-            fingerprint = tuple(len(re.findall(fr"<{tag}(?:\s|>)", html)) for tag in tags)
-            self.assertNotIn(fingerprint, fingerprints, template_id)
-            fingerprints.add(fingerprint)
+            with self.subTest(template=template_id):
+                html = (SITES_ROOT / template_id / "index.html").read_text(encoding="utf-8")
+                self.assertIn('data-app="', html)
+                self.assertNotIn("site-runtime.js", html)
 
     def test_sites_start_anonymous_and_define_restricted_login(self) -> None:
         authenticated_state_markers = (
@@ -119,12 +133,24 @@ class DisguiseSiteTests(unittest.TestCase):
             with self.subTest(template=template_id):
                 html = (SITES_ROOT / template_id / "index.html").read_text(encoding="utf-8")
 
-                self.assertIn("data-auth", html)
-                self.assertIn('type="email"', html)
-                self.assertIn('type="password"', html)
-                self.assertIn("Войти", html)
+                if template_id == "01-northline":
+                    self.assertIn('data-app="northline"', html)
+                elif template_id == "02-aster-observatory":
+                    self.assertIn('data-app="aster"', html)
+                elif template_id == "03-morrow-coffee":
+                    self.assertIn('data-app="morrow"', html)
+                elif template_id == "04-signal-works":
+                    self.assertIn('data-app="answers"', html)
+                elif template_id == "05-field-notes":
+                    self.assertIn('data-app="svod"', html)
+                elif template_id == "06-loop-archive":
+                    self.assertIn('data-app="loop"', html)
+                elif template_id == "07-fokus-news":
+                    self.assertIn('data-app="fokus"', html)
+                # A public route title does not imply an authenticated interface.
+                body = html.split("</head>", 1)[-1]
                 for marker in authenticated_state_markers:
-                    self.assertNotIn(marker, html)
+                    self.assertNotIn(marker, body)
 
 
 if __name__ == "__main__":

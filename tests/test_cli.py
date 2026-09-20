@@ -1478,6 +1478,7 @@ class CliDispatchTests(unittest.TestCase):
                 self.assertIn("--json", stderr.getvalue())
                 runner.interactive.assert_not_called()
 
+    @mock.patch("remnawave_manager.cli.require_root", new=lambda: None)
     def test_json_confirmation_requires_yes_without_prompting(self) -> None:
         prompt = mock.Mock(side_effect=AssertionError("input не должен вызываться"))
         with mock.patch("remnawave_manager.cli.restore_backup") as restore:
@@ -1496,6 +1497,7 @@ class CliDispatchTests(unittest.TestCase):
         prompt.assert_not_called()
         restore.assert_not_called()
 
+    @mock.patch("remnawave_manager.cli.require_root", new=lambda: None)
     def test_json_registry_login_requires_explicit_username(self) -> None:
         secret = mock.Mock(
             side_effect=AssertionError("secret prompt не должен вызываться")

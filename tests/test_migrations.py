@@ -10,7 +10,7 @@ from unittest import mock
 
 from remnawave_manager.adopt import adopt
 from remnawave_manager.backup import BackupResult
-from remnawave_manager.compat import component_target, require_supported_source
+from remnawave_manager.compat import component_target, load_manifest, require_supported_source
 from remnawave_manager.envfile import EnvDocument
 from remnawave_manager.errors import TransactionError, ValidationError
 from remnawave_manager.journal import TransactionJournal
@@ -235,6 +235,61 @@ class LegacyAdoptionTests(unittest.TestCase):
 
 
 class LegacyPanelMigrationTests(unittest.TestCase):
+    def test_current_v3_panel_upgrade_preserves_environment_and_compose_settings(self) -> None:
+        # Cover the previous release and a repeated update of the current release.
+        for source_version in ("3.4.3", "3.4.4"):
+            with self.subTest(source=source_version), tempfile.TemporaryDirectory() as temporary:
+                install_dir = copy_fixture(temporary, "legacy_panel_2_8_1")
+                source_digest = load_manifest()["components"]["panel"]["known_digests"][source_version]
+                sources = {
+                    "remnawave/backend:2": f"remnawave/backend:{source_version}@{source_digest}",
+                    "remnawave/subscription-page:latest": TARGET_IMAGES["subscription"],
+                    "postgres:18.3": TARGET_IMAGES["database"],
+                }
+                for name in ("docker-compose.yml", "compose-config.json"):
+                    path = install_dir / name
+                    content = path.read_text(encoding="utf-8")
+                    for old, new in sources.items():
+                        content = content.replace(old, new)
+                    path.write_text(content, encoding="utf-8")
+                env_path = install_dir / ".env"
+                env = EnvDocument.load(env_path)
+                env.migrate_panel_v3()
+                env.save(env_path)
+                original_env = env_path.read_bytes()
+                original_compose = (install_dir / "docker-compose.yml").read_text(encoding="utf-8")
+
+                runner = LegacyRunner(install_dir, "legacy_panel_2_8_1")
+                for container in runner.inspect_data.values():
+                    config = container["Config"]
+                    config["Image"] = sources.get(config["Image"], config["Image"])
+                store = StateStore(RuntimePaths(Path(temporary) / "runtime"))
+                inventory = adopt(runner, store, directory=install_dir, requested_role="panel")
+                for item in inventory.managed_files:
+                    if item.kind in {"compose", "env", "nginx", "secret"}:
+                        Path(item.path).chmod(0o600)
+                self.assertEqual(require_supported_source(runner, "panel", inventory.components["panel"]), source_version)
+                backup = BackupResult(Path(temporary) / "pre-panel.tar.gz", {})
+                with (
+                    mock.patch("remnawave_manager.update.create_backup", return_value=backup),
+                    mock.patch("remnawave_manager.update.pull_verified", side_effect=fake_pull),
+                    mock.patch("remnawave_manager.update.validate_rendered_compose"),
+                    mock.patch("remnawave_manager.update.wait_container"),
+                    mock.patch("remnawave_manager.update.wait_panel_http"),
+                    mock.patch("remnawave_manager.update.check_subscription_http") as subscription_health,
+                    mock.patch("remnawave_manager.update.check_subscription_api_scopes") as scopes,
+                    mock.patch("remnawave_manager.update.test_nginx"),
+                    mock.patch("remnawave_manager.update.adopt"),
+                ):
+                    self.assertEqual(update_panel_stack(runner, store), backup)
+
+                self.assertEqual(env_path.read_bytes(), original_env)
+                updated = (install_dir / "docker-compose.yml").read_text(encoding="utf-8")
+                self.assertEqual(updated, original_compose.replace(sources["remnawave/backend:2"], TARGET_IMAGES["panel"]))
+                subscription_health.assert_called_once()
+                scopes.assert_called_once()
+                self.assertFalse((store.paths.state / "active-transaction.json").exists())
+
     def test_update_preflight_rejects_world_readable_private_files(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             _, _, _, inventory = adopt_fixture(temporary, "legacy_panel_2_8_1")

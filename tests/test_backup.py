@@ -291,7 +291,7 @@ class BackupCreationTests(unittest.TestCase):
             store = Store(current)
             runner = NeverRunner()
 
-            with self.assertRaisesRegex(ValidationError, "символической ссылкой"):
+            with self.assertRaisesRegex(ValidationError, "символьной ссылкой"):
                 create_backup(runner, store)  # type: ignore[arg-type]
 
             self.assertEqual(runner.calls, [])
@@ -861,7 +861,7 @@ class RestoreTransactionTests(unittest.TestCase):
             make_backup(archive, saved, [(compose, restored_payload)])
             runner = NeverRunner()
 
-            with self.assertRaisesRegex(ValidationError, "символической ссылкой"):
+            with self.assertRaisesRegex(ValidationError, "символьной ссылкой"):
                 restore_backup(runner, Store(saved), archive)  # type: ignore[arg-type]
 
             self.assertEqual(link_destination.read_bytes(), original_payload)

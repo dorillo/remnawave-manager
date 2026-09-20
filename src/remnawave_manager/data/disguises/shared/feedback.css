@@ -1,0 +1,14 @@
+/* Shared feedback for sites 1–7. Colours follow each site's current theme. */
+a, a *, button, button * { text-decoration-line: none !important; }
+.ui-loading { display: inline-flex; align-items: center; justify-content: center; gap: .65em; vertical-align: middle; }
+.ui-loading[hidden] { display: none; }
+.ui-spinner { display: inline-block; box-sizing: border-box; width: 1.15em; height: 1.15em; flex: 0 0 1.15em; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: ui-spin .8s linear infinite; }
+@keyframes ui-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ui-spinner { animation: none; } }
+
+.guest-prompt { text-align: center; padding: clamp(28px, 5vw, 52px) clamp(18px, 4vw, 32px); margin: 16px 0; border: 1px dashed var(--line, #d9e3f3); border-radius: 16px; background: var(--surface, var(--panel, transparent)); color: var(--ink, var(--text, inherit)); }
+.guest-symbol { display: inline-flex; padding: 15px; margin-bottom: 16px; border-radius: 50%; color: var(--brand, var(--accent, #3267e8)); background: var(--soft, var(--raised, transparent)); }
+.guest-symbol svg { display: block; width: 26px; height: 26px; }
+.guest-prompt h2 { margin: 0; font-size: clamp(20px, 2.3vw, 26px); line-height: 1.3; overflow-wrap: anywhere; }
+.guest-prompt p { max-width: 540px; margin: 14px auto 24px; color: var(--muted, inherit); line-height: 1.65; }
+.guest-prompt :is(.guest-login, .empty-action) { display: inline-flex; justify-content: center; align-items: center; max-width: 100%; white-space: normal; padding: 12px 20px; border-radius: 10px; line-height: 1.4; cursor: pointer; }

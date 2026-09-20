@@ -8,6 +8,7 @@ import stat
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from importlib.resources import files
 from pathlib import Path
 
 from .adopt import adopt
@@ -18,6 +19,7 @@ from .certificates import (
     normalize_domain,
     obtain_certificate,
 )
+from .compat import component_target
 from .compose import compose_command
 from .errors import TransactionError, ValidationError
 from .firewall import FirewallTransaction, apply_firewall_transactional, plan_firewall
@@ -46,6 +48,9 @@ from .runner import (
     sha256_file,
 )
 from .state import StateStore
+from .site_policy import NODE_CSP
+from .site_config import upgrade_site_config
+from .disguise import copy_template, template_catalog
 
 POSTGRES_IMAGE = (
     "postgres:18.4@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636"
@@ -133,7 +138,7 @@ def render_panel_env(environment: PanelEnvironment) -> str:
         + "@remnawave-db:5432/remnawave"
     )
     return (
-        "# Remnawave Panel 3.4.3. Файл содержит секреты.\n"
+        f"# Remnawave Panel {component_target('panel')['version']}. Файл содержит секреты.\n"
         "APP_PORT=3000\n"
         "METRICS_PORT=3001\n"
         "API_INSTANCES=1\n"
@@ -613,7 +618,7 @@ server {{
     add_header X-Content-Type-Options nosniff always;
     add_header X-Frame-Options SAMEORIGIN always;
     add_header Referrer-Policy strict-origin-when-cross-origin always;
-    add_header Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'" always;
+    add_header Content-Security-Policy "{NODE_CSP}" always;
     add_header Cross-Origin-Opener-Policy same-origin always;
     add_header Cross-Origin-Resource-Policy same-origin always;
 
@@ -1009,7 +1014,8 @@ def install_node(
 ) -> NodeInstallResult:
     if not options.panel_3_4_ready:
         raise ValidationError(
-            "Node 3.4.1 требует Panel 3.4.3. Сначала обновите и проверьте Panel, затем "
+            f"Перед установкой Node {component_target('node')['version']} обновите "
+            f"и проверьте Panel {component_target('panel')['version']}, затем "
             "подтвердите совместимость параметром --panel-3-4-ready."
         )
     _preflight(
@@ -1062,11 +1068,14 @@ def install_node(
             install_dir=directory,
             stop_nginx_for_http01=False,
         )
-        _install_static_site(options.site_source, directory / "site")
+        template_id = _install_node_site(options.site_source, directory / "site")
+        nginx_config = render_node_nginx(domain=domain, certificate=certificate)
+        if template_id:
+            nginx_config, _ = upgrade_site_config(nginx_config, template_id, {"/var/www/html"})
         atomic_write_text(env_path, render_node_env(options.secret_key), mode=0o600)
         atomic_write_text(
             nginx_path,
-            render_node_nginx(domain=domain, certificate=certificate),
+            nginx_config,
             mode=0o600,
         )
         atomic_write_text(
@@ -1710,6 +1719,21 @@ def _validate_site_source(source: Path) -> None:
     index = source / "index.html"
     if not index.is_file() or index.is_symlink():
         raise ValidationError("В шаблоне маскировочного сайта отсутствует index.html.")
+
+
+def _install_node_site(source: Path, target: Path) -> str | None:
+    """Use the same assets and proxy contract for fresh installs and replacements."""
+    bundled = Path(str(files("remnawave_manager").joinpath("data/disguises")))
+    for template in template_catalog():
+        if source.resolve() == (bundled / template["id"]).resolve():
+            # Installation prepares an empty site directory before obtaining TLS.
+            # rmdir deliberately refuses a nonempty directory or a symlink.
+            if target.exists() or target.is_symlink():
+                target.rmdir()
+            copy_template(template["id"], target)
+            return template["id"]
+    _install_static_site(source, target)
+    return None
 
 
 def _install_static_site(source: Path, target: Path) -> None:

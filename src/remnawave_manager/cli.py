@@ -43,6 +43,7 @@ from .certificates import (
     configure_adopted_certbot,
     issue_certificate,
 )
+from .compat import component_target
 from .compose import inspect_compose
 from .diagnose import repair_permissions, run_diagnostics
 from .disguise import DISGUISE_TEMPLATE_COUNT, apply_template, template_catalog
@@ -407,7 +408,7 @@ def build_parser() -> RussianArgumentParser:
     node.add_argument(
         "--panel-3-4-ready",
         action="store_true",
-        help="Подтвердить, что Panel уже работает на версии 3.4.3.",
+        help=f"Подтвердить, что Panel уже работает на версии {component_target('panel')['version']}.",
     )
     source = node.add_mutually_exclusive_group(required=True)
     source.add_argument("--template", choices=DISGUISE_IDS)
@@ -428,7 +429,7 @@ def build_parser() -> RussianArgumentParser:
     update.add_argument(
         "--panel-3-4-ready",
         action="store_true",
-        help="Подтвердить, что Panel уже обновлена до 3.4.3 перед обновлением Node.",
+        help=f"Подтвердить, что Panel уже обновлена до {component_target('panel')['version']} перед обновлением Node.",
     )
     update.add_argument(
         "--accept-reality-client-risk",
@@ -1144,7 +1145,8 @@ def dispatch(args: argparse.Namespace, context: CliContext) -> int:
             "Миграции PostgreSQL откатываются только восстановлением dump."
             if inventory.role == "panel"
             else "Будет создан backup и протестирован текущий Xray-конфиг новым образом Node. "
-            "Перед обновлением Node 3.4.1 сначала обновите и проверьте Panel 3.4.3: "
+            f"Перед обновлением Node {component_target('node')['version']} сначала "
+            f"обновите и проверьте Panel {component_target('panel')['version']}: "
             "компоненты должны использовать один актуальный Node API-контракт."
         )
         _confirm(context, warning, assume_yes=args.yes)
@@ -2224,7 +2226,7 @@ def _interactive_arguments(context: CliContext, section: int) -> list[str] | Non
             catalog[template - 1]["id"],
         ]
         if _yes_no(
-            context, "Panel уже установлена или обновлена до 3.4.3", default=False
+            context, f"Panel уже установлена или обновлена до {component_target('panel')['version']}", default=False
         ):
             result.append("--panel-3-4-ready")
         if not _yes_no(context, "Настроить UFW", default=True):
@@ -2233,7 +2235,7 @@ def _interactive_arguments(context: CliContext, section: int) -> list[str] | Non
     if section == 3:
         result = ["update"]
         if _yes_no(
-            context, "Panel уже обновлена до 3.4.3 и прошла проверку", default=False
+            context, f"Panel уже обновлена до {component_target('panel')['version']} и прошла проверку", default=False
         ):
             result.append("--panel-3-4-ready")
         if _yes_no(

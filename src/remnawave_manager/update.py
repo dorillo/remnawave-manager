@@ -11,7 +11,7 @@ from typing import Any
 
 from .adopt import adopt
 from .backup import BackupResult, create_backup, restore_backup
-from .compat import require_supported_source
+from .compat import component_target, require_supported_source
 from .compose import ComposeDocument, compose_command, validate_rendered_compose
 from .envfile import EnvDocument
 from .errors import TransactionError, ValidationError
@@ -751,10 +751,11 @@ def update_node(
         inventory.components["node"],
         accept_unknown=accept_unknown_source,
     )
-    if source_version != "3.4.1" and not panel_3_4_ready:
+    if source_version != component_target("node")["version"] and not panel_3_4_ready:
         raise ValidationError(
-            "Node 3.4.1 требует Panel 3.4.3 с актуальным Node API-контрактом. Сначала "
-            "обновите Panel, убедитесь, что она работает, затем повторите update Node "
+            f"Перед обновлением Node {component_target('node')['version']} "
+            f"обновите и проверьте Panel {component_target('panel')['version']} "
+            "с актуальным Node API-контрактом, затем повторите update Node "
             "с --panel-3-4-ready."
         )
     TransactionJournal.ensure_available(store)

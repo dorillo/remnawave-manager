@@ -8,6 +8,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from root_fixture import root_owned_fixture
+
 from remnawave_manager.api import REALITY_RECOVERY_NAME
 from remnawave_manager.diagnose import (
     Check,
@@ -167,6 +169,7 @@ class DiagnoseTests(unittest.TestCase):
         self.assertNotIn("\r", check.detail)
         self.assertNotIn("\x00", check.detail)
 
+    @root_owned_fixture
     def test_firewall_transaction_diagnostics_accept_absent_and_empty_root(
         self,
     ) -> None:
@@ -181,6 +184,7 @@ class DiagnoseTests(unittest.TestCase):
             self.assertEqual([check.level for check in absent], ["ok"])
             self.assertEqual([check.level for check in empty], ["ok"])
 
+    @root_owned_fixture
     def test_firewall_transaction_diagnostics_report_valid_orphan(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             store = _store(Path(temporary))
@@ -213,6 +217,7 @@ class DiagnoseTests(unittest.TestCase):
             self.assertEqual([check.level for check in checks], ["error"])
             self.assertIn("ожидается обычный каталог", checks[0].detail)
 
+    @root_owned_fixture
     def test_firewall_transaction_diagnostics_reject_unsafe_entry_type(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             store = _store(Path(temporary))
@@ -227,6 +232,7 @@ class DiagnoseTests(unittest.TestCase):
             self.assertIn("ожидается обычный каталог", checks[0].detail)
 
     @unittest.skipUnless(hasattr(os, "link"), "hard links are unavailable")
+    @root_owned_fixture
     def test_firewall_transaction_diagnostics_reject_hardlinked_manifest(
         self,
     ) -> None:
@@ -249,6 +255,7 @@ class DiagnoseTests(unittest.TestCase):
             self.assertEqual([check.level for check in checks], ["error"])
             self.assertIn("hardlink", checks[0].detail)
 
+    @root_owned_fixture
     def test_firewall_transaction_diagnostics_reject_missing_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             store = _store(Path(temporary))
@@ -308,6 +315,7 @@ class DiagnoseTests(unittest.TestCase):
             self.assertIn("hardlink", inventory_check.detail)
 
     @unittest.skipUnless(os.name == "posix", "POSIX modes are unavailable")
+    @root_owned_fixture
     def test_repair_permissions_can_recover_world_readable_inventory(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             store = _store(Path(temporary))
@@ -443,6 +451,7 @@ class DiagnoseTests(unittest.TestCase):
             ["database-service:network_mode=host"],
         )
 
+    @root_owned_fixture
     def test_diagnoses_and_repairs_every_private_managed_file_kind(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -511,6 +520,7 @@ class DiagnoseTests(unittest.TestCase):
                     self.assertEqual(files[kind].stat().st_mode & 0o777, 0o600)
                 self.assertEqual(files["site"].stat().st_mode & 0o777, 0o644)
 
+    @root_owned_fixture
     def test_reports_and_repairs_world_readable_legacy_log(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -558,6 +568,7 @@ class DiagnoseTests(unittest.TestCase):
             self.assertIsInstance(raised.exception.__cause__, OSError)
 
     @unittest.skipUnless(hasattr(os, "link"), "hard links are unavailable")
+    @root_owned_fixture
     def test_repair_permissions_refuses_hardlinked_managed_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -589,6 +600,7 @@ class DiagnoseTests(unittest.TestCase):
             with self.assertRaisesRegex(ValidationError, "небезопасный тип"):
                 repair_permissions(store)
 
+    @root_owned_fixture
     def test_certbot_diagnostics_require_timer_and_standalone_hooks(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -653,6 +665,7 @@ class DiagnoseTests(unittest.TestCase):
             self.assertIn(str(hook), checks[-1].detail)
             self.assertIn("certificate repair-renewal", checks[-1].detail)
 
+    @root_owned_fixture
     def test_certbot_diagnostics_reject_unexpected_standalone_hooks(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -693,6 +706,7 @@ class DiagnoseTests(unittest.TestCase):
     @unittest.skipUnless(
         os.name == "posix", "POSIX ownership and modes are unavailable"
     )
+    @root_owned_fixture
     def test_certbot_diagnostics_reject_writable_or_hardlinked_hooks(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -761,6 +775,7 @@ class DiagnoseTests(unittest.TestCase):
             self.assertIn(str(hook), checks[-1].detail)
 
     @unittest.skipUnless(os.name == "posix", "O_NONBLOCK is a POSIX hardening")
+    @root_owned_fixture
     def test_permission_repair_opens_regular_files_nonblocking(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "managed.env"

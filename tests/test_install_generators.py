@@ -49,7 +49,7 @@ from remnawave_manager.install import (
 )
 from remnawave_manager.models import Component, Inventory
 from remnawave_manager.paths import RuntimePaths
-from remnawave_manager.runner import Result, Runner
+from remnawave_manager.runner import Result, Runner, _validate_compose_bind_reference
 from remnawave_manager.state import StateStore
 
 
@@ -76,7 +76,7 @@ class InstallGeneratorTests(unittest.TestCase):
             )
         )
 
-        self.assertTrue(panel.startswith("# Remnawave Panel 3.4.3."))
+        self.assertTrue(panel.startswith("# Remnawave Panel 3.4.4."))
         self.assertIn("SHORT_UUID_METHOD=nanoid\n", panel)
         self.assertIn("SHORT_UUID_LENGTH=16\n", panel)
         self.assertTrue(
@@ -894,7 +894,9 @@ class InstallGeneratorTests(unittest.TestCase):
         self.assertIn("server_name node.example.com;", redirect_http)
         self.assertIn("return 308 https://$host$request_uri;", redirect_http)
         self.assertIn("script-src 'self'", rendered)
-        self.assertIn("connect-src 'none'", rendered)
+        self.assertIn("connect-src 'self' https://mastodon.social", rendered)
+        self.assertIn("https://rutube.ru; frame-src https://rutube.ru", rendered)
+        self.assertIn("img-src 'self' data: blob: https:; media-src 'self' data: blob: https:", rendered)
         self.assertNotIn("script-src 'none'", rendered)
 
     def test_http01_certbot_command_is_noninteractive_and_has_all_domains(self) -> None:
@@ -1594,6 +1596,8 @@ class InstallGeneratorTests(unittest.TestCase):
     def test_node_install_checks_runtime_before_adoption(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
+            shared_memory = root / "shm"
+            shared_memory.mkdir()
             site = root / "template"
             site.mkdir()
             (site / "index.html").write_text("placeholder", encoding="utf-8")
@@ -1605,6 +1609,8 @@ class InstallGeneratorTests(unittest.TestCase):
                 private_key="/etc/letsencrypt/live/node.example.com/privkey.pem",
                 managed_by_certbot=True,
             )
+            for branch in ("live", "archive"):
+                (material.host_root / branch / "node.example.com").mkdir(parents=True)
             adopted = Inventory(
                 schema_version=1,
                 role="node",
@@ -1647,7 +1653,18 @@ class InstallGeneratorTests(unittest.TestCase):
                 events.append("certificate")
                 return material
 
+            def validate_bind(value, *, project_directory):
+                # macOS has no /dev/shm; validate a real test directory in its place.
+                _validate_compose_bind_reference(
+                    str(shared_memory) if value == "/dev/shm" else value,
+                    project_directory=project_directory,
+                )
+
             with (
+                mock.patch(
+                    "remnawave_manager.runner._validate_compose_bind_reference",
+                    side_effect=validate_bind,
+                ),
                 mock.patch("remnawave_manager.install._preflight"),
                 mock.patch("remnawave_manager.install.validate_node_secret"),
                 mock.patch("remnawave_manager.install._ensure_container_names_available"),
