@@ -42,9 +42,19 @@ let feed = [],
   pageMemory = new Map(),
   lastHash = "",
   freshFeed = null;
+const systemTheme = matchMedia("(prefers-color-scheme: dark)");
+let themePreference = null;
 try {
-  theme = localStorage.getItem("fokus:theme") === "dark" ? "dark" : "light";
+  const saved = localStorage.getItem("fokus:theme");
+  if (saved === "dark" || saved === "light") themePreference = saved;
 } catch {}
+theme = themePreference ?? (systemTheme.matches ? "dark" : "light");
+document.documentElement.dataset.theme = theme;
+systemTheme.addEventListener("change", (event) => {
+  if (themePreference !== null) return;
+  theme = event.matches ? "dark" : "light";
+  header();
+});
 const me = () => store.account(db),
   main = document.querySelector("main");
 const err = (error) =>
@@ -871,6 +881,7 @@ document.addEventListener("click", async (event) => {
       render();
     } else if (action === "theme") {
       theme = theme === "light" ? "dark" : "light";
+      themePreference = theme;
       try {
         localStorage.setItem("fokus:theme", theme);
       } catch {}
