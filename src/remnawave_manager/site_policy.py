@@ -15,6 +15,11 @@ LEGACY_IMAGE_PROXY = render_image_proxy(tuple(host for host in IMAGE_HOSTS if ho
 NORTHLINE_PROXY = render_proxy()
 LEGACY_NORTHLINE_PROXY = render_proxy(legacy=True, secure=False)
 
+STATIC_NODE_CSP = (
+    "default-src 'self'; img-src 'self' data:; style-src 'self'; "
+    "script-src 'self'; connect-src 'none'; object-src 'none'; "
+    "base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+)
 LEGACY_NODE_CSP = (
     "default-src 'self'; img-src 'self' data: blob: https:; "
     "media-src 'self' data: blob: https:; style-src 'self'; script-src 'self'; "
@@ -32,6 +37,7 @@ MORROW_AI_NODE_CSP = ASTER_NODE_CSP.replace(
 
 # Video traffic uses media-src; API calls use a fixed same-origin nginx route.
 NODE_CSP = ASTER_NODE_CSP
+KNOWN_NODE_CSPS = (STATIC_NODE_CSP, LEGACY_NODE_CSP, ASTER_NODE_CSP, MORROW_AI_NODE_CSP)
 
 ASTER_SEARCH_PROXY = """    location = /_aster/rutube-search {
         limit_except GET { deny all; }
@@ -50,7 +56,7 @@ ASTER_SEARCH_PROXY = """    location = /_aster/rutube-search {
 
 def _upgrade_known_policy(text: str) -> str:
     new = f'add_header Content-Security-Policy "{NODE_CSP}" always;'
-    for policy in (LEGACY_NODE_CSP, ASTER_NODE_CSP, MORROW_AI_NODE_CSP):
+    for policy in KNOWN_NODE_CSPS:
         text = text.replace(f'add_header Content-Security-Policy "{policy}" always;', new)
     for previous, current in _PROXY_REVISIONS:
         text = text.replace(previous, current)

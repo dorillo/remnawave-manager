@@ -21,7 +21,7 @@ from remnawave_manager.install import _install_node_site
 from remnawave_manager.models import Component, Inventory, ManagedFile
 from remnawave_manager.runner import Result, sha256_file
 from remnawave_manager.site_config import upgrade_site_config
-from remnawave_manager.site_policy import NODE_CSP, TEMPLATE_POLICIES
+from remnawave_manager.site_policy import NODE_CSP, STATIC_NODE_CSP, TEMPLATE_POLICIES
 
 ROOT = Path(__file__).resolve().parents[1]
 ASSETS = ROOT / 'src/remnawave_manager/data/disguises'
@@ -56,6 +56,37 @@ def legacy_config():
 
 
 class SiteDeploymentTests(unittest.TestCase):
+    def test_beeline_post_static_csp_upgrades_without_changing_transport(self):
+        original = (ROOT / 'tests/fixtures/beeline_post_static.conf').read_text(encoding='utf-8')
+        old_header = f'add_header Content-Security-Policy "{STATIC_NODE_CSP}" always;'
+        new_header = f'add_header Content-Security-Policy "{NODE_CSP}" always;'
+        self.assertIn(old_header, original)
+        for template_id in TEMPLATE_POLICIES:
+            for newline in ('\n', '\r\n'):
+                with self.subTest(template=template_id, newline=repr(newline)):
+                    source = original.replace('\n', newline)
+                    result, count = upgrade_site_config(source, template_id, {'/var/www/html'})
+                    self.assertEqual(count, 1)
+                    self.assertNotIn(old_header, result)
+                    self.assertIn(new_header, result)
+                    # Every pre-existing block and directive except the site CSP
+                    # must survive byte-for-byte and in the same order.
+                    cursor = 0
+                    for chunk in source.split(old_header):
+                        # New site routes are inserted after the header and before
+                        # the site server's closing brace.
+                        for line in chunk.splitlines(keepends=True):
+                            position = result.find(line, cursor)
+                            self.assertNotEqual(position, -1, line)
+                            cursor = position + len(line)
+                    for route in ('location = /source/origin {', 'location ^~ /source/origin/ {'):
+                        start = source.index(route)
+                        end = source.index('}', start) + 1
+                        self.assertIn(source[start:end], result)
+                    self.assertEqual(upgrade_site_config(result, template_id, {'/var/www/html'}), (result, 1))
+                    if template_id == '02-aster-observatory':
+                        self.assertIn('location = /_aster/rutube-search {', result)
+
     def test_every_fresh_install_matches_replacement_and_complete_module_graph(self):
         self.assertEqual(set(TEMPLATE_POLICIES), {item['id'] for item in template_catalog()})
         for template_id in TEMPLATE_POLICIES:

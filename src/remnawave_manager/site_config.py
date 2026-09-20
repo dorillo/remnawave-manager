@@ -6,7 +6,7 @@ import re
 from .errors import ValidationError
 from .nginx import _brace_depths, _server_blocks, _structural_text
 from .site_policy import (
-    ASTER_NODE_CSP, LEGACY_NODE_CSP, MORROW_AI_NODE_CSP, NODE_CSP,
+    KNOWN_NODE_CSPS, NODE_CSP,
     TEMPLATE_POLICIES, _PROXY_REVISIONS,
     ASTER_METADATA_PROXY, ASTER_COMMENTS_PROXY, ASTER_SEARCH_PROXY,
     IMAGE_PROXY, NORTHLINE_PROXY, MORROW_YAPPY_PROXY, ANSWERS_MAIL_PROXY,
@@ -49,7 +49,7 @@ def upgrade_site_config(text: str, template_id: str, roots: set[str]) -> tuple[s
         marker = f'add_header Content-Security-Policy "{NODE_CSP}" always;'
         headers = list(re.finditer(r'\badd_header\s+Content-Security-Policy\b[^;]*;', structural, re.I))
         known = {f'add_header Content-Security-Policy "{value}" always;'
-                 for value in (LEGACY_NODE_CSP, ASTER_NODE_CSP, MORROW_AI_NODE_CSP)}
+                 for value in KNOWN_NODE_CSPS}
         # Sandbox headers in known proxy blocks are intentionally retained.
         stripped = body
         for old, new in _PROXY_REVISIONS:
