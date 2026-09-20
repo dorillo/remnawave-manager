@@ -2,7 +2,7 @@
 
 Целевой образ Node `3.4.1` привязан к immutable multiarch digest в `compatibility.json`. Обновление меняет только прямое поле `image` сервиса Node в Compose и, для старого стека, исправляет target лога `/var/log/remnanode` на `/var/log/xray`.
 
-Перед обновлением Node обязательно обновите и проверьте Panel `3.4.3`. Node и Panel должны использовать проверенную актуальную связку; менеджер остановит переход со старой Node без явного `--panel-3-4-ready`.
+Перед обновлением Node обязательно обновите и проверьте Panel `3.4.4`. Node и Panel должны использовать проверенную актуальную связку; менеджер остановит переход со старой Node без явного `--panel-3-4-ready`.
 
 Node 3.4.1 сохраняет ENV-контракт, Xray Core `v26.7.28`, runtime-команды `rw-core`/`cli` и Unix-сокеты XHTTP версии 3.4.0. Версия обновляет Node Plugins/Zod и исправляет сброс старых соединений при замене VLESS UUID. Необязательные `NFTABLES_LOGGING`, `NFTABLES_ACCEPT_REPLY_TRAFFIC` и `SNI_VERIFICATION` остаются совместимыми; старый env валиден, а чистая установка задаёт upstream-compatible defaults явно. Менеджер проверяет `SECRET_KEY` и текущий Xray JSON новым образом до изменения Compose; Reality без явного `minClientVer` требует явного подтверждения риска.
 

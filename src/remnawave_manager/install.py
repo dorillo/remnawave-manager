@@ -19,6 +19,7 @@ from .certificates import (
     normalize_domain,
     obtain_certificate,
 )
+from .compat import component_target
 from .compose import compose_command
 from .errors import TransactionError, ValidationError
 from .firewall import FirewallTransaction, apply_firewall_transactional, plan_firewall
@@ -137,7 +138,7 @@ def render_panel_env(environment: PanelEnvironment) -> str:
         + "@remnawave-db:5432/remnawave"
     )
     return (
-        "# Remnawave Panel 3.4.3. Файл содержит секреты.\n"
+        f"# Remnawave Panel {component_target('panel')['version']}. Файл содержит секреты.\n"
         "APP_PORT=3000\n"
         "METRICS_PORT=3001\n"
         "API_INSTANCES=1\n"
@@ -1013,7 +1014,8 @@ def install_node(
 ) -> NodeInstallResult:
     if not options.panel_3_4_ready:
         raise ValidationError(
-            "Node 3.4.1 требует Panel 3.4.3. Сначала обновите и проверьте Panel, затем "
+            f"Перед установкой Node {component_target('node')['version']} обновите "
+            f"и проверьте Panel {component_target('panel')['version']}, затем "
             "подтвердите совместимость параметром --panel-3-4-ready."
         )
     _preflight(

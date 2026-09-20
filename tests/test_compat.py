@@ -65,9 +65,9 @@ class CompatibilityTests(unittest.TestCase):
 
         self.assertEqual(require_supported_source(runner, "database", component), "18.4")
 
-    def test_panel_target_is_3_4_3_and_identical_in_both_registries(self) -> None:
+    def test_panel_target_is_3_4_4_and_identical_in_both_registries(self) -> None:
         expected_digest = (
-            "sha256:4ea85b2fc16bd3e5d367b61afc07ec219133eaa12dd7b5e898adc33c84515422"
+            "sha256:63ef481550bbf49dabfa514c95d94109619cc85607730b308f7ad0b9b5599f06"
         )
 
         docker_hub = component_target("panel", "docker-hub")
@@ -76,16 +76,16 @@ class CompatibilityTests(unittest.TestCase):
         self.assertEqual(
             docker_hub,
             {
-                "version": "3.4.3",
-                "image": "remnawave/backend:3.4.3",
+                "version": "3.4.4",
+                "image": "remnawave/backend:3.4.4",
                 "digest": expected_digest,
             },
         )
         self.assertEqual(
             ghcr,
             {
-                "version": "3.4.3",
-                "image": "ghcr.io/remnawave/backend:3.4.3",
+                "version": "3.4.4",
+                "image": "ghcr.io/remnawave/backend:3.4.4",
                 "digest": expected_digest,
             },
         )
@@ -166,6 +166,12 @@ class CompatibilityTests(unittest.TestCase):
                 "remnawave/backend:3.4.3",
                 "sha256:4ea85b2fc16bd3e5d367b61afc07ec219133eaa12dd7b5e898adc33c84515422",
                 "3.4.3",
+            ),
+            (
+                "panel",
+                "remnawave/backend:3.4.4",
+                "sha256:63ef481550bbf49dabfa514c95d94109619cc85607730b308f7ad0b9b5599f06",
+                "3.4.4",
             ),
             (
                 "node",

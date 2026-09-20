@@ -63,6 +63,8 @@ class InventoryValidationTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
+            store.paths.inventory.chmod(0o600)
+
             with self.assertRaisesRegex(ValidationError, "инвентаризации повреждён"):
                 store.load_inventory()
 
