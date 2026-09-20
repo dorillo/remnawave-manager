@@ -122,6 +122,8 @@ class NginxProxyAuditTests(unittest.TestCase):
                         time.sleep(.05)
                 cases = [
                     ('/_northline/mastodon/api/v1/accounts/123/statuses?limit=20&exclude_replies=true&max_id=456', 'mastodon.ml', '/api/v1/accounts/123/statuses?limit=20&exclude_replies=true&max_id=456', 'application/json'),
+                    ('/_aster/rutube-video/' + 'a' * 32, 'rutube.ru', '/api/video/' + 'a' * 32 + '/', 'application/json'),
+                    ('/_aster/rutube-profile/123', 'rutube.ru', '/api/profile/user/123/', 'application/json'),
                     ('/_aster/rutube-search?query=cat&client=wdp&page=2', 'rutube.ru', '/api/search/video/?query=cat&client=wdp&page=2', 'application/json'),
                     ('/_morrow/yappy/feed?page=2', 'yappy.media', '/api/feed?page=2&fingerprint=', 'application/json'),
                     ('/_morrow/yappy/search?query=%D0%BA%D0%BE%D1%82&page=1', 'yappy.media', '/api/search/video?query=%D0%BA%D0%BE%D1%82&page=1', 'application/json'),

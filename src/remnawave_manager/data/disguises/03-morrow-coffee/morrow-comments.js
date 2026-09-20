@@ -115,12 +115,26 @@ export function openComments(video, { getStore, mutate, gate, openAuthor }) {
       send.disabled = false;
     }
   }
+  function branchIds(items, roots) {
+    const ids = new Set(roots);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const item of items) if (ids.has(item.parentId) && !ids.has(item.id)) {
+        ids.add(item.id);
+        changed = true;
+      }
+    }
+    return ids;
+  }
   function render() {
     const d = getStore()?.data,
       locals = (d?.comments || [])
         .filter((c) => c.videoId === video.id)
         .map((c) => ({ ...c, author: profileAuthor(), local: true, likes: 0 }));
-    const all = [...publicItems, ...locals],
+    const items = [...publicItems, ...locals];
+    const removed = branchIds(items, items.filter(c => c.deleted).map(c => c.id));
+    const all = items.filter(c => !removed.has(c.id)),
       map = new Map(all.map((c) => [c.id, c]));
     const children = new Map();
     for (const c of all) {
@@ -200,13 +214,13 @@ export function openComments(video, { getStore, mutate, gate, openAuthor }) {
           button(t("edit"), () => setTarget(c, true)),
           button(t("delete"), () =>
             confirmAction(t("delete"), t("deleteText"), async () => {
+              let removed;
               await mutate((x) => {
-                const own = x.comments.find((y) => y.id === c.id);
-                if (own) {
-                  own.text = "";
-                  own.deleted = true;
-                }
+                removed = branchIds(x.comments.filter(y => y.videoId === video.id), [c.id]);
+                x.comments = x.comments.filter(y => !removed.has(y.id));
+                x.commentLikes = x.commentLikes.filter(id => !removed.has(id));
               });
+              if (removed.has(target?.id) || removed.has(editing?.id)) setTarget(null);
               render();
             }),
           ),
@@ -238,6 +252,7 @@ export function openComments(video, { getStore, mutate, gate, openAuthor }) {
       let loaded = 0;
       while (next && loaded < 5) {
         const result = await getComments(video.id, page, controller.signal);
+        if (result.stale) error.textContent = t("staleComments");
         const known = new Set(publicItems.map((c) => c.id));
         const fresh = result.items.filter((c) => !known.has(c.id));
         publicItems.push(...fresh);

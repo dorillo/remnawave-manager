@@ -209,6 +209,7 @@ const messages = {
   ],
   choose: ["Выберите коллекцию", "Choose a collection"],
   added: ["Добавлено в коллекцию", "Added to collection"],
+  removedFromCollection: ["Убрано из коллекции", "Removed from collection"],
   alreadyAdded: ["Уже в коллекции", "Already in collection"],
   items: ["реакций", "reactions"],
   about: [

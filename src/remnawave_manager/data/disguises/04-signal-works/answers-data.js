@@ -76,7 +76,7 @@ async function get(path, params = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12000);
   try {
-    const response = await fetch(url, { credentials: 'omit', headers: { Accept: 'application/json' }, signal: controller.signal, redirect: 'error' });
+    const response = await fetch(url, { cache: 'no-store', credentials: 'omit', headers: { Accept: 'application/json' }, signal: controller.signal, redirect: 'error' });
     if (response.status === 429) { cooldown = Date.now() + Math.min(300000, Math.max(30000, Number(response.headers.get('Retry-After')) * 1000 || 30000)); throw new Error('rate-limit'); }
     if (!response.ok) throw new Error(response.status === 404 ? 'missing' : 'network');
     if (!(response.headers.get('content-type') || '').includes('application/json')) throw new Error('schema');

@@ -1,4 +1,4 @@
-import { guestPrompt } from '../shared/guest-state.js';
+import { guestPrompt, emptyPrompt } from '../shared/guest-state.js';
 import { loadingNode } from '../shared/feedback.js';
 import { t, preference } from "./loop-i18n.js";
 import {
@@ -289,19 +289,25 @@ function collectionDialog(item) {
         picker.append(
           button(
             c.name,
-            async () => {
-              if (c.items.length >= 500) throw new Error("limit");
-              await store.editCollection(c.id, (value) => {
-                if (!value.items.some((x) => x.id === item.id))
-                  value.items.push(store.mediaSnapshot(item));
-              });
-              notice(t("added"));
-              await draw();
-              pages.clear();
+            async (control) => {
+              control.disabled = true;
+              try {
+                await store.editCollection(c.id, (value) => {
+                  if (added) value.items = value.items.filter(x => x.id !== item.id);
+                  else if (!value.items.some(x => x.id === item.id)) {
+                    if (value.items.length >= 500) throw new Error("limit");
+                    value.items.push(store.mediaSnapshot(item));
+                  }
+                });
+                pages.clear();
+                notice(t(added ? "removedFromCollection" : "added"));
+                if (picker.isConnected) await draw();
+              } catch (error) { notice(t(safeError(error))); }
+              finally { control.disabled = false; }
             },
             {
               symbol: added ? "check" : "folder",
-              disabled: added,
+              "aria-pressed": String(added),
               "aria-label": `${c.name}${added ? " — " + t("alreadyAdded") : ""}`,
             },
           ),
@@ -1187,15 +1193,7 @@ async function libraryPage(r, token) {
     main.append(
       list.length
         ? localList(list, (x) => card(x.media))
-        : state(
-            t("empty"),
-            t("emptyLikes"),
-            el(
-              "a",
-              { class: "button primary", href: "#/explore" },
-              t("explore"),
-            ),
-          ),
+        : emptyPrompt('likedMedia', () => go('#/explore')),
     );
     return;
   }
@@ -1261,15 +1259,7 @@ async function libraryPage(r, token) {
     main.append(
       c.items.length
         ? localList(c.items, (x) => card(x, c))
-        : state(
-            t("empty"),
-            t("emptyCollection"),
-            el(
-              "a",
-              { class: "button primary", href: "#/explore" },
-              t("explore"),
-            ),
-          ),
+        : emptyPrompt('collection', () => go('#/explore')),
     );
     return;
   }
@@ -1294,7 +1284,7 @@ async function libraryPage(r, token) {
     ),
   );
   if (!collections.length) {
-    main.append(state(t("empty"), t("emptyCollections")));
+    main.append(emptyPrompt('collections'));
     return;
   }
   main.append(
@@ -1487,7 +1477,7 @@ function uploadsPage() {
   main.append(
     ownUploads.length
       ? localList(ownUploads, (item) => card(item))
-      : state(t("empty"), t("emptyUploads")),
+      : emptyPrompt('uploads'),
   );
 }
 function profilePage() {

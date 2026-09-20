@@ -52,3 +52,13 @@ body:has(.modal-backdrop) { overflow: hidden; }
 .guest-prompt p { color: #65758b; }
 [data-theme="dark"] .guest-prompt { background: #1e293b; border-color: #35465e; color: #dce5f3; }
 [data-theme="dark"] .guest-prompt p { color: #a7b8d0; }
+
+.profile-avatar { flex: 0 0 64px; aspect-ratio: 1; }
+.profile-hero > div:last-child { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 560px) {
+  .profile-hero { padding: 20px 17px; gap: 14px; }
+  .profile-hero h1 { font-size: 21px; line-height: 1.3; }
+  .profile-actions { display: grid; grid-template-columns: 1fr; }
+  .profile-actions > * { min-height: 44px; width: 100%; justify-content: center; }
+  .profile-actions svg { flex-shrink: 0; }
+}

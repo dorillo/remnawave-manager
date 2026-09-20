@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from remnawave_manager.image_preview import OPENER, serve_preview_asset  # noqa: E402
 
 from remnawave_manager.site_assets import FreshAssetsHandler
-from remnawave_manager.aster_proxy import PREFIX as COMMENTS_PREFIX, upstream_url, search_upstream, SEARCH_PATH
+from remnawave_manager.aster_proxy import PREFIX as COMMENTS_PREFIX, upstream_url, search_upstream, SEARCH_PATH, metadata_upstream
 
 SITE = (
     Path(__file__).resolve().parents[1]
@@ -39,6 +39,13 @@ class AsterPreviewHandler(FreshAssetsHandler):
         if serve_preview_asset(self):
             return
         request = urlsplit(self.path)
+        if request.path.startswith(("/_aster/rutube-video/", "/_aster/rutube-profile/")):
+            upstream = metadata_upstream(request.path, request.query)
+            if upstream is None:
+                self._json_error(400, "Invalid metadata request")
+            else:
+                self._serve_json(upstream)
+            return
         if request.path.startswith(COMMENTS_PREFIX):
             self._serve_comments(request)
             return

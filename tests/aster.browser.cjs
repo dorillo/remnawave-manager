@@ -39,6 +39,16 @@ let browser;
   const searchPages = [];
   await context.route(`${origin}/**`, async (route) => {
     const url = new URL(route.request().url());
+    if (url.pathname.startsWith('/_aster/rutube-video/')) {
+      const id = url.pathname.split('/').at(-1);
+      return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ id, title: 'Current title', description: 'Полное описание из API' }) });
+    }
+    if (url.pathname.startsWith('/_aster/rutube-profile/')) {
+      const id = url.pathname.split('/').at(-1);
+      const fixture = JSON.parse(await fs.readFile(path.join(root, '02-aster-observatory/data/catalog.json'), 'utf8'));
+      const channel = fixture.channels.find(channel => String(channel.id) === id);
+      return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ id, name: channel?.name || 'Автор свежего комментария', avatar_url: channel?.avatar, subscribers_count: 12345 }) });
+    }
     if (url.pathname.startsWith('/_aster/rutube-comments/')) {
       const fixture = JSON.parse(await fs.readFile(path.join(root, '02-aster-observatory/data/catalog.json'), 'utf8'));
       const video = fixture.videos.find(video => video.id === url.pathname.split('/').at(-1));
@@ -307,6 +317,8 @@ let browser;
   await page.locator('dialog').waitFor({ state: 'detached' });
   await page.locator('.thumb').first().click();
   await page.locator('.public-comment').first().waitFor();
+  await page.getByText('Полное описание из API', { exact: true }).waitFor();
+  await page.locator('.watch-channel .subscriber-count').filter({ hasText: '12' }).waitFor();
   assert.equal(await page.getByRole('button', { name: 'Повторить' }).count(), 0);
   await page.frameLocator('iframe').locator('#play').evaluate(() => {
     parent.postMessage(
@@ -357,7 +369,8 @@ let browser;
     name: 'Нравится',
     exact: true,
   });
-  assert.match(await videoLike.innerText(), /^♡ /);
+  const heartSize = await videoLike.locator('svg').boundingBox();
+  assert.equal(await videoLike.getAttribute('aria-pressed'), 'false');
   assert.ok(
     (await videoLike.innerText()).includes(
       new Intl.NumberFormat('ru-RU').format(publicLikes),
@@ -384,7 +397,10 @@ let browser;
     id,
   );
   await videoLike.click();
-  assert.match(await videoLike.innerText(), /^♥ /);
+  assert.equal(await videoLike.getAttribute('aria-pressed'), 'true');
+  const likedSize = await videoLike.locator('svg').boundingBox();
+  assert.equal(likedSize.width, heartSize.width);
+  assert.equal(likedSize.height, heartSize.height);
   await page
     .getByRole('button', { name: 'Смотреть позже', exact: true })
     .first()
@@ -423,8 +439,10 @@ let browser;
     .first()
     .getByRole('button', { name: 'Нравится комментарий', exact: true })
     .first();
+  assert.equal(await publicCommentLike.locator('svg').evaluate(node => node.getBoundingClientRect().width), 18);
   await publicCommentLike.click();
-  assert.match(await publicCommentLike.innerText(), /^♥ /);
+  assert.equal(await publicCommentLike.getAttribute('aria-pressed'), 'true');
+  assert.equal(await publicCommentLike.locator('svg').evaluate(node => node.getBoundingClientRect().width), 18);
   const nestedPublicReply = page.locator('.public-comment.comment-reply').first();
   if (await nestedPublicReply.count()) {
     await nestedPublicReply
@@ -711,7 +729,7 @@ let browser;
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await page.getByRole('button', { name: 'Confirm', exact: true }).click();
   await page
-    .getByRole('button', { name: 'Sign in', exact: true })
+    .getByRole('button', { name: 'Sign in or create a profile', exact: true })
     .first()
     .click();
   await page.locator('dialog input[name=email]').fill('aster@example.test');
@@ -733,10 +751,11 @@ let browser;
   await page.evaluate(() => {
     location.hash = '/likes';
   });
-  await page.getByRole('heading', { name: 'No videos here yet' }).waitFor();
+  await page.getByRole('heading', { name: 'No liked videos yet' }).waitFor();
+  await require('./personal-empty.helpers.cjs')(page, [['#/likes', 'likedVideos'], ['#/later', 'later'], ['#/subscriptions', 'following'], ['#/history', 'historyVideo']]);
   denyCatalog = true;
   await page.reload();
-  await page.getByRole('heading', { name: 'No videos here yet' }).waitFor();
+  await page.getByRole('heading', { name: 'No liked videos yet' }).waitFor();
   await page.evaluate(() => {
     location.hash = '/home';
   });

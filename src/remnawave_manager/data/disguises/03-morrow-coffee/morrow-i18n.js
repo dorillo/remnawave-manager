@@ -70,8 +70,8 @@ const dictionary = {
   edit: ["Редактировать", "Edit"],
   delete: ["Удалить", "Delete"],
   deleteText: [
-    "Удалить этот комментарий? Ответы останутся в обсуждении.",
-    "Delete this comment? Replies will remain in the conversation.",
+    "Удалить этот комментарий и все ответы на него?",
+    "Delete this comment and all its replies?",
   ],
   deleted: ["Комментарий удалён", "Comment deleted"],
   send: ["Отправить", "Post"],
@@ -164,6 +164,7 @@ const dictionary = {
     "All data for this account will be deleted.",
   ],
   clearCache: ["Очистить кэш ленты", "Clear feed cache"],
+  staleComments: ["Не удалось обновить комментарии. Показаны ранее загруженные ответы.", "Could not refresh comments. Previously loaded replies are shown."],
   stale: [
     "Показана сохранённая лента. Подключение к источнику недоступно.",
     "Showing your cached feed. The source is currently unavailable.",

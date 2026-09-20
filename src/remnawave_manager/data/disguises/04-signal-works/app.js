@@ -1,4 +1,4 @@
-import { guestMarkup } from '../shared/guest-state.js';
+import { guestMarkup, emptyMarkup } from '../shared/guest-state.js';
 import { loadingMarkup } from '../shared/feedback.js';
 // Each visit starts with the system theme; a manual toggle applies to this visit.
 const appearanceMedia = matchMedia('(prefers-color-scheme: dark)');
@@ -179,14 +179,14 @@ function renderLocal() {
   const person = user();
   if (!person) return locked('questions');
   const items = state.questions.filter((item) => item.authorId === person.id).sort((a,b) => Date.parse(b.created)-Date.parse(a.created));
-  return `<div class="section-title"><h2>${e(t('myQuestions'))}</h2><button class="primary" data-action="ask">＋ ${e(t('ask'))}</button></div>${list(items,true)}`;
+  return `<div class="section-title"><h2>${e(t('myQuestions'))}</h2><button class="primary" data-action="ask">＋ ${e(t('ask'))}</button></div>${items.length ? list(items,true) : emptyMarkup("questions", "", "ask")}`;
 }
 function renderSaved() {
   const person = user();
   if (!person) return locked('savedQuestions');
   const ids = state.saves[person.id] || [];
   const items = ids.map((id) => state.questions.find((x) => x.id === id) || publicFeed.find((x) => x.id === id) || details.get(id)?.question || state.snapshots?.[id]).filter(Boolean);
-  return `<div class="section-title"><h2>${e(t('saved'))}</h2></div>${items.length ? items.map((x)=>questionCard(x,x.id.startsWith('local:'))).join('') : `<div class="empty">${e(t('noQuestions'))}</div>`}`;
+  return `<div class="section-title"><h2>${e(t('saved'))}</h2></div>${items.length ? items.map((x)=>questionCard(x,x.id.startsWith('local:'))).join('') : emptyMarkup("savedQuestions")}`;
 }
 function locked(kind = 'profile') { return guestMarkup(kind, 'login'); }
 function renderSearch(term) {
@@ -225,7 +225,7 @@ function renderDetail(page) {
   const answerList = [...record.answers.map((x) => ({ ...x, local:false })), ...state.answers.filter((x) => x.questionId === question.id).map((x) => ({ ...x, local:true }))];
   const currentVote = person ? state.votes[person.id]?.[question.id] || 0 : 0;
   const saved = person && (state.saves[person.id] || []).includes(question.id);
-  return `${backLink(local?'#/local':'#/home')}<article class="card detail-card">${meta(question,local)}<h1>${e(question.title)}</h1><div class="tag-list">${(local?[question.space]:question.spaces.map((x)=>x.name)).filter(Boolean).slice(0,4).map((x)=>`<span class="tag">${e(x)}</span>`).join('')}</div><div class="body-text">${e(question.body)}</div>${media(question)}${attachments(question)}<div class="detail-actions icon-actions"><button class="icon-action ${currentVote===1?'selected':''}" data-action="vote" data-id="${e(question.id)}" data-value="1" aria-label="${e(t('voteUp'))}" title="${e(t('voteUp'))}">${icon('up')}</button><button class="icon-action ${currentVote===-1?'selected':''}" data-action="vote" data-id="${e(question.id)}" data-value="-1" aria-label="${e(t('voteDown'))}" title="${e(t('voteDown'))}">${icon('down')}</button><button class="icon-action ${saved?'selected':''}" data-action="save" data-id="${e(question.id)}" aria-label="${e(saved?t('unsave'):t('save'))}" title="${e(saved?t('unsave'):t('save'))}">${icon('bookmark')}</button>${local && person?.id === question.authorId ? `<button class="icon-action" data-action="edit" data-kind="question" data-id="${e(question.id)}" aria-label="${e(t('edit'))}" title="${e(t('edit'))}">${icon('edit')}</button><button class="icon-action danger" data-action="delete" data-kind="question" data-id="${e(question.id)}" aria-label="${e(t('remove'))}" title="${e(t('remove'))}">${icon('trash')}</button>` : ''}</div></article><form class="card composer" data-form="answer" data-question="${e(question.id)}"><h3>${e(t('answer'))}</h3><label class="field">${e(t('writeAnswer'))}<textarea name="body" required minlength="2" maxlength="5000" rows="5"></textarea></label>${attachmentControl()}<p class="form-error" role="alert"></p><button class="primary">${e(t('publish'))}</button></form><h2 class="answers-title">${answerList.length} ${e(t('replies'))}</h2>${answerList.length ? answerList.map((x) => answerCard(x,question,x.local)).join('') : `<div class="empty">${e(!local && record.answersAvailable === false ? t('responseUnavailable') : t('noAnswers'))}</div>`}`;
+  return `${backLink(local?'#/local':'#/home')}${!local && detailStatus.get(page.id)==='error' ? `<div class="notice-inline" role="status">${e(t('cachedDiscussion'))}<button class="action" data-action="retry-detail">${e(t('retry'))}</button></div>` : ''}<article class="card detail-card">${meta(question,local)}<h1>${e(question.title)}</h1><div class="tag-list">${(local?[question.space]:question.spaces.map((x)=>x.name)).filter(Boolean).slice(0,4).map((x)=>`<span class="tag">${e(x)}</span>`).join('')}</div><div class="body-text">${e(question.body)}</div>${media(question)}${attachments(question)}<div class="detail-actions icon-actions"><button class="icon-action ${currentVote===1?'selected':''}" data-action="vote" data-id="${e(question.id)}" data-value="1" aria-label="${e(t('voteUp'))}" title="${e(t('voteUp'))}">${icon('up')}</button><button class="icon-action ${currentVote===-1?'selected':''}" data-action="vote" data-id="${e(question.id)}" data-value="-1" aria-label="${e(t('voteDown'))}" title="${e(t('voteDown'))}">${icon('down')}</button><button class="icon-action ${saved?'selected':''}" data-action="save" data-id="${e(question.id)}" aria-label="${e(saved?t('unsave'):t('save'))}" title="${e(saved?t('unsave'):t('save'))}">${icon('bookmark')}</button>${local && person?.id === question.authorId ? `<button class="icon-action" data-action="edit" data-kind="question" data-id="${e(question.id)}" aria-label="${e(t('edit'))}" title="${e(t('edit'))}">${icon('edit')}</button><button class="icon-action danger" data-action="delete" data-kind="question" data-id="${e(question.id)}" aria-label="${e(t('remove'))}" title="${e(t('remove'))}">${icon('trash')}</button>` : ''}</div></article><form class="card composer" data-form="answer" data-question="${e(question.id)}"><h3>${e(t('answer'))}</h3><label class="field">${e(t('writeAnswer'))}<textarea name="body" required minlength="2" maxlength="5000" rows="5"></textarea></label>${attachmentControl()}<p class="form-error" role="alert"></p><button class="primary">${e(t('publish'))}</button></form><h2 class="answers-title">${answerList.length} ${e(t('replies'))}</h2>${answerList.length ? answerList.map((x) => answerCard(x,question,x.local)).join('') : `<div class="empty">${e(!local && record.answersAvailable === false ? t('responseUnavailable') : t('noAnswers'))}</div>`}`;
 }
 function notifications(person) {
   const myQuestions = new Set(state.questions.filter((x) => x.authorId === person.id).map((x) => x.id));
@@ -244,7 +244,7 @@ function renderProfile(page) {
   const myQuestions = state.questions.filter((x) => x.authorId===person.id);
   const myAnswers = state.answers.filter((x) => x.authorId===person.id);
   const alerts = notifications(person);
-  const content = tab==='answers' ? answerList(myAnswers) : tab==='notifications' ? (alerts.length ? alerts.map((x)=>`<article class="card question-card notification-card"><a class="notification-avatar" href="#/user/local/${e(x.who)}" aria-label="${e(accountName(x.who))}">${avatar(state.accounts.find((a)=>a.id===x.who),accountName(x.who))}</a><div class="notification-copy"><a href="#/user/local/${e(x.who)}"><strong>${e(accountName(x.who))}</strong></a> <a href="${qurl(x.questionId)}">· ${e(t('answer'))}</a></div><div class="muted">${e(dateText(x.date))}</div></article>`).join('') : `<div class="empty">${e(t('noNotifications'))}</div>`) : list(myQuestions,true);
+  const content = tab==='answers' ? (myAnswers.length ? answerList(myAnswers) : emptyMarkup('answers')) : tab==='notifications' ? (alerts.length ? alerts.map((x)=>`<article class="card question-card notification-card"><a class="notification-avatar" href="#/user/local/${e(x.who)}" aria-label="${e(accountName(x.who))}">${avatar(state.accounts.find((a)=>a.id===x.who),accountName(x.who))}</a><div class="notification-copy"><a href="#/user/local/${e(x.who)}"><strong>${e(accountName(x.who))}</strong></a> <a href="${qurl(x.questionId)}">· ${e(t('answer'))}</a></div><div class="muted">${e(dateText(x.date))}</div></article>`).join('') : emptyMarkup('notifications')) : (myQuestions.length ? list(myQuestions,true) : emptyMarkup('questions', '', 'ask'));
   return `<section class="card profile-card"><div class="profile-hero">${profileAvatar(person)}<div><h1>${e(person.name)}</h1><p>${e(person.email)}</p>${person.bio?`<div class="profile-bio">${e(person.bio)}</div>`:''}</div></div><div class="profile-actions"><button class="primary" data-action="edit-profile">${icon('edit')}${e(t('editProfile'))}</button><button class="ghost" data-action="logout">${e(t('logout'))}</button></div></section>${profileTabs('#/profile',tab,true)}${content}`;
 }
 function knownRemoteProfiles() {
@@ -377,7 +377,7 @@ async function loadSearch(term) {
   render();
 }
 async function loadDetail(id, refresh = false) {
-  if (!refresh && (details.has(id) || detailStatus.get(id)==='loading')) return;
+  if (detailStatus.get(id)==='loading' || (!refresh && details.has(id))) return;
   detailStatus.set(id,'loading'); render();
   try { details.set(id, await detail(id.slice(5))); detailStatus.set(id,'ready'); }
   catch { detailStatus.set(id,'error'); }
@@ -398,7 +398,7 @@ function onRoute() {
   if ((page.page==='home' || page.page==='user'&&page.source==='mail') && feedStatus==='loading' && !publicFeed.length) loadFeed();
   if (page.page==='search' && page.term) loadSearch(page.term);
   if (page.page==='space' && !spaceFeeds.has(page.slug)) loadSpace(page.slug);
-  if (page.page==='question' && page.id.startsWith('mail:')) loadDetail(page.id);
+  if (page.page==='question' && page.id.startsWith('mail:')) loadDetail(page.id, true);
   window.scrollTo(0,0);
 }
 async function addItem(type, body, questionId, parentId, files = []) {

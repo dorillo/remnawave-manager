@@ -4,12 +4,13 @@ import { user, library, updateUser } from './aster-store.js';
 import { t, relativeDate } from './aster-i18n.js';
 import { normalizeList, loadComments } from './aster-data.js';
 
-export function comments(video, guard, signal) {
+export function comments(video, guard, signal, onUpdate = () => {}) {
   const section = el('section', { class: 'comments', id: 'comments' });
   let inlineForm = null;
   let visiblePublic = 10;
   let loading = !video.local, failed = false, hasNext = false, cursor = '';
   const replyPages = new Map();
+  const freshReplies = new Map();
   async function fetchPage(more = false) {
     loading = true;
     failed = false;
@@ -17,10 +18,10 @@ export function comments(video, guard, signal) {
     try {
       const result = await loadComments(video.id, { cursor: more ? cursor : '', signal });
       if (signal?.aborted) return;
-      const roots = new Set(result.rows.map(row => row.id));
-      const old = more ? video.publicComments || []
-        : (video.publicComments || []).filter(row => row.parentId && roots.has(row.parentId));
+      // Keep replies fetched during this visit, never stale snapshot replies.
+      const old = more ? video.publicComments || [] : [...freshReplies.values()];
       video.publicComments = [...new Map([...old, ...result.rows].map(row => [row.id, row])).values()];
+      onUpdate(video);
       if (result.count !== null) video.commentsCount = result.count;
       hasNext = result.hasNext && !!result.cursor && result.cursor !== cursor;
       cursor = result.cursor;
@@ -43,7 +44,10 @@ export function comments(video, guard, signal) {
     try {
       const result = await loadComments(video.id, { parent: row.id.slice(3), cursor: state.cursor, signal });
       if (signal?.aborted) return;
-      video.publicComments = [...new Map([...(video.publicComments || []), ...result.rows].map(item => [item.id, item])).values()];
+      for (const reply of result.rows) freshReplies.set(reply.id, reply);
+      const old = state.cursor ? video.publicComments || [] : (video.publicComments || []).filter(item => item.parentId !== row.id);
+      video.publicComments = [...new Map([...old, ...result.rows].map(item => [item.id, item])).values()];
+      onUpdate(video);
       state.hasNext = result.hasNext && !!result.cursor && result.cursor !== state.cursor;
       state.cursor = result.cursor;
     } catch {
@@ -190,6 +194,13 @@ export function comments(video, guard, signal) {
     else target?.append(inlineForm);
     replyInput.focus();
   }
+  function likeContent(count) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.innerHTML = '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/>';
+    return [svg, el('span', {}, String(count))];
+  }
   function localItem(row, replies = []) {
     return el(
       'article',
@@ -213,7 +224,7 @@ export function comments(video, guard, signal) {
         'div',
         { class: 'button-row' },
         button(
-          `${row.liked ? '♥' : '♡'} ${row.liked ? 1 : 0}`,
+          likeContent(Number(!!row.liked)),
           () =>
             guard(() => {
               updateUser((account) => {
@@ -225,7 +236,7 @@ export function comments(video, guard, signal) {
               });
               draw();
             }),
-          { 'aria-label': t('likeComment'), 'aria-pressed': String(row.liked) },
+          { class: 'comment-like', 'aria-label': t('likeComment'), 'aria-pressed': String(row.liked) },
         ),
         button(t('reply'), () => openInline(row)),
         button(t('edit'), () => openInline(row, true)),
@@ -278,7 +289,7 @@ export function comments(video, guard, signal) {
         'div',
         { class: 'button-row' },
         button(
-          `${reacted ? '♥' : '♡'} ${row.likes + Number(reacted)}`,
+          likeContent(row.likes + Number(reacted)),
           () =>
             guard(() => {
               updateUser((account) => {
@@ -289,7 +300,7 @@ export function comments(video, guard, signal) {
               });
               draw();
             }),
-          { 'aria-label': t('likeComment'), 'aria-pressed': String(reacted) },
+          { class: 'comment-like', 'aria-label': t('likeComment'), 'aria-pressed': String(reacted) },
         ),
         button(t('reply'), () => openInline(row)),
       ),

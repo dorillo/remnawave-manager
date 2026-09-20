@@ -18,8 +18,8 @@ const messages = {
   answers: ['Поделитесь своими знаниями', 'Войдите, чтобы отвечать на вопросы и находить свои ответы в профиле.', 'Share what you know', 'Sign in to answer questions and find your answers on your profile.'],
   notifications: ['Не пропускайте новые ответы', 'Войдите, чтобы узнавать об ответах и продолжать обсуждения.', 'Keep the conversation going', 'Sign in to keep track of replies and continue your discussions.'],
   savedQuestions: ['Сохраните интересные вопросы', 'Войдите, чтобы добавлять вопросы в избранное и возвращаться к обсуждениям.', 'Save interesting questions', 'Sign in to save questions and return to their discussions.'],
-  library: ['Соберите свою библиотеку', 'Войдите, чтобы сохранять статьи и объединять их в собственные подборки.', 'Build your own library', 'Sign in to save articles and organise them into collections.'],
-  historyReading: ['Продолжайте с того места, где остановились', 'Войдите, чтобы сохранять историю чтения и возвращаться к изученным темам.', 'Pick up where you left off', 'Sign in to keep your reading history and revisit topics you have explored.'],
+  library: ['Ваша библиотека ещё не открыта', 'Войдите, чтобы сохранять статьи и объединять их в собственные подборки.', 'Your library is waiting', 'Sign in to save articles and organise them into collections.'],
+  historyReading: ['История чтения пока недоступна', 'Войдите, чтобы сохранять историю чтения и возвращаться к изученным темам.', 'Your reading history is waiting', 'Sign in to keep your reading history and revisit topics you have explored.'],
   likedMedia: ['Любимые реакции будут здесь', 'Войдите, чтобы отмечать понравившиеся GIF, стикеры и клипы.', 'Keep your favourite reactions', 'Sign in to like GIFs, stickers and clips.'],
   collections: ['Создавайте свои коллекции', 'Войдите, чтобы собирать GIF, стикеры и клипы по темам и настроению.', 'Create your own collections', 'Sign in to collect GIFs, stickers and clips by topic or mood.'],
   uploadsMedia: ['Добавьте что-то своё', 'Войдите, чтобы загружать материалы и управлять своей подборкой.', 'Make it your own', 'Sign in to upload media and manage your collection.'],
@@ -56,5 +56,133 @@ export function guestPrompt(kind = 'profile', onLogin, language = document.docum
 export function guestMarkup(kind, action) {
   const node = guestPrompt(kind);
   node.querySelector('button').dataset.action = action;
+  return node.outerHTML;
+}
+
+const emptyMessages = {
+  "likedVideos": [
+    "Пока нет понравившихся видео",
+    "Отмечайте видео сердцем — они появятся здесь.",
+    "No liked videos yet",
+    "Like videos to find them here."
+  ],
+  "later": [
+    "Список просмотра пока пуст",
+    "Добавляйте видео в «Смотреть позже», чтобы не потерять их.",
+    "Your watch list is empty",
+    "Add videos to Watch later to find them here."
+  ],
+  "savedVideos": [
+    "Пока нет сохранённых видео",
+    "Сохраняйте интересные видео и возвращайтесь к ним.",
+    "No saved videos yet",
+    "Save interesting videos and return to them here."
+  ],
+  "historyVideo": [
+    "Вы ещё не смотрели видео",
+    "Начните просмотр — история появится здесь.",
+    "No watch history yet",
+    "Start watching and your history will appear here."
+  ],
+  "following": [
+    "Вы пока ни на кого не подписаны",
+    "Подписывайтесь на интересных авторов, чтобы видеть их новые видео.",
+    "No subscriptions yet",
+    "Follow creators to keep up with their new videos."
+  ],
+  "questions": [
+    "Вы ещё не задавали вопросов",
+    "Задайте первый вопрос и начните обсуждение.",
+    "No questions yet",
+    "Ask your first question and start a discussion."
+  ],
+  "savedQuestions": [
+    "Пока нет сохранённых вопросов",
+    "Нажмите закладку у вопроса, чтобы вернуться к нему позже.",
+    "No saved questions yet",
+    "Bookmark a question to return to it later."
+  ],
+  "answers": [
+    "Вы ещё не отвечали на вопросы",
+    "Поделитесь знаниями — ваши ответы появятся здесь.",
+    "No answers yet",
+    "Share what you know and find your answers here."
+  ],
+  "notifications": [
+    "Пока нет новых ответов",
+    "Здесь появятся уведомления об ответах на ваши вопросы.",
+    "No new replies yet",
+    "Replies to your questions will appear here."
+  ],
+  "likedMedia": [
+    "Пока нет понравившихся материалов",
+    "Отмечайте GIF, стикеры и клипы сердцем, чтобы собрать любимое.",
+    "No favourites yet",
+    "Like GIFs, stickers and clips to collect your favourites."
+  ],
+  "collections": [
+    "У вас пока нет коллекций",
+    "Создайте коллекцию и добавьте в неё любимые материалы.",
+    "No collections yet",
+    "Create a collection and add your favourite media."
+  ],
+  "collection": [
+    "В коллекции пока пусто",
+    "Добавляйте материалы через кнопку сохранения.",
+    "This collection is empty",
+    "Use the save button to add media here."
+  ],
+  "uploads": [
+    "Вы ещё ничего не загрузили",
+    "Добавьте первый материал — он появится в этом разделе.",
+    "No uploads yet",
+    "Upload your first item to see it here."
+  ],
+  "savedNews": [
+    "Пока нет сохранённых новостей",
+    "Нажмите закладку у новости, чтобы вернуться к ней позже.",
+    "No saved news yet",
+    "Bookmark a story to read it later."
+  ],
+  "historyNews": [
+    "Вы ещё не читали новости",
+    "Откройте интересную новость — она появится в истории.",
+    "No reading history yet",
+    "Open a story to start your reading history."
+  ],
+  "comments": [
+    "Вы ещё не оставляли комментариев",
+    "Присоединитесь к обсуждению новости — ваши комментарии появятся здесь.",
+    "No comments yet",
+    "Join a discussion to find your comments here."
+  ],
+  "reactions": [
+    "Вы ещё не ставили реакций",
+    "Отмечайте новости, которые вас заинтересовали.",
+    "No reactions yet",
+    "React to stories that interest you."
+  ]
+};
+
+export function emptyPrompt(kind, onExplore, language = document.documentElement.lang) {
+  const node = guestPrompt('profile', onExplore, language);
+  const copy = emptyMessages[kind];
+  const english = language.startsWith('en');
+  node.removeAttribute('data-guest-section');
+  node.dataset.emptySection = kind;
+  node.querySelector('h2').textContent = copy[english ? 2 : 0];
+  node.querySelector('p').textContent = copy[english ? 3 : 1];
+  const button = node.querySelector('button');
+  button.classList.remove('guest-login');
+  button.classList.add('empty-action');
+  button.textContent = english ? 'Explore' : 'Перейти в обзор';
+  if (!onExplore) button.remove();
+  return node;
+}
+export function emptyMarkup(kind, href = '#/home', action = '') {
+  const node = emptyPrompt(kind, () => {});
+  const button = node.querySelector('button');
+  if (action) { button.dataset.action = action; button.textContent = document.documentElement.lang.startsWith('en') ? 'Ask a question' : 'Задать вопрос'; }
+  else { const link = document.createElement('a'); link.className = button.className; link.href = href; link.textContent = button.textContent; button.replaceWith(link); }
   return node.outerHTML;
 }

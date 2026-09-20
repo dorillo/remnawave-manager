@@ -75,3 +75,42 @@ def render_search_proxy() -> str:
         proxy_connect_timeout 5s;
         proxy_read_timeout 15s;
     }}''', 'aster_search')
+
+
+# Only these two public read endpoints are exposed; neither accepts query args.
+METADATA_ROUTES = (
+    ('video', r'[a-f0-9]{32}', 'video'),
+    ('profile', r'[0-9]{1,20}', 'profile/user'),
+)
+
+
+def metadata_upstream(path: str, query: str) -> str | None:
+    if query:
+        return None
+    for kind, pattern, upstream in METADATA_ROUTES:
+        match = re.fullmatch(r'/_aster/rutube-' + kind + '/(' + pattern + ')', path)
+        if match:
+            return f'https://rutube.ru/api/{upstream}/{match[1]}/'
+    return None
+
+
+def render_metadata_proxy() -> str:
+    blocks = []
+    for kind, pattern, upstream in METADATA_ROUTES:
+        blocks.append(harden_proxy(f'''    location ~ "^/_aster/rutube-{kind}/(?<aster_{kind}_id>{pattern})$" {{
+        if ($request_method != GET) {{ return 405; }}
+        if ($args != "") {{ return 400; }}
+        rewrite ^ /api/{upstream}/$aster_{kind}_id/ break;
+        proxy_pass https://rutube.ru;
+        proxy_ssl_server_name on;
+        proxy_ssl_name rutube.ru;
+        proxy_pass_request_headers off;
+        proxy_set_header Host rutube.ru;
+        proxy_set_header Accept application/json;
+        proxy_set_header User-Agent "Mozilla/5.0";
+        proxy_set_header Referer "https://rutube.ru/";
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 15s;
+    }}
+    location /_aster/rutube-{kind}/ {{ return 404; }}''', f'aster_{kind}'))
+    return '\n'.join(blocks)

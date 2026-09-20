@@ -516,6 +516,7 @@ main {
   height: 17px;
 }
 .button[data-like].active {
+  border-color: currentColor;
   color: #bb3159;
   background: var(--surface);
 }
@@ -1462,3 +1463,5 @@ main:focus {
 .dialog-heading > .button {
   flex-shrink: 0;
 }
+
+.collection-picker .button[aria-pressed="true"] { border-color: var(--accent); background: var(--soft); }

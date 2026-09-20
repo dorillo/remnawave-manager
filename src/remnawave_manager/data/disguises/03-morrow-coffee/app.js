@@ -1,4 +1,4 @@
-import { guestPrompt } from '../shared/guest-state.js';
+import { guestPrompt, emptyPrompt } from '../shared/guest-state.js';
 import { t, getLanguage, setLanguage, number } from "./morrow-i18n.js";
 import {
   el,
@@ -536,10 +536,7 @@ function videoCard(v) {
 }
 const feedStates = new Map();
 let mountedFeedKey = null;
-function mountFeed(load) {
-  mountedFeedKey = (account?.id || "guest") + location.hash;
-  const previous = feedStates.get(mountedFeedKey);
-  main.className = "main watching";
+function feedTabs() {
   const tabs = el(
     "div",
     { class: "feed-tabs" },
@@ -570,6 +567,13 @@ function mountFeed(load) {
       "feed-refresh",
     ),
   );
+  return tabs;
+}
+function mountFeed(load) {
+  mountedFeedKey = (account?.id || "guest") + location.hash;
+  const previous = feedStates.get(mountedFeedKey);
+  main.className = "main watching";
+  const tabs = feedTabs();
   const status = el("div", {
     class: "feed-status",
     role: "status",
@@ -991,9 +995,9 @@ function profilePage() {
       .map((id) => d.videos.find((v) => v.id === id))
       .filter(Boolean);
     content.append(grid(videos));
-    if (!videos.length) content.replaceChildren(empty());
+    if (!videos.length) content.replaceChildren(emptyPrompt(({ likes: 'likedVideos', saved: 'savedVideos', history: 'historyVideo' })[tab], () => go('#/feed')));
   }
-  if (!content.children.length) content.append(empty());
+  if (!content.children.length) content.append(emptyPrompt('following', () => go('#/feed')));
   main.replaceChildren(
     el("div", { class: "page-container" }, head, tabs, content),
   );
@@ -1230,11 +1234,13 @@ async function route() {
       await authorPage(parts[2], signal);
     else if (parts[0] === "following") {
       if (!store || !store.data.following.length) {
+        main.className = "main empty-following";
         main.replaceChildren(
+          feedTabs(),
           el(
             "div",
             { class: "page-container" },
-            !store ? guestPrompt('following', () => authDialog()) : empty(t("noFollowing"), t("emptyHint"), emptyActions()),
+            !store ? guestPrompt('following', () => authDialog()) : emptyPrompt('following', () => go('#/feed')),
           ),
         );
         return;

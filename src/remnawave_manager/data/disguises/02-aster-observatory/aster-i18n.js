@@ -169,6 +169,9 @@ const words = {
   notFound: ['Видео не найдено', 'Video not found'],
   count: ['материалов', 'videos'],
   userComments: ['Комментарии пользователя', 'User comments'],
+  subscribers: ['подписчиков', 'subscribers'],
+  descriptionUnavailable: ['Не удалось загрузить описание.', 'Could not load the description.'],
+  profileUnavailable: ['Профиль временно недоступен.', 'Profile is temporarily unavailable.'],
   userNotFound: ['Профиль пользователя не найден', 'User profile not found'],
   justNow: ['только что', 'just now'],
 };

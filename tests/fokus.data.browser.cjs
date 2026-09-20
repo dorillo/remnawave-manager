@@ -118,6 +118,12 @@ const root = path.resolve(
         s.cache = [];
       }, false);
     });
+    parsed = await article(`<div class="article__body"><div class="article__block" data-type="list"><ul><li>Первый пункт</li><li>Второй пункт</li></ul></div><div class="article__block" data-type="video"><video poster="${img}" data-title="Тестовое видео"></video></div></div>`);
+    assert.equal(parsed.blocks[0].html, '<ul><li>Первый пункт</li><li>Второй пункт</li></ul>');
+    assert.equal(parsed.blocks[1].type, 'videoPreview');
+    assert.equal(parsed.blocks[1].src, '/_fokus/media/images/123_80.jpg');
+    await page.evaluate(async () => (await import('./fokus-store.js')).change(s => { s.cache = []; }, false));
+    await assert.rejects(article('<div class="article__body"><div class="article__visual-journalism-black"><script>window.pwned=true</script></div></div>'), /articleFormat/);
     // A real malformed response must still fail, not become a fake empty article.
     await assert.rejects(
       article("<html><h1>Access denied</h1></html>"),

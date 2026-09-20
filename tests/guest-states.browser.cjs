@@ -46,12 +46,12 @@ const sites = [
         await page.locator('header').first().waitFor();
         for (const route of routes) {
           await page.evaluate(route => { location.hash = '#/' + route; }, route);
-          const prompt = page.locator('.guest-prompt');
+          const prompt = page.locator(site === '05-field-notes' ? `.guest-prompt[data-guest-section="${route === 'history' ? 'historyReading' : 'library'}"]` : '.guest-prompt');
           await prompt.waitFor();
           await page.waitForTimeout(70);
           assert.equal(await prompt.count(), 1, site + '/' + route);
           const english = (process.env.GUEST_LOCALE || '').startsWith('en');
-          assert.equal(await prompt.locator('button').textContent(), english ? 'Sign in or create a profile' : 'Войти или создать профиль', site + '/' + route);
+          assert.equal(await prompt.locator('button').textContent(), site === '05-field-notes' ? (route === 'library' ? (english ? 'Sign in to build your library' : 'Войти и собрать библиотеку') : (english ? 'Sign in to view your history' : 'Войти и открыть историю')) : english ? 'Sign in or create a profile' : 'Войти или создать профиль', site + '/' + route);
           for (const width of [320, 390, 1440]) {
             await page.setViewportSize({ width, height: 900 });
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, site + '/' + route + ' overflow ' + width);

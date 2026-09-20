@@ -80,6 +80,7 @@ export function normalize(raw, topic = 'general') {
       : '',
     channel: String(raw.channel || author.name || 'Астер').slice(0, 200),
     avatar: safeImage(raw.avatar || author.avatar_url),
+    subscribers: counter(raw.subscribers ?? author.subscribers_count),
     topic: TOPICS.includes(raw.topic || topic) ? raw.topic || topic : 'general',
     views: counter(raw.views ?? raw.hits),
     publicLikes: counter(raw.publicLikes),
@@ -139,7 +140,7 @@ async function json(url, signal) {
     signal: signal ? AbortSignal.any([timeout, signal]) : timeout,
     cache: 'no-cache',
   });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  if (!response.ok) throw Object.assign(new Error(`HTTP ${response.status}`), { status: response.status });
   return response.json();
 }
 export async function loadCatalog(signal) {
@@ -208,5 +209,26 @@ export async function loadComments(videoId, { cursor = '', parent = '', signal }
     count: counter(result.comments_count),
     hasNext: result.has_next === true,
     cursor: String(result.results.at(-1)?.id || ''),
+  };
+}
+
+
+export async function loadVideo(id, signal) {
+  if (!validId(id)) throw new Error('Invalid video ID');
+  const raw = await json('/_aster/rutube-video/' + id, signal);
+  const video = normalize(raw);
+  if (!video || video.id !== id) throw new Error('Invalid video response');
+  return video;
+}
+export async function loadProfile(id, signal) {
+  if (!/^[0-9]{1,20}$/.test(id)) throw new Error('Invalid profile ID');
+  const raw = await json('/_aster/rutube-profile/' + id, signal);
+  if (!raw || String(raw.id) !== id || typeof raw.name !== 'string') throw new Error('Invalid profile response');
+  return {
+    id, name: raw.name.slice(0, 200),
+    avatar: safeImage(raw.avatar_url || raw.appearance?.avatar_image),
+    description: typeof raw.description === 'string' ? raw.description.slice(0, 12000) : '',
+    subscribers: counter(raw.subscribers_count),
+    videoCount: counter(raw.video_count),
   };
 }

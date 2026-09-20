@@ -2311,3 +2311,38 @@ small {
 [data-theme="dark"] .primary:hover { background: #1c624b; }
 
 .post-action:is(:hover, :focus-visible, .selected), .save-button:is(:hover, :focus-visible, .selected) { background: transparent; }
+
+/* Inline discussion editors follow the post or the reply they address. */
+.reply-prompt { display: block; }
+.comment-form { min-width: 0; width: 100%; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.thread-reply > .comment-form { padding: 18px; margin: 10px 0 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.comment-form .compose-text { display: block; width: 100%; min-height: 64px; padding: 10px 12px; resize: vertical; }
+.comment-form > :is(.compose-text, .comment-replying-to, .composer-media-actions, .composer-attachments) { grid-column: 1 / -1; }
+.comment-form :is(.composer-media-actions, .composer-attachments, .compose-status) { margin: 0; }
+.comment-form .composer-attachments:empty { display: none; }
+.comment-form .compose-status { gap: 8px; flex-wrap: wrap; }
+.comment-form .compose-status > :empty { display: none; }
+.comment-form .form-actions { justify-self: end; }
+@media(max-width: 380px) { .comment-form:has(.comment-replying-to) .form-actions { grid-column: 1 / -1; } }
+.comment-form .composer-media-actions, .comment-form .form-actions { flex-wrap: wrap; }
+.comment-form .comment-replying-to { overflow-wrap: anywhere; }
+@media(max-width: 480px) { .thread-reply > .comment-form { padding: 12px; } .comment-form .composer-media-actions { align-items: flex-start; } }
+
+/* Keep the story editor compact, including when no attachments are selected. */
+.story-editor.editor-dialog { gap: 12px; }
+.story-editor .compose-text { min-height: 112px; max-height: 40dvh; padding: 12px; }
+.story-editor .composer-attachments:empty { display: none; }
+.story-editor .composer-attachments { margin: 0; }
+.story-editor .composer-author { min-width: 0; gap: 12px; }
+.story-editor .composer-author > div { min-width: 0; overflow-wrap: anywhere; }
+.story-editor .composer-author .avatar { width: 40px; height: 40px; flex-shrink: 0; }
+.story-editor .composer-autosave { margin: 0; font-size: 12px; }
+.story-editor .form-actions { margin: 0; padding-top: 12px; }
+@media (max-width: 720px) {
+  .topbar { height: 112px; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: 44px 44px; padding: 8px 14px; gap: 6px 12px; }
+  .brand-name { display: inline; }
+  .global-search { grid-row: 2; grid-column: 1 / -1; width: 100%; height: 40px; }
+  .global-search input { font-size: 16px; min-width: 0; }
+  .search-submit { display: inline-flex; }
+  .topbar-actions { grid-row: 1; grid-column: 2; }
+}

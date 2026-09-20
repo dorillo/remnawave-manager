@@ -1,6 +1,6 @@
 """Known node CSP revisions and narrowly scoped template upgrades."""
 
-from .aster_proxy import render_proxy as render_aster_comments_proxy, render_search_proxy
+from .aster_proxy import render_proxy as render_aster_comments_proxy, render_search_proxy, render_metadata_proxy
 from .fokus_proxy import render_proxy as render_fokus_proxy
 from .image_proxy import HOSTS as IMAGE_HOSTS, render_proxy as render_image_proxy
 from .loop_proxy import render_proxy as render_loop_proxy
@@ -9,6 +9,7 @@ from .northline_proxy import render_proxy
 
 
 ASTER_COMMENTS_PROXY = render_aster_comments_proxy()
+ASTER_METADATA_PROXY = render_metadata_proxy()
 IMAGE_PROXY = render_image_proxy()
 LEGACY_IMAGE_PROXY = render_image_proxy(tuple(host for host in IMAGE_HOSTS if host != "filin.mail.ru"), secure=False)
 NORTHLINE_PROXY = render_proxy()
@@ -64,7 +65,7 @@ def upgrade_aster_policy(text: str) -> str:
     new = f'add_header Content-Security-Policy "{NODE_CSP}" always;'
     if new not in upgraded:
         return upgraded
-    for proxy in (ASTER_SEARCH_PROXY, ASTER_COMMENTS_PROXY):
+    for proxy in (ASTER_SEARCH_PROXY, ASTER_COMMENTS_PROXY, ASTER_METADATA_PROXY):
         if proxy not in upgraded:
             upgraded = upgraded.replace(new, f"{new}\n\n{proxy}")
     return upgraded

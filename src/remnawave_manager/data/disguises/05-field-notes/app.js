@@ -400,10 +400,9 @@ function accountDialog() {
   ]);
 }
 function requireAccount(historyMode = false) {
-  main.append(
-    heading(t(historyMode ? "history" : "library")),
-    guestPrompt(historyMode ? 'historyReading' : 'library', () => authDialog()),
-  );
+  const prompt = guestPrompt(historyMode ? 'historyReading' : 'library', () => authDialog());
+  prompt.querySelector('button').textContent = t(historyMode ? 'historyLogin' : 'libraryLogin');
+  main.append(heading(t(historyMode ? "history" : "library")), prompt);
 }
 async function home(token, signal) {
   main.append(
@@ -727,10 +726,13 @@ async function manageCollections(article) {
         checked: c.pages.includes(article.pageid),
       });
       checks.push([c, input]);
-      return el("label", { class: "check-row" }, input, c.name);
+      return el("label", { class: "check-row collection-choice" }, input,
+        icon("library"), el("span", { class: "collection-choice-name" }, c.name),
+        el("span", { class: "collection-choice-count" }, String(c.pages.length)),
+        el("span", { class: "collection-choice-check", "aria-hidden": true }, "✓"));
     });
     d = dialog(t("collections"), [
-      ...content,
+      el("div", { class: "collection-picker" }, ...content),
       rows.length ? null : el("p", { class: "muted" }, t("noItems")),
       button(t("newCollection"), () =>
         editCollection(null, () => {
@@ -889,14 +891,14 @@ async function personalPage(historyMode, token) {
     if (!filtered.length)
       content.append(
         empty(
-          rows.length
+          query
             ? "emptySearch"
-            : historyMode
+            : coll ? "emptyCollection" : historyMode
               ? "emptyHistory"
               : "emptyLibrary",
-          rows.length
+          query
             ? "emptySearchHint"
-            : historyMode
+            : coll ? "emptyCollectionHint" : historyMode
               ? "emptyHistoryHint"
               : "emptyLibraryHint",
         ),

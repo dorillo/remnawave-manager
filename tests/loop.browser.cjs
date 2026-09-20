@@ -311,6 +311,7 @@ let browser,
       ),
     "1",
   );
+  assert.notEqual(await page.locator('.card-like.active').first().evaluate(node => getComputedStyle(node).borderTopColor), 'rgba(0, 0, 0, 0)');
   await page.locator(".card-media").first().click();
   await page.locator(".detail").waitFor();
   await page.locator(".related .load-more button").waitFor();
@@ -441,6 +442,18 @@ let browser,
   await page.locator('.nav-link[href="#/collections"]').click();
   await page.getByRole("heading", { name: "Для друзей" }).waitFor();
   await page.getByRole("heading", { name: "Для друзей" }).click();
+  await page.locator('.card-media').first().click();
+  await page.getByRole('button', { name: 'В коллекцию', exact: true }).click();
+  const selectedCollection = page.locator('.collection-picker button');
+  await selectedCollection.waitFor();
+  assert.equal(await selectedCollection.getAttribute('aria-pressed'), 'true');
+  await selectedCollection.click();
+  await page.waitForFunction(() => document.querySelector('.collection-picker button')?.getAttribute('aria-pressed') === 'false');
+  await selectedCollection.click();
+  await page.waitForFunction(() => document.querySelector('.collection-picker button')?.getAttribute('aria-pressed') === 'true');
+  await page.keyboard.press('Escape');
+  await page.locator('.nav-link[href="#/collections"]').click();
+  await page.getByRole("heading", { name: "Для друзей" }).click();
   await page.locator(".card").waitFor();
   await page.getByRole("button", { name: "Переименовать" }).click();
   await page.getByLabel("Название коллекции").fill("Мои коты");
@@ -472,7 +485,7 @@ let browser,
     .getByRole("dialog")
     .getByRole("button", { name: "Подтвердить" })
     .click();
-  await page.getByRole("heading", { name: "Собери свою коллекцию" }).waitFor();
+  await page.locator(".guest-prompt").waitFor();
   await page.locator(".header-account").click();
   await page.getByLabel("Логин", { exact: true }).fill("tester");
   await page.getByLabel("Пароль", { exact: true }).fill("wrongpassword");
@@ -540,10 +553,10 @@ let browser,
     .click();
   await page.getByRole("button", { name: "Save name" }).waitFor();
   await page.locator('.nav-link[href="#/likes"]').click();
-  await page.getByRole("heading", { name: "Nothing here yet" }).waitFor();
+  await page.locator('[data-empty-section="likedMedia"]').waitFor();
   assert.equal(await page.locator(".card").count(), 0);
   await page.locator('.nav-link[href="#/collections"]').click();
-  await page.getByRole("heading", { name: "Nothing here yet" }).waitFor();
+  await page.locator('[data-empty-section="collections"]').waitFor();
   await page.locator('.nav-link[href="#/profile"]').click();
   await page
     .getByRole("button", { name: "Delete account", exact: true })
@@ -553,7 +566,7 @@ let browser,
     .getByRole("button", { name: "Confirm", exact: true })
     .click();
   await page
-    .getByRole("heading", { name: "Make it your collection" })
+    .locator(".guest-prompt")
     .waitFor();
   await page.locator(".header-account").click();
   await page.getByLabel("Username", { exact: true }).fill("tester");
@@ -567,16 +580,16 @@ let browser,
   await page.getByRole("heading", { name: "Мои коты" }).click();
   await page.locator(".card").waitFor();
   await page.getByRole("button", { name: "Remove from collection" }).click();
-  await page.getByRole("heading", { name: "Nothing here yet" }).waitFor();
+  await page.locator('[data-empty-section="collection"]').waitFor();
   await page.getByRole("button", { name: "Delete", exact: true }).click();
   await page
     .getByRole("dialog")
     .getByRole("button", { name: "Confirm", exact: true })
     .click();
-  await page.getByRole("heading", { name: "Nothing here yet" }).waitFor();
+  await page.locator('[data-empty-section="collections"]').waitFor();
   await page.locator('.nav-link[href="#/likes"]').click();
   await page.locator(".card-like").click();
-  await page.getByRole("heading", { name: "Nothing here yet" }).waitFor();
+  await page.locator('[data-empty-section="likedMedia"]').waitFor();
   for (const language of ["en", "ru"]) {
     if ((await page.locator("html").getAttribute("lang")) !== language)
       await page.locator(".header-actions button").first().click();

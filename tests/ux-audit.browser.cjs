@@ -47,6 +47,14 @@ const sites = [
           await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
           for (const width of [320, 390, 768, 1024, 1440, 1920]) {
             await page.setViewportSize({ width, height: 900 });
+            if (width <= 768 && ['Line', 'Aster'].includes(brand)) {
+              const search = await page.locator(brand === 'Line' ? '.global-search' : '.search').boundingBox();
+              const logo = await page.locator(brand === 'Line' ? '.brand' : '.top-brand').boundingBox();
+              if (width <= 720 || brand === 'Aster') {
+                assert.ok(search.y >= logo.y + logo.height, brand + ': mobile search has its own row');
+                assert.ok(search.width > width * .85, brand + ': mobile search uses full width');
+              }
+            }
             const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
             assert.equal(overflow, false, `${brand}: overflow at ${width}/${theme}`);
           }

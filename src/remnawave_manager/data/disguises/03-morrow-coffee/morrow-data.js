@@ -69,6 +69,7 @@ async function request(path, signal, fresh = false) {
     try {
       const response = await fetch("/_morrow/yappy/" + path, {
         credentials: "omit",
+        cache: fresh ? "no-store" : "default",
         signal: controller.signal,
         redirect: "error",
         headers: { Accept: "application/json" },
@@ -150,7 +151,7 @@ export const getComments = (id, page, signal) =>
   list(
     `comments/${check(id)}?page=${pageNumber(page)}`,
     signal,
-    false,
+    true,
     "comment",
   );
 export async function getVideo(id, signal, fresh = false) {

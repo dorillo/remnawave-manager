@@ -211,9 +211,9 @@ function confirmAction(title, description, label, action) {
     ]),
   );
 }
-function showAuthDialog() {
+function showAuthDialog(onAuthenticated = null, startRegistration = false) {
   const modal = dialog('Добро пожаловать в Line');
-  let register = false;
+  let register = startRegistration;
   const content = el('div');
   const draw = () => {
     const login = el('input', {
@@ -295,6 +295,7 @@ function showAuthDialog() {
               if (!form.isConnected) return;
               if (!createSession(state, account.id)) { showError('Не удалось сохранить профиль. Освободите место и повторите попытку.'); return; }
               reloadReader();
+              if (typeof onAuthenticated === 'function') onAuthenticated(account);
               modal.close();
               render();
               toast(`Профиль @${username} создан`);
@@ -309,6 +310,7 @@ function showAuthDialog() {
             if (!form.isConnected) return;
             if (!createSession(state, account.id)) { showError('Не удалось сохранить вход. Повторите попытку.'); return; }
             reloadReader();
+            if (typeof onAuthenticated === 'function') onAuthenticated(account);
             modal.close();
             render();
             toast(`С возвращением, ${reader.name || account.displayName}`);
@@ -1019,23 +1021,55 @@ function renderLocalComment(comment, state, post, depth = 0) {
     'data-comment-id': comment.id,
   }, node);
 }
+// Keep unfinished comments through redraws and an explicit sign-in, in memory only.
+const commentDrafts = new Map();
+const commentDraftKey = (post, parent, owner = activeUser()?.id || 'guest') => JSON.stringify([owner, post.id, parent?.id || '']);
+let pendingCommentFocus = '';
+let activeCommentReply = '';
+function closeCommentReplies(except = '') {
+  activeCommentReply = except;
+  main.querySelectorAll('.comment-form[data-reply-to]').forEach(form => {
+    if (form.dataset.replyTo && form.dataset.replyTo !== except) form.remove();
+  });
+}
 function showCommentComposer(post, parent = null) {
-  if (!requireAuth('Войдите, чтобы написать комментарий')) return;
-  const modal = dialog(parent ? 'Ответить на комментарий' : 'Новый комментарий');
-  modal.content.classList.add('editor-dialog', 'comment-editor');
+  closeCommentReplies(parent?.id || '');
+  const host = parent
+    ? main.querySelector(`[data-comment-id="${CSS.escape(parent.id)}"]`)
+    : main.querySelector('.reply-prompt');
+  if (!host) {
+    pendingCommentFocus = post.id;
+    location.hash = `#/post/${encodeURIComponent(post.id)}`;
+    return;
+  }
+  let form = host.querySelector('.comment-form');
+  if (!form) { form = commentComposer(post, parent); host.append(form); }
+  form.querySelector('textarea').focus();
+}
+function commentComposer(post, parent = null) {
+  const key = commentDraftKey(post, parent);
+  const draft = commentDrafts.get(key) || { text: '', attachments: [], parent };
+  const rememberDraft = () => {
+    draft.text = input.value;
+    draft.attachments = attachments;
+    commentDrafts.set(key, draft);
+  };
   const input = el('textarea', {
-    rows: '5', maxlength: '5000', class: 'compose-text',
+    rows: '2', maxlength: '5000', class: 'compose-text',
     placeholder: 'Напишите бережный комментарий…', 'aria-label': 'Текст комментария',
   });
-  const count = el('span', { class: 'muted', text: '0 / 5000' });
+  input.value = draft.text;
+  if (!parent) input.addEventListener('focus', () => closeCommentReplies());
+  const count = el('span', { class: 'muted', text: `${input.value.length} / 5000` });
   input.addEventListener('input', () => {
+    rememberDraft();
     count.textContent = `${input.value.length} / 5000`;
   });
-  let attachments = [];
+  let attachments = draft.attachments;
   const attachmentList = el('div', { class: 'composer-attachments comment-attachments', 'aria-live': 'polite' });
   const attachmentInput = el('input', {
-    type: 'file', accept: 'image/*,video/*', multiple: true, hidden: true,
-    'aria-label': 'Добавить фото или видео к комментарию',
+    type: 'file', accept: 'image/*', multiple: true, hidden: true,
+    'aria-label': 'Добавить фото к комментарию',
   });
   const mediaStatus = el('span', { class: 'muted', role: 'status' });
   const renderAttachments = () => replace(
@@ -1048,6 +1082,7 @@ function showCommentComposer(post, parent = null) {
         el('figcaption', { text: media.alt || (media.type === 'video' ? 'Видео' : 'Фото') }),
         iconButton('Удалить вложение', 'close', () => {
           attachments = attachments.filter((_, item) => item !== index);
+          rememberDraft();
           renderAttachments();
         }),
       ]),
@@ -1070,13 +1105,11 @@ function showCommentComposer(post, parent = null) {
         if (file.type.startsWith('image/')) {
           const url = await imageDataUrl(file);
           added.push({ id: newId('media'), type: 'image', url, preview: url, alt: file.name });
-        } else if (file.type.startsWith('video/')) {
-          const url = await readFileAsDataUrl(file);
-          added.push({ id: newId('media'), type: 'video', url, preview: '', alt: file.name });
-        } else toast(`Файл «${file.name}» не является изображением или видео`);
+        } else toast('Можно прикреплять только изображения');
       }
       if (!attachmentInput.isConnected) return;
       attachments = [...attachments, ...added];
+      rememberDraft();
       renderAttachments();
       mediaStatus.textContent = attachments.length ? translate(`${attachments.length} вложения добавлено`) : '';
     } catch (error) {
@@ -1086,16 +1119,24 @@ function showCommentComposer(post, parent = null) {
       attachmentInput.disabled = false;
     }
   });
-  modal.content.append(el('form', {
-    class: 'comment-form editor-form',
+  const form = el('form', {
+    class: 'comment-form editor-form', 'data-reply-to': parent?.id || '',
+    'aria-label': parent ? `Ответить @${parent.username}` : 'Написать комментарий',
     onsubmit: (event) => {
       event.preventDefault();
       if (attachmentInput.disabled) { toast('Дождитесь подготовки вложений'); return; }
       const text = input.value.trim();
-      if (!text && !attachments.length) { input.focus(); return; }
       const state = readState();
       const account = currentUser(state);
-      if (!account) { toast('Войдите в профиль для отправки комментария'); return; }
+      if (!account) {
+        rememberDraft();
+        showAuthDialog((account) => {
+          commentDrafts.delete(key);
+          commentDrafts.set(commentDraftKey(post, parent, account.id), draft);
+        }, true);
+        return;
+      }
+      if (!text && !attachments.length) { input.focus(); return; }
       state.comments.push({
         id: newId('comment'),
         postId: post.id,
@@ -1110,7 +1151,11 @@ function showCommentComposer(post, parent = null) {
         toast('Не удалось сохранить комментарий. Возможно, хранилище заполнено.');
         return;
       }
-      modal.close();
+      commentDrafts.delete(key);
+      input.value = '';
+      attachments = [];
+      count.textContent = '0 / 5000';
+      renderAttachments();
       if (route().page === 'post') render();
       toast(parent ? 'Ответ опубликован' : 'Комментарий опубликован');
     },
@@ -1123,7 +1168,7 @@ function showCommentComposer(post, parent = null) {
     input,
     attachmentInput,
     el('div', { class: 'composer-media-actions' }, [
-      button('Добавить фото или видео', () => attachmentInput.click(), {
+      button('Добавить фото', () => attachmentInput.click(), {
         className: 'button secondary', symbol: 'camera',
       }),
       el('small', { text: `До ${MAX_ATTACHMENTS} вложений` }),
@@ -1131,11 +1176,12 @@ function showCommentComposer(post, parent = null) {
     attachmentList,
     el('div', { class: 'compose-status' }, [mediaStatus, count]),
     el('div', { class: 'form-actions' }, [
+      parent && button('Отмена', () => { commentDrafts.delete(key); activeCommentReply = ''; form.remove(); }, { className: 'button secondary' }),
       el('button', { type: 'submit', class: 'button primary' }, [icon('message'), el('span', { text: 'Опубликовать' })]),
     ]),
-  ]));
+  ]);
   renderAttachments();
-  input.focus();
+  return form;
 }
 function showPoll(post) {
   if (!requireAuth('Войдите, чтобы голосовать')) return;
@@ -1420,7 +1466,7 @@ function showStoryEditor(post) {
   if (!source) return;
   const modal = dialog('Редактировать историю');
   const input = el('textarea', {
-    rows: '8', maxlength: '5000', class: 'compose-text', text: source.text,
+    rows: '4', maxlength: '5000', class: 'compose-text', text: source.text,
     'aria-label': 'Текст истории',
   });
   modal.content.append(el('form', {
@@ -1625,8 +1671,8 @@ async function renderDiscussion(id, version) {
       contexts.set(id, { ancestors: [], replies: [], error: '', stale: false });
     } else {
       const results = await Promise.allSettled([
-        request(`/api/v1/statuses/${encodeURIComponent(id)}`),
-        request(`/api/v1/statuses/${encodeURIComponent(id)}/context`),
+        request(`/api/v1/statuses/${encodeURIComponent(id)}`, { force: true }),
+        request(`/api/v1/statuses/${encodeURIComponent(id)}/context`, { force: true }),
       ]);
     if (results[0].status === 'fulfilled') {
       post = normalizeMastodonStatus(results[0].value.data, results[0].value.instance);
@@ -1687,8 +1733,10 @@ async function renderDiscussion(id, version) {
           id: reply.id, username: reply.account.username, text: reply.text,
         }), { className: 'post-action comment-reply-button', symbol: 'message', 'aria-label': `Ответить @${reply.account.username}` }),
       );
-      node = el('div', { class: `thread-reply${depth ? ' nested' : ''} depth-${Math.min(depth, 3)}` }, card);
+      node = el('div', { class: `thread-reply${depth ? ' nested' : ''} depth-${Math.min(depth, 3)}`, 'data-comment-id': reply.id }, card);
     }
+    const draft = commentDrafts.get(commentDraftKey(post, { id: key }));
+    if (draft && activeCommentReply === key) node.append(commentComposer(post, draft.parent));
     replyNodes.push(node);
     for (const child of children.get(key) || []) appendEntry(child, depth + 1);
   };
@@ -1710,16 +1758,7 @@ async function renderDiscussion(id, version) {
         )
       : null,
     renderPostCard(post, { full: true }),
-    el('section', { class: 'reply-prompt card' }, [
-      el('div', {}, [
-        el('strong', { text: 'Присоединиться к разговору' }),
-        el('p', { text: 'Оставьте комментарий и присоединитесь к разговору.' }),
-      ]),
-      button('Написать комментарий', () => showCommentComposer(post), {
-        className: 'button primary',
-        symbol: 'message',
-      }),
-    ]),
+    el('section', { class: 'reply-prompt card', 'aria-label': 'Написать комментарий' }, commentComposer(post)),
     el('div', { class: 'section-heading discussion-heading' }, [
       el('h2', { text: 'Ответы и комментарии' }),
       el('span', { class: 'muted', text: `${context.replies.length + comments.length} доступно` }),
@@ -1748,6 +1787,10 @@ async function renderDiscussion(id, version) {
           )
         : null,
   );
+  if (pendingCommentFocus === post.id) {
+    pendingCommentFocus = '';
+    main.querySelector('.reply-prompt textarea')?.focus();
+  }
   const selectedComment = route().params.get('comment');
   if (selectedComment)
     requestAnimationFrame(() => {
@@ -2233,7 +2276,7 @@ function showComposer(id) {
   const textarea = el('textarea', {
     class: 'compose-text',
     maxlength: '5000',
-    rows: '8',
+    rows: '4',
     placeholder: 'О чём вы думаете? Поделитесь своей историей…',
     'aria-label': 'Текст черновика',
     text: draft?.text || '',
@@ -2241,8 +2284,8 @@ function showComposer(id) {
   let attachments = localMedia(draft?.media);
   const attachmentList = el('div', { class: 'composer-attachments', 'aria-live': 'polite' });
   const attachmentInput = el('input', {
-    type: 'file', accept: 'image/*,video/*', multiple: true, hidden: true,
-    'aria-label': 'Добавить фото или видео',
+    type: 'file', accept: 'image/*', multiple: true, hidden: true,
+    'aria-label': 'Добавить фото',
   });
   const status = el('span', { class: 'muted', role: 'status' });
   let timer;
@@ -2280,10 +2323,7 @@ function showComposer(id) {
         if (file.type.startsWith('image/')) {
           const url = await imageDataUrl(file);
           added.push({ id: newId('media'), type: 'image', url, preview: url, alt: file.name });
-        } else if (file.type.startsWith('video/')) {
-          const url = await readFileAsDataUrl(file);
-          added.push({ id: newId('media'), type: 'video', url, preview: '', alt: file.name });
-        } else toast(`Файл «${file.name}» не является изображением или видео`);
+        } else toast('Можно прикреплять только изображения');
       }
       if (!attachmentInput.isConnected) return;
       attachments = [...attachments, ...added];
@@ -2343,7 +2383,7 @@ function showComposer(id) {
     textarea,
     attachmentInput,
     el('div', { class: 'composer-media-actions' }, [
-      button('Добавить фото или видео', () => attachmentInput.click(), {
+      button('Добавить фото', () => attachmentInput.click(), {
         className: 'button secondary', symbol: 'camera',
       }),
       el('small', { text: `До ${MAX_ATTACHMENTS} вложений` }),
@@ -2351,7 +2391,7 @@ function showComposer(id) {
     attachmentList,
     el('div', { class: 'compose-status' }, [status, count]),
     el('p', {
-      class: 'muted',
+      class: 'muted composer-autosave',
       text: 'Черновик сохраняется автоматически.',
     }),
     el('div', { class: 'form-actions' }, [
@@ -2442,6 +2482,7 @@ async function render() {
     });
 }
 window.addEventListener('hashchange', () => {
+  if (route().page === 'post' && previousHash.split('?')[0] !== location.hash.split('?')[0]) contexts.delete(route().id);
   scrollPositions.set(previousHash, window.scrollY);
   previousHash = location.hash || '#/feed';
   window.scrollTo(0, scrollPositions.get(previousHash) || 0);

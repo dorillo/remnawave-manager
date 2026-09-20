@@ -433,3 +433,28 @@ body:has(dialog[open]) { overflow: hidden; }
 .logo { transition: color .18s ease; }
 .logo:is(:hover, :focus-visible) { color: var(--accent); text-decoration: none; }
 @media (prefers-reduced-motion: reduce) { .logo { transition: none; } }
+
+.watch-actions .video-like { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; }
+.video-like svg { width: 20px; height: 20px; flex: 0 0 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
+.video-like[aria-pressed="true"] svg { fill: currentColor; }
+.video-like .like-count:empty { display: none; }
+
+.search input { min-width: 0; flex: 1; }
+@media (min-width: 701px) and (max-width: 960px) {
+  :root { --header: 116px; }
+  .top { height: var(--header); padding: 8px 16px; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: 44px 48px; gap: 5px 12px; }
+  .search { grid-column: 1 / -1; grid-row: 2; }
+  .top-actions { grid-column: 2; grid-row: 1; }
+}
+@media (max-width: 700px) { .search input { font-size: 16px; } }
+.comment-like { display: inline-flex; align-items: center; gap: 6px; }
+.comment-like svg { width: 18px; height: 18px; flex: 0 0 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
+.comment-like[aria-pressed="true"] svg { fill: currentColor; }
+
+.watch-channel-copy, .channel-copy { min-width: 0; overflow-wrap: anywhere; }
+.watch-channel-copy { flex: 1; }
+.subscriber-count { display: block; color: var(--muted); font-size: 12px; }
+.subscriber-count[hidden] { display: none; }
+.channel-banner > .channel-avatar { width: 66px; height: 66px; }
+
+.watch-channel-copy .channel-title { display: block; max-width: 230px; width: 100%; }

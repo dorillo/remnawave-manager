@@ -206,6 +206,7 @@ export async function request(path, { force = false, ttl = 180000 } = {}) {
         throw new Error('Сервер просит подождать перед следующим запросом');
       const response = await fetch(`/_northline/${source}${path}`, {
         signal: controller.signal,
+        cache: force ? 'no-store' : 'default',
         credentials: 'omit',
         redirect: 'error',
         headers: { Accept: 'application/json' },

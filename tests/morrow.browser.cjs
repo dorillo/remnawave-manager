@@ -91,6 +91,7 @@ let browser;
   const movie = Buffer.from(bytes);
   const poster =
     '<svg xmlns="http://www.w3.org/2000/svg" width="360" height="640"><rect width="360" height="640" fill="#65897b"/><circle cx="250" cy="150" r="90" fill="#c4dbb1"/><path d="M0 350h200v290H0z" fill="#324641"/></svg>';
+  let commentRequests = 0, lastCommentId;
   const routeHandler = async (route) => {
     const req = route.request(),
       u = new URL(req.url());
@@ -98,6 +99,7 @@ let browser;
       return route.fulfill({ contentType: u.pathname.endsWith('.css') ? 'text/css' : 'text/javascript', body: await fs.readFile(path.resolve(root, '..' + u.pathname)) });
     if (u.pathname.startsWith('/_images/'))
       return route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="green"/></svg>' });
+    if (u.pathname.includes('/comments/')) { commentRequests++; lastCommentId = u.pathname.split('/').at(-1); }
     if (req.method() !== "GET") writes.push(req.url());
     if (u.origin !== origin) {
       if (u.hostname === "vb-rtb.uma.media")
@@ -242,6 +244,28 @@ let browser;
   );
   assert.ok((await page.locator("video").count()) <= 3);
   await register("morrow_one");
+  await require('./personal-empty.helpers.cjs')(page, [['#/profile?tab=likes', 'likedVideos'], ['#/profile?tab=saved', 'savedVideos'], ['#/following', 'following']]);
+  await page.evaluate(() => { location.hash = '#/following'; });
+  await page.locator('[data-empty-section=following]').waitFor();
+  assert.equal(await page.locator('.feed-tabs a').count(), 2);
+  const followingTabs = await page.locator('.feed-tabs a').first().boundingBox();
+  await page.locator('.feed-tabs a[href="#/feed"]').click();
+  const feedTabs = await page.locator('.feed-tabs a').first().boundingBox();
+  assert.ok(Math.abs(followingTabs.x - feedTabs.x) < 1 && Math.abs(followingTabs.y - feedTabs.y) < 1, 'Feed tabs keep their position');
+  const originalViewport = page.viewportSize();
+  for (const width of [320, 390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    const before = await page.locator('.feed-tabs a').first().boundingBox();
+    await page.locator('.feed-tabs a[href="#/following"]').click();
+    await page.locator('[data-empty-section=following]').waitFor();
+    const after = await page.locator('.feed-tabs a').first().boundingBox();
+    assert.ok(Math.abs(before.x - after.x) < 1 && Math.abs(before.y - after.y) < 1, `Stable tabs at ${width}px`);
+    await page.locator('.feed-tabs a[href="#/feed"]').click();
+    await page.locator('.video-slide').first().waitFor();
+  }
+  await page.setViewportSize(originalViewport);
+
+  await page.locator('.video-slide').first().waitFor();
   await page
     .locator(".video-slide")
     .first()
@@ -268,6 +292,9 @@ let browser;
     .getByRole("button", { name: "Комментарии", exact: true })
     .click();
   await page.waitForSelector(".comment");
+  const beforeCommentRefresh = commentRequests;
+  await page.evaluate(async id => (await import('/morrow-data.js')).getComments(id, 1), lastCommentId);
+  assert.ok(commentRequests > beforeCommentRefresh, 'Comments bypass the video cache');
   assert.equal(await page.locator(".comment-text img").count(), 0);
   await page
     .locator(".comment")
@@ -304,7 +331,7 @@ let browser;
   await page
     .locator(".comments-panel")
     .screenshot({ path: "tests/.tmp/morrow-comments.png" });
-  // Removing a parent preserves its reply; deleting an entire thread is unavailable.
+  // Removing a parent also removes every descendant reply.
   await page
     .locator(".comment")
     .nth(1)
@@ -316,13 +343,13 @@ let browser;
     .getByRole("button", { name: "Удалить", exact: true })
     .click();
   await wait();
-  assert.equal((await state()).comments[0].deleted, true);
-  assert.equal((await state()).comments.length, 2);
+  assert.equal(await page.locator(".comment").count(), 1);
+  assert.equal((await state()).comments.length, 0);
   assert.equal(
     await page.getByRole("button", { name: "Удалить ветку", exact: true }).count(),
     0,
   );
-  assert.equal((await state()).comments.length, 2);
+  assert.equal((await state()).comments.length, 0);
   await page.locator(".comments-panel>header button").click();
   await open("#/profile");
   assert.ok((await page.locator(".video-tile").count()) > 0);

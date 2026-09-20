@@ -1790,3 +1790,13 @@ details p {
 
 .topbar-actions .language-button { font-size: 13px; line-height: 1; font-weight: 600; letter-spacing: 0; }
 .topbar-actions .language-button svg { width: 16px; height: 16px; display: block; }
+
+.main.empty-following { scrollbar-gutter: auto; }
+.empty-following .page-container { margin-top: 64px; }
+@media(max-width: 760px) { .empty-following .page-container { margin-top: 48px; } }
+
+.empty-following .feed-tabs { text-shadow: none; }
+.empty-following .feed-tabs a { color: var(--muted); }
+.empty-following .feed-tabs a.active { color: var(--accent); }
+
+.empty-following .feed-refresh { color: var(--text); }

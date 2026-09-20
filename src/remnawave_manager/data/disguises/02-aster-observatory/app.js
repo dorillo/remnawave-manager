@@ -1,4 +1,4 @@
-import { guestPrompt } from '../shared/guest-state.js';
+import { guestPrompt, emptyPrompt } from '../shared/guest-state.js';
 import { loadingNode } from '../shared/feedback.js';
 // Each visit starts with the system theme; a manual toggle applies to this visit.
 const appearanceMedia = matchMedia('(prefers-color-scheme: dark)');
@@ -25,6 +25,8 @@ import {
 import {
   TOPICS,
   loadCatalog,
+  loadVideo,
+  loadProfile,
   searchRutube,
   normalize,
   normalizeList,
@@ -103,6 +105,21 @@ let searchState = {
   failed: false,
 };
 let disposePlayer = () => {};
+let pageController = new AbortController();
+const recentDiscussions = new Map();
+function rememberDiscussion(video) {
+  recentDiscussions.delete(video.id);
+  recentDiscussions.set(video.id, video);
+  if (recentDiscussions.size > 50) recentDiscussions.delete(recentDiscussions.keys().next().value);
+}
+function subscribersNode(value = null) {
+  return el('small', { class: 'subscriber-count', hidden: value === null },
+    value === null ? '' : `${new Intl.NumberFormat(locale()).format(value)} ${t('subscribers')}`);
+}
+function showSubscribers(node, value) {
+  node.hidden = value === null;
+  node.textContent = value === null ? '' : `${new Intl.NumberFormat(locale()).format(value)} ${t('subscribers')}`;
+}
 function route() {
   const [path, query = ''] = location.hash.slice(1).split('?');
   return {
@@ -803,7 +820,7 @@ function watch(main, id, uploaded = null) {
           : ` ${new Intl.NumberFormat(locale()).format(
               (video.publicLikes || 0) + selected,
             )}`;
-      return `${selected ? '♥' : '♡'}${count}`;
+      return count.trim();
     };
     const control = button(
       key === 'likes' ? likesLabel() : t(key),
@@ -817,7 +834,7 @@ function watch(main, id, uploaded = null) {
               ? list.filter((v) => v !== id)
               : [...list, id];
           });
-          if (key === 'likes') control.textContent = likesLabel();
+          if (key === 'likes') control.querySelector('.like-count').textContent = likesLabel();
           control.setAttribute(
             'aria-pressed',
             String(library()[key].includes(id)),
@@ -828,8 +845,17 @@ function watch(main, id, uploaded = null) {
         'aria-pressed': String(library()[key].includes(id)),
       },
     );
+    if (key === 'likes') {
+      const heart = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      heart.setAttribute('viewBox', '0 0 24 24');
+      heart.setAttribute('aria-hidden', 'true');
+      heart.innerHTML = '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/>';
+      control.classList.add('video-like');
+      control.replaceChildren(heart, el('span', { class: 'like-count' }, likesLabel()));
+    }
     return control;
   };
+  const subscribers = subscribersNode(video.subscribers ?? null);
   primary.append(
     el(
       'div',
@@ -838,13 +864,13 @@ function watch(main, id, uploaded = null) {
         'div',
         { class: 'watch-channel' },
         channelAvatar(video, true),
-        video.local
+        el('div', { class: 'watch-channel-copy' }, video.local
           ? link(video.channel, '#/profile', { class: 'channel-title' })
           : video.channelId
           ? link(video.channel, `#/channel/${video.channelId}`, {
               class: 'channel-title',
             })
-          : el('strong', {}, video.channel),
+          : el('strong', {}, video.channel), subscribers),
         !video.local && video.channelId ? followButton(video.channelId) : null,
       ),
       el(
@@ -873,16 +899,35 @@ function watch(main, id, uploaded = null) {
       ),
     ),
   );
+  const description = el('p', {}, video.description || (video.local ? t('noDescription') : loadingNode(t('loading'))));
   primary.append(
     el(
       'details',
       { class: 'description', open: true },
       el('summary', {}, t('description'), ' · ', date(video.published)),
-      el('p', {}, video.description || t('noDescription')),
+      description,
     ),
   );
   const commentsController = new AbortController();
-  primary.append(comments(video, guard, commentsController.signal));
+  primary.append(comments(video, guard, commentsController.signal, rememberDiscussion));
+  if (!video.local) {
+    const signal = commentsController.signal;
+    const refreshDescription = async () => {
+      try {
+        const current = await loadVideo(id, signal);
+        if (signal.aborted) return;
+        video.description = current.description;
+        description.textContent = current.description || t('noDescription');
+      } catch {
+        if (signal.aborted || video.description) return;
+        description.replaceChildren(t('descriptionUnavailable'), ' ', button(t('commentsRetry'), refreshDescription));
+      }
+    };
+    refreshDescription();
+    if (video.channelId) loadProfile(video.channelId, signal).then(profile => {
+      if (!signal.aborted) showSubscribers(subscribers, profile.subscribers);
+    }).catch(() => {});
+  }
   const stopPlayer = disposePlayer;
   disposePlayer = () => { commentsController.abort(); stopPlayer(); };
   rail.append(el('h2', {}, t('related')));
@@ -927,94 +972,66 @@ async function watchUploaded(main, id) {
   }
 }
 function channel(main, id) {
+  const signal = pageController.signal;
   const videos = normalizeList([
     ...channelVideos(id),
-    ...searchState.videos.filter((video) => video.channelId === id),
-    ...allVideos().filter((v) => v.channelId === id),
+    ...searchState.videos.filter(video => video.channelId === id),
+    ...allVideos().filter(video => video.channelId === id),
   ]);
   const author = videos[0];
-  if (!author) return empty(main);
-  main.append(
-    el(
-      'section',
-      { class: 'channel-banner' },
-      author.avatar
-        ? el('img', {
-            class: 'avatar',
-            src: author.avatar,
-            alt: '',
-            onerror: (e) => {
-              e.target.hidden = true;
-            },
-          })
-        : el('span', { class: 'avatar initials' }, author.channel[0]),
-      el(
-        'div',
-        {},
+  const header = el('section', { class: 'channel-banner' });
+  main.append(header);
+  const drawHeader = profile => {
+    header.replaceChildren(
+      channelAvatar({ channel: profile.name, avatar: profile.avatar }, true),
+      el('div', { class: 'channel-copy' },
         el('span', { class: 'eyebrow' }, t('channel')),
-        el('h1', {}, author.channel),
-        el('p', {}, `${videos.length} ${t('count')}`),
-      ),
-      followButton(id),
-    ),
-  );
-  grid(
-    main,
-    videos.sort((a, b) => b.published.localeCompare(a.published)),
-  );
+        el('h1', {}, profile.name),
+        subscribersNode(profile.subscribers ?? null),
+        el('p', {}, `${profile.videoCount ?? videos.length} ${t('count')}`)),
+      followButton(id));
+  };
+  if (author) drawHeader({ name: author.channel, avatar: author.avatar, subscribers: author.subscribers });
+  else header.append(loadingNode(t('loading')));
+  loadProfile(id, signal).then(profile => {
+    if (!signal.aborted) drawHeader(profile);
+  }).catch(error => {
+    if (!signal.aborted && !author) header.replaceChildren(el('p', {}, t(error.status === 404 ? 'userNotFound' : 'profileUnavailable')));
+  });
+  grid(main, videos.sort((a, b) => b.published.localeCompare(a.published)));
 }
 function publicUser(main, id) {
-  const entries = (catalog?.videos || []).flatMap((video) =>
-    (video.publicComments || [])
-      .filter((comment) => comment.authorId === id)
-      .map((comment) => ({ comment, video })),
-  );
-  if (!entries.length) return empty(main, 'userNotFound');
-  const profile = entries[0].comment;
-  const picture = profile.avatar
-    ? el('img', {
-        class: 'avatar',
-        src: profile.avatar,
-        alt: '',
-        onerror: (event) => event.target.remove(),
-      })
-    : el(
-        'span',
-        { class: 'avatar initials', 'aria-hidden': true },
-        profile.author.trim().slice(0, 1).toUpperCase(),
-      );
-  main.append(
-    el(
-      'section',
-      { class: 'channel-banner user-banner' },
-      picture,
-      el(
-        'div',
-        {},
-        el('span', { class: 'eyebrow' }, t('profile')),
-        el('h1', {}, profile.author),
-        el('p', {}, `${entries.length} · ${t('userComments')}`),
-      ),
-    ),
-    el(
-      'div',
-      { class: 'user-comments' },
-      entries.map(({ comment, video }) =>
-        el(
-          'article',
-          { class: 'user-comment' },
-          el('p', {}, comment.text),
-          el(
-            'div',
-            { class: 'meta' },
-            relativeDate(comment.createdAt),
-            ' · ',
-            link(video.title, `#/watch/${video.id}`),
-          ),
-        ),
-      ),
-    ),
-  );
+  const signal = pageController.signal;
+  const videos = new Map([...allVideos(), ...searchState.videos, ...recentDiscussions.values()].map(video => [video.id, video]));
+  const entries = [...videos.values()].flatMap(video =>
+    (video.publicComments || []).filter(comment => comment.authorId === id).map(comment => ({ comment, video })));
+  const header = el('section', { class: 'channel-banner user-banner' });
+  const drawHeader = profile => header.replaceChildren(
+    channelAvatar({ channel: profile.name, avatar: profile.avatar }, true),
+    el('div', { class: 'channel-copy' },
+      el('span', { class: 'eyebrow' }, t('profile')),
+      el('h1', {}, profile.name),
+      subscribersNode(profile.subscribers ?? null)),
+    link(t('channel'), `#/channel/${id}`, { class: 'primary' }));
+  if (entries.length) drawHeader({ name: entries[0].comment.author, avatar: entries[0].comment.avatar });
+  else header.append(loadingNode(t('loading')));
+  main.append(header);
+  const refreshProfile = async () => {
+    try {
+      const profile = await loadProfile(id, signal);
+      if (!signal.aborted) drawHeader(profile);
+    } catch (error) {
+      if (signal.aborted || entries.length) return;
+      header.replaceChildren(el('p', {}, t(error.status === 404 ? 'userNotFound' : 'profileUnavailable')),
+        button(t('commentsRetry'), refreshProfile));
+    }
+  };
+  refreshProfile();
+  if (entries.length) main.append(
+    el('h2', {}, t('userComments')),
+    el('div', { class: 'user-comments' }, entries.map(({ comment, video }) =>
+      el('article', { class: 'user-comment' }, el('p', {}, comment.text),
+        el('div', { class: 'meta' }, relativeDate(comment.createdAt), ' · ', link(video.title, `#/watch/${video.id}`))))));
 }
 function accountPicture(account, className = 'avatar') {
   return account.avatar
@@ -1352,9 +1369,12 @@ function collection(main, kind) {
       .filter((v) => library().history[v.id])
       .sort((a, b) => library().history[b.id].at - library().history[a.id].at);
   else videos = videos.filter((v) => library()[kind].includes(v.id));
+  if (!videos.length) { main.append(emptyPrompt(({ subscriptions: 'following', history: 'historyVideo', likes: 'likedVideos', later: 'later' })[kind], () => go('/home'))); return; }
   grid(main, videos, true, '', 24, kind === 'subscriptions' ? 'moreVideos' : 'more');
 }
 function render() {
+  pageController.abort();
+  pageController = new AbortController();
   disposePlayer();
   disposePlayer = () => {};
   const main = shell();

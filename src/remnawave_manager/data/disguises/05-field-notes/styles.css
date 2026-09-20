@@ -1426,3 +1426,28 @@ dialog > button {
 .brand { transition: color .18s ease; }
 .brand:is(:hover, :focus-visible) { color: var(--accent); text-decoration: none; }
 @media (prefers-reduced-motion: reduce) { .brand { transition: none; } }
+
+.collection-picker { display: grid; gap: 10px; margin-bottom: 16px; }
+.collection-choice { position: relative; margin: 0; padding: 14px; border: 1px solid var(--line); border-radius: 12px; cursor: pointer; background: var(--panel); }
+.collection-choice input { position: absolute; width: 1px; height: 1px; min-height: 0; opacity: 0; }
+.collection-choice:has(input:checked) { border-color: var(--accent); background: var(--soft); }
+.collection-choice:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 3px; }
+.collection-choice-name { flex: 1; min-width: 0; }
+.collection-choice > .icon { flex-shrink: 0; }
+.collection-choice-count { color: var(--muted); font-size: 12px; }
+.collection-choice-check { width: 22px; height: 22px; border: 1px solid var(--line); border-radius: 50%; display: grid; place-items: center; color: transparent; flex-shrink: 0; }
+.collection-choice:has(input:checked) .collection-choice-check { color: var(--panel); background: var(--accent); border-color: var(--accent); }
+
+@media (max-width: 600px) {
+  .collection-tabs { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .collection-tab { width: 100%; }
+  .collection-select { flex: 1; min-width: 0; text-align: left; }
+  .collection-options { flex: 0 0 44px; }
+  .collection-options summary { width: 44px; }
+  .collection-tabs > button { text-align: left; }
+  .collection-menu { max-width: 100%; }
+  .library-controls { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .library-controls > input, .library-controls > select { width: 100%; min-width: 0; font-size: 16px; }
+  .personal-item .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .personal-item .actions > button { min-height: 44px; }
+}

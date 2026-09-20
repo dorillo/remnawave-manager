@@ -1,4 +1,4 @@
-import { guestMarkup } from '../shared/guest-state.js';
+import { guestMarkup, emptyMarkup } from '../shared/guest-state.js';
 import * as store from "./fokus-store.js?v=20260919-release";
 import { authenticate } from "./fokus-auth.js?v=20260919-release";
 import {
@@ -52,6 +52,7 @@ const err = (error) =>
     [
       "network",
       "schema",
+      "articleFormat",
       "storage",
       "rateLimit",
       "invalid",
@@ -143,8 +144,25 @@ function personal(kind) {
     .filter((b) => b.accountId === me().id)
     .map((b) => b.article);
   remember(items);
-  return listing(items, t(kind));
+  return items.length ? listing(items, t(kind)) : pageHead(t(kind), "", false) + emptyMarkup(kind === "saved" ? "savedNews" : "historyNews");
 }
+function closeOtherCommentEditors(current) {
+  let changed = false;
+  for (const context of [view, ...(view.discussions?.values() || [])]) {
+    if (context !== current && (context.reply || context.editing)) {
+      context.reply = null;
+      context.editing = '';
+      changed = true;
+    }
+  }
+  return changed;
+}
+main.addEventListener('focusin', event => {
+  const form = event.target.closest('.comment-form');
+  if (!form) return;
+  const context = articleState(form.dataset.article);
+  if (context && closeOtherCommentEditors(context)) render();
+});
 function articleState(id) {
   if (!id || id === view.article?.id) return view;
   return view.discussions?.get(id);
@@ -300,12 +318,12 @@ function storyContent(a, continued = false) {
     (b) => b.accountId === me()?.id && b.article.id === a.id,
   );
   return cleanSourceMarkup(
-    `${stale(a)}<div class="eyebrow">${e(a.category || t("source"))}</div><${continued ? "h2" : "h1"} class="article-title">${e(cleanSourceText(a.title))}</${continued ? "h2" : "h1"}><div class="article-meta">${a.published ? `<time>${e(date(a.published))}</time>` : ""}${a.author ? `<span>${e(a.author)}</span>` : ""}</div><div class="article-tools">${button("save", t(saved ? "unsave" : "save"), saved ? "check" : "bookmark", "secondary", `aria-pressed="${saved}" data-article="${e(a.id)}"`)}${button("share", t("share"), "share", "secondary", `data-article="${e(a.id)}"`)}</div>${a.image ? `<figure class="article-cover"><img src="${e(a.image)}" alt="${e(cleanSourceText(a.title))}">${a.caption ? `<figcaption>${e(a.caption)}</figcaption>` : ""}</figure>` : ""}<div class="article-body">${a.blocks.map((b) => (b.type === "text" ? `<div class="paragraph">${b.html}</div>` : b.type === "quote" ? `<blockquote>${b.html}</blockquote>` : b.type === "image" ? `<figure><img src="${e(b.src)}" alt="" loading="lazy"><figcaption>${e(b.caption)}</figcaption></figure>` : `<p class="notice">${e(t("unsupported"))}</p>`)).join("")}</div>`,
+    `${stale(a)}<div class="eyebrow">${e(a.category || t("source"))}</div><${continued ? "h2" : "h1"} class="article-title">${e(cleanSourceText(a.title))}</${continued ? "h2" : "h1"}><div class="article-meta">${a.published ? `<time>${e(date(a.published))}</time>` : ""}${a.author ? `<span>${e(a.author)}</span>` : ""}</div><div class="article-tools">${button("save", t(saved ? "unsave" : "save"), saved ? "check" : "bookmark", "secondary", `aria-pressed="${saved}" data-article="${e(a.id)}"`)}${button("share", t("share"), "share", "secondary", `data-article="${e(a.id)}"`)}</div>${a.image ? `<figure class="article-cover"><img src="${e(a.image)}" alt="${e(cleanSourceText(a.title))}">${a.caption ? `<figcaption>${e(a.caption)}</figcaption>` : ""}</figure>` : ""}<div class="article-body">${a.blocks.map((b) => (b.type === "text" ? `<div class="paragraph">${b.html}</div>` : b.type === "quote" ? `<blockquote>${b.html}</blockquote>` : ["image", "videoPreview"].includes(b.type) ? `<figure><img src="${e(b.src)}" alt="" loading="lazy"><figcaption>${b.type === "videoPreview" ? e(t("videoPreview")) + (b.caption ? " · " : "") : ""}${e(b.caption)}</figcaption></figure>` : `<p class="notice">${e(t("unsupported"))}</p>`)).join("")}</div>`,
   );
 }
 function nextCandidate() {
   const articles = [view.article, ...(view.continued || [])].filter(Boolean);
-  const seen = new Set(articles.map((a) => a.id));
+  const seen = new Set([...articles.map((a) => a.id), ...(view.skippedArticles || [])]);
   return unique([...(articles.at(-1)?.related || []), ...feed, ...home]).find(
     (a) => !seen.has(a.id),
   );
@@ -385,12 +403,20 @@ async function nextArticle(manual = false) {
       feed = data.items;
       remember(feed);
     }
-    const candidate = nextCandidate();
-    if (!candidate) {
-      view.nextDone = true;
-      return;
+    let article;
+    // Each failed candidate is tried once per reading session. Keep moving through
+    // the finite list; navigation aborts the loop immediately.
+    while (!signal.aborted) {
+      const candidate = nextCandidate();
+      if (!candidate) break;
+      try { article = await load("article", { ref: candidate, signal }); break; }
+      catch (error) {
+        if (current !== token) return;
+        if (signal.aborted || error.name === 'AbortError') throw error;
+        (view.skippedArticles ||= new Set()).add(candidate.id);
+      }
     }
-    const article = await load("article", { ref: candidate, signal });
+    if (!article) { view.nextDone = true; return; }
     if (current !== token) return;
     const context = { article };
     (view.discussions ||= new Map()).set(article.id, context);
@@ -402,7 +428,7 @@ async function nextArticle(manual = false) {
     if (manual) view.focusNext = article.id;
   } catch (error) {
     if (current === token && error.name !== "AbortError")
-      view.nextError = error;
+      view.nextDone = true;
   } finally {
     if (current === token) {
       view.nextBusy = false;
@@ -460,7 +486,7 @@ function profileView() {
                 .filter((x) => x.accountId === a.id)
                 .map((x) => x.article),
             )
-          : state(t(tab === "saved" ? "emptySaved" : "emptyHistory"))
+          : emptyMarkup(tab === "saved" ? "savedNews" : "historyNews")
         : tab === "ownComments"
           ? db.comments
               .filter((c) => c.authorId === a.id && !c.deleted)
@@ -468,7 +494,7 @@ function profileView() {
                 (c) =>
                   `<article class="activity"><a href="${e(route(c.article))}">${e(cleanSourceText(c.article.title))}</a><p>${e(c.text)}</p><time>${e(date(c.at))}</time></article>`,
               )
-              .join("") || state(t("empty"))
+              .join("") || emptyMarkup("comments")
           : db.reactions.some((r) => r.accountId === a.id && r.article)
             ? newsGrid(
                 unique(
@@ -477,7 +503,7 @@ function profileView() {
                     .map((r) => r.article),
                 ),
               )
-            : state(t("noReactions"))
+            : emptyMarkup("reactions")
   }`;
 }
 function render(preserve = true) {
@@ -564,7 +590,7 @@ async function social(kind, more = false, context = view) {
       ref,
       cursor,
       signal: controller.signal,
-      force: !more,
+      force: true,
     });
     if (current !== token) return;
     if (kind === "comments") {
@@ -872,6 +898,7 @@ document.addEventListener("click", async (event) => {
       ].find((x) => x.ref === b.dataset.ref);
       if (c)
         await accountGate(() => {
+          closeOtherCommentEditors(discussion);
           discussion.reply = {
             ref: c.ref,
             name: c.name,
@@ -894,6 +921,7 @@ document.addEventListener("click", async (event) => {
           x.articleId === discussion.article.id,
       );
       if (c) {
+        closeOtherCommentEditors(discussion);
         discussion.editing = c.id;
         discussion.reply = null;
         render();

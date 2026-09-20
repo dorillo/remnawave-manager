@@ -77,6 +77,10 @@ const words = {
   width: ["Ширина текста", "Text width"],
   wide: ["Широкая", "Wide"],
   print: ["Печать", "Print"],
+  emptyCollection: ["В этой коллекции пока нет статей", "No articles in this collection yet"],
+  emptyCollectionHint: ["Добавляйте сохранённые статьи через кнопку управления коллекциями.", "Add saved articles using the collections button."],
+  libraryLogin: ["Войти и собрать библиотеку", "Sign in to build your library"],
+  historyLogin: ["Войти и открыть историю", "Sign in to view your history"],
   language: ["Язык интерфейса", "Interface language"],
   welcome: [
     "Мир начинается с вопроса",

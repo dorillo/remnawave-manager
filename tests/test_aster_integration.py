@@ -19,6 +19,19 @@ from remnawave_manager.site_policy import (
 
 
 class AsterIntegrationTests(unittest.TestCase):
+    def test_metadata_proxy_is_fixed_and_installed(self):
+        from remnawave_manager.aster_proxy import metadata_upstream
+        from remnawave_manager.site_policy import ASTER_METADATA_PROXY
+        self.assertEqual(metadata_upstream('/_aster/rutube-video/' + 'a' * 32, ''), 'https://rutube.ru/api/video/' + 'a' * 32 + '/')
+        self.assertEqual(metadata_upstream('/_aster/rutube-profile/123', ''), 'https://rutube.ru/api/profile/user/123/')
+        for path in ['/_aster/rutube-profile/../me', '/_aster/rutube-video/123', '/_aster/rutube-profile/https://evil.test']:
+            self.assertIsNone(metadata_upstream(path, ''))
+        self.assertIsNone(metadata_upstream('/_aster/rutube-profile/123', 'url=https://evil.test'))
+        existing = f'add_header Content-Security-Policy "{NODE_CSP}" always;\n{ASTER_SEARCH_PROXY}'
+        upgraded = upgrade_aster_policy(existing)
+        self.assertIn(ASTER_METADATA_PROXY, upgraded)
+        self.assertEqual(upgrade_aster_policy(upgraded), upgraded)
+
     def test_live_comments_proxy_validation_and_upgrade(self):
         from remnawave_manager.aster_proxy import upstream_url
         from remnawave_manager.site_policy import ASTER_COMMENTS_PROXY

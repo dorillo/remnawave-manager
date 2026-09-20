@@ -68,10 +68,11 @@ const comment = {
           const offset = Number(u.searchParams.get("offset"));
           body = `<div class="list-items-loaded" data-count="21" ${offset ? "" : `data-next-url="/services/search/getmore/?query=${encodeURIComponent(u.searchParams.get("query"))}&amp;offset=20"`}><div class="list-item"><a class="list-item__title" href="https://ria.ru/20260919/archive-${3000 + offset}.html">Архивный результат ${offset}</a></div></div>`;
         } else if (u.pathname.includes("/article/")) {
-          body = article;
+          body = failNext && u.pathname.endsWith("test-2118660372.html")
+            ? '<div class="article__body"><div class="article__visual-journalism-black"><script src="https://evil.test/embed.js"></script></div></div>' : article;
           if (
             failArticle ||
-            (failNext && !u.pathname.endsWith("test-2118660370.html"))
+            (failNext && u.pathname.endsWith("test-2118660371.html"))
           )
             status = 503;
         } else if (u.pathname.includes("/dynamics/"))
@@ -191,6 +192,8 @@ const comment = {
       await page.locator("#modal").waitFor({ state: "hidden" });
     }
     await register("reader1", "Первый читатель");
+    await require('./personal-empty.helpers.cjs')(page, [['#/profile/saved', 'savedNews'], ['#/profile/ownComments', 'comments'], ['#/profile/ownReactions', 'reactions']]);
+    await page.locator('.article-stream > .reader .comment').first().waitFor();
     const like = page.locator(
       '.article-stream > .reader .comment[data-comment^="ria:"] [data-action="comment-like"]',
     );
@@ -728,11 +731,10 @@ const comment = {
     );
     failNext = true;
     await stream.locator("#next-article").scrollIntoViewIfNeeded();
-    await stream.locator("#next-article .error-text").waitFor();
-    assert.equal(await stream.locator(".continued-story").count(), 0);
-    failNext = false;
-    await stream.locator('[data-action="next-article"]').click();
     await stream.locator(".continued-story .article-body").first().waitFor();
+    assert.equal(await stream.locator("#next-article .error-text").count(), 0);
+    assert.equal(await stream.locator('.continued-story[data-article-id="2118660371"], .continued-story[data-article-id="2118660372"]').count(), 0);
+    failNext = false;
     const nextId = await stream
       .locator(".continued-story")
       .first()
@@ -947,6 +949,14 @@ const comment = {
       allIds.length,
       "unique IDs for each discussion and composer",
     );
+    await firstStory.locator('[data-action="reply"]').first().click();
+    await firstStory.locator('textarea').fill('Черновик первого обсуждения');
+    await nextStory.locator('[data-action="reply"]').first().click();
+    assert.equal(await firstStory.locator('.reply-target').count(), 0);
+    assert.equal(await nextStory.locator('.reply-target').count(), 1);
+    await firstStory.locator('textarea').focus();
+    assert.equal(await nextStory.locator('.reply-target').count(), 0);
+    assert.equal(await firstStory.locator('textarea').inputValue(), 'Черновик первого обсуждения');
     const beforeNext = await stream.locator(".continued-story").count();
     await stream.locator("#next-article").scrollIntoViewIfNeeded();
     await stream.waitForFunction(
@@ -966,6 +976,24 @@ const comment = {
         `stream overflow ${width}`,
       );
     }
+    await stream.evaluate(async () => (await import('./fokus-store.js')).change(s => { s.cache = []; }, false));
+    const exhausted = await context.newPage();
+    await exhausted.route('**/_fokus/ria/feed', r => r.fulfill({ body: '<rss><channel>' + [9000,9001,9002].map(id => `<item><title>Story ${id}</title><link>https://ria.ru/20260919/test-${id}.html</link></item>`).join('') + '</channel></rss>', contentType: 'text/xml' }));
+    await exhausted.route('**/_fokus/ria/home', r => r.fulfill({ body: '<div class="cell"><a href="https://ria.ru/20260919/test-9000.html"></a><span class="cell-video__title">Story 9000</span></div>' }));
+    const failedIds = [];
+    await exhausted.route('**/_fokus/ria/article/**', r => {
+      if (r.request().url().endsWith('test-9000.html')) return r.fulfill({ body: article });
+      failedIds.push(r.request().url());
+      return r.fulfill({ status: 503, body: '' });
+    });
+    await exhausted.goto(origin + '/#/article/20260919/test-9000.html');
+    await exhausted.locator('.article-body').waitFor();
+    await exhausted.locator('#next-article').scrollIntoViewIfNeeded();
+    await exhausted.locator('#next-article a[href="#/latest"]').waitFor();
+    assert.equal(await exhausted.locator('#next-article .error-text').count(), 0);
+    assert.equal(failedIds.length, 2);
+    assert.equal(new Set(failedIds).size, 2, 'Each failed candidate is tried only once');
+    await exhausted.close();
     await stream.goto(origin + "/#/home");
     await stream.locator(".lead-story").waitFor();
     assert.equal(await stream.locator(".continued-story").count(), 0);

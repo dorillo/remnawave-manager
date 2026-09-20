@@ -164,7 +164,7 @@ const html = `<p><b>Земля</b> — третья планета Солнеч�
   );
   await page.screenshot({ path: "/tmp/svod-mobile-navigation.png" });
   await page.getByRole("link", { name: "Моя библиотека", exact: true }).click();
-  await page.locator(".empty .primary").waitFor();
+  await page.locator(".guest-prompt .primary").waitFor();
   assert.equal(
     await page
       .locator("#app")
@@ -177,7 +177,7 @@ const html = `<p><b>Земля</b> — третья планета Солнеч�
       .getAttribute("href"),
     "#/library",
   );
-  await page.locator(".empty .primary").click();
+  await page.locator(".guest-prompt .primary").click();
   await page.locator(".auth-switch").click();
   const formButtons = await page.evaluate(() =>
     [
@@ -311,6 +311,11 @@ const html = `<p><b>Земля</b> — третья планета Солнеч�
     .getByRole("button", { name: "Сохранить", exact: true })
     .click();
   await page.getByLabel("Космос").check();
+  assert.equal(await page.locator('.collection-choice:has(input:checked)').count(), 1);
+  await page.setViewportSize({ width: 320, height: 900 });
+  assert.equal(await page.locator('dialog').evaluate(node => node.scrollWidth > node.clientWidth), false);
+  await page.screenshot({ path: '/tmp/svod-collection-picker.png' });
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await page
     .locator("dialog")
     .getByRole("button", { name: "Сохранить", exact: true })
@@ -339,6 +344,15 @@ const html = `<p><b>Земля</b> — третья планета Солнеч�
     .getByRole("button", { name: "Переименовать", exact: true })
     .waitFor();
   await page.screenshot({ path: "/tmp/svod-library-collections.png" });
+  await page.setViewportSize({ width: 320, height: 850 });
+  const searchBox = await page.locator('.library-controls input').boundingBox();
+  const sortBox = await page.locator('.library-controls select').boundingBox();
+  assert.ok(sortBox.y >= searchBox.y + searchBox.height, 'Library search and sort use separate mobile rows');
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  await page.waitForTimeout(350);
+  await page.screenshot({ path: '/tmp/svod-library-mobile.png' });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+
   await page
     .locator(".personal-item")
     .getByRole("button", { name: "Удалить", exact: true })
@@ -404,7 +418,7 @@ const html = `<p><b>Земля</b> — третья планета Солнеч�
   await page.getByRole("button", { name: "Sign in", exact: true }).waitFor();
   await page.getByRole("link", { name: "My library", exact: false }).click();
   await page
-    .getByRole("heading", { name: "Sign in to build your library" })
+    .getByRole("heading", { name: "Your library is waiting" })
     .waitFor();
   // A second local account must never inherit the first account's library.
   await page

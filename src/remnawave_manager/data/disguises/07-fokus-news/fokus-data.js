@@ -342,7 +342,7 @@ function article(raw, ref) {
           type: "text",
           html: `<${type}>${safeInline(heading)}</${type}>`,
         });
-    } else if (type === "image" || type === "media-image") {
+    } else if (["image", "media-image", "photo-site"].includes(type)) {
       const src = image(x);
       if (src)
         blocks.push({
@@ -353,6 +353,9 @@ function article(raw, ref) {
             x.querySelector("img")?.getAttribute("alt") ||
             "",
         });
+    } else if (type === "list") {
+      const list = x.querySelector('ul, ol');
+      if (list) blocks.push({ type: 'text', html: safeInline(list) });
     } else if (type === "photolenta") {
       for (const item of x.querySelectorAll(".article__photo-item")) {
         const src = image(item);
@@ -377,10 +380,13 @@ function article(raw, ref) {
             image(x),
           ),
         );
-    } else if (["video", "embed", "media-video", "media-embed"].includes(type))
-      blocks.push({ type: "unsupported" });
+    } else if (["video", "embed", "media-video", "media-embed"].includes(type)) {
+      const video = x.querySelector('video');
+      const poster = media(video?.getAttribute('poster')) || image(x);
+      if (poster) blocks.push({ type: 'videoPreview', src: poster, caption: video?.getAttribute('data-title') || text(x, '.media__title, .white-longread__media-description') });
+    }
   }
-  if (!blocks.length) throw new Error("schema");
+  if (!blocks.length) throw new Error("articleFormat");
   const meta = (name) =>
     d.querySelector(`meta[property="${name}"]`)?.getAttribute("content") || "";
   return {
@@ -600,7 +606,7 @@ export async function load(
     default:
       throw new Error("invalid");
   }
-  const key = path;
+  const key = kind === 'article' ? 'article-v2:' + path : path;
   let old = await cached(key);
   if (old) {
     const v = old.value;
