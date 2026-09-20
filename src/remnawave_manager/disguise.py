@@ -11,7 +11,9 @@ from importlib.resources import files
 from pathlib import Path
 
 from .backup import create_backup
+from .compose import inspect_compose
 from .errors import ManagerError, TransactionError, ValidationError
+from .integrity import configuration_drift
 from .models import Inventory, ManagedFile
 from .nginx import activate_nginx_config, nginx_is_running
 from .runner import (
@@ -24,18 +26,10 @@ from .runner import (
     sha256_file,
 )
 from .site_assets import revision, versioned
-from .site_policy import (
-    upgrade_answers_policy,
-    upgrade_aster_policy,
-    upgrade_morrow_policy,
-    upgrade_northline_policy,
-    upgrade_svod_policy,
-    upgrade_loop_policy,
-    upgrade_fokus_policy,
-)
+from .site_config import upgrade_site_config
 from .state import StateStore, utc_now
 
-DISGUISE_TEMPLATE_COUNT = 10
+DISGUISE_TEMPLATE_COUNT = 7
 
 
 def template_catalog() -> list[dict[str, str]]:
@@ -99,6 +93,8 @@ def copy_template(template_id: str, target: Path) -> None:
     shared = Path(str(files("remnawave_manager").joinpath("data/disguises/shared")))
     if not shared.is_dir():
         raise ValidationError("Общие файлы маскировочных шаблонов не найдены.")
+    _assert_trusted_site_directories(source)
+    _assert_trusted_site_directories(shared)
     if target.exists() or target.is_symlink():
         raise ValidationError(f"Целевой каталог уже существует: {target}")
     target.mkdir(mode=0o755)
@@ -116,6 +112,10 @@ def copy_template(template_id: str, target: Path) -> None:
         for item, relative in resources:
             if item.is_symlink():
                 raise ValidationError("Шаблон не может содержать символические ссылки.")
+            if os.name == "posix":
+                info = item.lstat()
+                if info.st_uid not in {0, os.geteuid()} or stat.S_IMODE(info.st_mode) & 0o022:
+                    raise ValidationError(f"Небезопасный владелец или права элемента шаблона: {item}")
             destination = target / relative
             if item.is_dir():
                 destination.mkdir(parents=True, exist_ok=True, mode=0o755)
@@ -232,26 +232,20 @@ def _validate_site_inventory(inventory: Inventory, target: Path) -> None:
         )
 
 
-def _aster_policy_changes(
+def _site_policy_changes(
     inventory: Inventory,
-    *,
-    morrow: bool = False,
-    answers: bool = False,
-    svod: bool = False,
-    loop: bool = False,
-    fokus: bool = False,
-    northline: bool = False,
+    template_id: str,
+    site_roots: set[str],
 ) -> list[tuple[Path, str, str, int]]:
-    """Prepare only known CSP upgrades, and only for unchanged managed nginx files."""
+    """Prepare scoped upgrades only for unchanged managed nginx files."""
     changes: list[tuple[Path, str, str, int]] = []
+    matched = 0
     nginx_roots = [Path(value).resolve() for value in inventory.nginx_files]
     install_root = Path(inventory.install_dir).resolve()
     for item in inventory.managed_files:
         path = Path(item.path)
         resolved = path.resolve()
         if not any(resolved == root or root in resolved.parents for root in nginx_roots):
-            continue
-        if path.suffix != ".conf":
             continue
         if install_root not in resolved.parents or path.is_symlink():
             raise ValidationError(f"Небезопасный путь конфигурации nginx: {path}")
@@ -263,23 +257,40 @@ def _aster_policy_changes(
             raise ValidationError(f"Конфигурация nginx изменена после adoption: {path}")
         # Decode bytes directly so rollback preserves CRLF as well as LF.
         old = snapshot.data.decode("utf-8")
-        if fokus:
-            new = upgrade_fokus_policy(old)
-        elif northline:
-            new = upgrade_northline_policy(old)
-        elif loop:
-            new = upgrade_loop_policy(old)
-        elif svod:
-            new = upgrade_svod_policy(old)
-        elif answers:
-            new = upgrade_answers_policy(old)
-        elif morrow:
-            new = upgrade_morrow_policy(old)
-        else:
-            new = upgrade_aster_policy(old)
+        new, count = upgrade_site_config(old, template_id, site_roots)
+        matched += count
         if old != new:
             changes.append((path, old, new, snapshot.mode))
+    if not matched:
+        raise ValidationError(
+            "Не найден управляемый server nginx с root выбранного сайта. "
+            "Проверьте bind mounts, root и inventory перед заменой."
+        )
     return changes
+
+
+def _site_roots(runner: Runner, inventory: Inventory, target: Path) -> set[str]:
+    compose = inspect_compose(runner, Path(inventory.compose_file),
+                              Path(inventory.env_file) if inventory.env_file else None)
+    service = compose["services"].get(inventory.components["nginx"].service, {})
+    roots = {
+        volume["target"].rstrip("/")
+        for volume in service.get("volumes", [])
+        if isinstance(volume, dict) and volume.get("type") == "bind"
+        and isinstance(volume.get("source"), str)
+        and Path(volume["source"]).resolve() == target
+        and isinstance(volume.get("target"), str)
+        and volume["target"].startswith("/var/www/")
+    }
+    if not roots:
+        raise ValidationError("Bind mount сайта не найден в текущем nginx-сервисе; повторите adoption после проверки Compose.")
+    return roots
+
+
+def _validate_configuration(inventory: Inventory) -> None:
+    drift = configuration_drift(inventory)
+    if drift:
+        raise ValidationError("Конфигурация изменена после adoption: " + "; ".join(drift))
 
 
 def apply_template(
@@ -297,19 +308,9 @@ def apply_template(
     _assert_trusted_site_directories(target)
     _validate_site_inventory(inventory, target)
     _template(template_id)
-    policy_changes = (
-        _aster_policy_changes(
-            inventory,
-            morrow=template_id == "03-morrow-coffee",
-            answers=template_id == "04-signal-works",
-            svod=template_id == "05-field-notes",
-            loop=template_id == "06-loop-archive",
-            fokus=template_id == "07-fokus-news",
-            northline=template_id == "01-northline",
-        )
-        if template_id in {"01-northline", "02-aster-observatory", "03-morrow-coffee", "04-signal-works", "05-field-notes", "06-loop-archive", "07-fokus-news"}
-        else []
-    )
+    _validate_configuration(inventory)
+    site_roots = _site_roots(runner, inventory, target)
+    policy_changes = _site_policy_changes(inventory, template_id, site_roots)
     create_backup(runner, store, reason=f"pre-disguise-{template_id}", retention=None)
     parent = target.parent
     staging = parent / f".{target.name}.rwm-new-{uuid.uuid4().hex}"
@@ -329,19 +330,10 @@ def apply_template(
         # the destructive directory rename so such changes are never discarded.
         _assert_trusted_site_directories(target)
         _validate_site_inventory(inventory, target)
-        current_policy_changes = (
-            _aster_policy_changes(
-                inventory,
-                morrow=template_id == "03-morrow-coffee",
-                answers=template_id == "04-signal-works",
-                svod=template_id == "05-field-notes",
-                loop=template_id == "06-loop-archive",
-                fokus=template_id == "07-fokus-news",
-                northline=template_id == "01-northline",
-            )
-            if template_id in {"01-northline", "02-aster-observatory", "03-morrow-coffee", "04-signal-works", "05-field-notes", "06-loop-archive", "07-fokus-news"}
-            else []
-        )
+        _validate_configuration(inventory)
+        if _site_roots(runner, inventory, target) != site_roots:
+            raise ValidationError("Bind mount сайта изменился во время подготовки шаблона.")
+        current_policy_changes = _site_policy_changes(inventory, template_id, site_roots)
         if policy_changes != current_policy_changes:
             raise ValidationError("Конфигурация nginx изменилась во время подготовки шаблона.")
         was_running = nginx_is_running(runner, inventory)

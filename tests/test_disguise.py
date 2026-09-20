@@ -12,6 +12,13 @@ from remnawave_manager.runner import Result, Runner, sha256_file
 
 
 class DisguiseInventoryTests(unittest.TestCase):
+    def setUp(self):
+        # These cases isolate filesystem rollback; nginx integration is tested separately.
+        for name, result in (("_site_roots", {"/var/www/html"}), ("_site_policy_changes", [])):
+            patcher = mock.patch("remnawave_manager.disguise." + name, return_value=result)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
     def test_refresh_replaces_only_site_hashes_and_preserves_secrets(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

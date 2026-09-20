@@ -47,8 +47,9 @@ from .runner import (
     sha256_file,
 )
 from .state import StateStore
-from .site_policy import NODE_CSP, upgrade_northline_policy
-from .site_assets import revision, versioned
+from .site_policy import NODE_CSP
+from .site_config import upgrade_site_config
+from .disguise import copy_template, template_catalog
 
 POSTGRES_IMAGE = (
     "postgres:18.4@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636"
@@ -1065,10 +1066,10 @@ def install_node(
             install_dir=directory,
             stop_nginx_for_http01=False,
         )
-        northline = _install_node_site(options.site_source, directory / "site")
+        template_id = _install_node_site(options.site_source, directory / "site")
         nginx_config = render_node_nginx(domain=domain, certificate=certificate)
-        if northline:
-            nginx_config = upgrade_northline_policy(nginx_config)
+        if template_id:
+            nginx_config, _ = upgrade_site_config(nginx_config, template_id, {"/var/www/html"})
         atomic_write_text(env_path, render_node_env(options.secret_key), mode=0o600)
         atomic_write_text(
             nginx_path,
@@ -1718,20 +1719,19 @@ def _validate_site_source(source: Path) -> None:
         raise ValidationError("В шаблоне маскировочного сайта отсутствует index.html.")
 
 
-def _install_node_site(source: Path, target: Path) -> bool:
-    """Install static files and recognize the bundled Northline proxy contract."""
+def _install_node_site(source: Path, target: Path) -> str | None:
+    """Use the same assets and proxy contract for fresh installs and replacements."""
+    bundled = Path(str(files("remnawave_manager").joinpath("data/disguises")))
+    for template in template_catalog():
+        if source.resolve() == (bundled / template["id"]).resolve():
+            # Installation prepares an empty site directory before obtaining TLS.
+            # rmdir deliberately refuses a nonempty directory or a symlink.
+            if target.exists() or target.is_symlink():
+                target.rmdir()
+            copy_template(template["id"], target)
+            return template["id"]
     _install_static_site(source, target)
-    northline = Path(str(files("remnawave_manager").joinpath("data/disguises/01-northline")))
-    if source.resolve() != northline.resolve():
-        return False
-    shared = target / "shared"
-    shared.mkdir(exist_ok=True, mode=0o755)
-    _install_static_site(northline.parent / "shared", shared)
-    asset_revision = revision(northline, northline.parent / "shared")
-    for asset in target.rglob("*"):
-        if asset.is_file() and asset.suffix in {".html", ".js"}:
-            atomic_write_text(asset, versioned(asset.read_bytes(), asset.suffix, asset_revision).decode(), mode=0o644)
-    return True
+    return None
 
 
 def _install_static_site(source: Path, target: Path) -> None:

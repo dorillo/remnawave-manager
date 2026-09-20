@@ -88,6 +88,7 @@ class PackagingTests(unittest.TestCase):
         manifest = (PROJECT_ROOT / "MANIFEST.in").read_text(encoding="utf-8")
 
         self.assertIn("include install.sh", manifest.splitlines())
+        self.assertIn("recursive-include scripts *.py *.cjs", manifest.splitlines())
         self.assertIn("prune tests", manifest.splitlines())
         self.assertIn("global-exclude *.py[cod]", manifest.splitlines())
         self.assertTrue((PROJECT_ROOT / "install.sh").is_file())
@@ -132,7 +133,7 @@ class PackagingTests(unittest.TestCase):
         )
         self.assertTrue((PROJECT_ROOT / "docs/certificates.md").is_file())
 
-    def test_packaged_resources_cover_manifest_notices_and_ten_templates(self) -> None:
+    def test_packaged_resources_cover_manifest_notices_and_seven_templates(self) -> None:
         package = files("remnawave_manager")
         self.assertTrue(package.joinpath("data/compatibility.json").is_file())
         self.assertTrue(package.joinpath("data/licenses/wgcf-MIT.txt").is_file())
@@ -154,9 +155,6 @@ class PackagingTests(unittest.TestCase):
                 "05-field-notes",
                 "06-loop-archive",
                 "07-fokus-news",
-                "08-vector-docs",
-                "09-pulse-monitor",
-                "10-dev-circle",
             ],
         )
         for template in templates:

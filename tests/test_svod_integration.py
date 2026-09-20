@@ -20,6 +20,11 @@ from remnawave_manager.site_policy import (
 
 
 class SvodIntegrationTests(unittest.TestCase):
+    def setUp(self):
+        patcher = mock.patch("remnawave_manager.disguise._site_roots", return_value={"/var/www/html"})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_preview_only_allows_fixed_read_operations(self) -> None:
         script = Path(__file__).resolve().parents[1] / "scripts/preview_svod.py"
         spec = importlib.util.spec_from_file_location("preview_svod", script)
@@ -67,7 +72,7 @@ class SvodIntegrationTests(unittest.TestCase):
                 index = site / "index.html"
                 index.write_text("original")
                 config = root / "nginx.conf"
-                original = f'add_header Content-Security-Policy "{ASTER_NODE_CSP}" always;\n'.encode()
+                original = f'server {{\n root /var/www/html;\n add_header Content-Security-Policy "{ASTER_NODE_CSP}" always;\n}}\n'.encode()
                 config.write_bytes(original)
                 inventory = Inventory(
                     schema_version=1, role="node", install_dir=str(root),

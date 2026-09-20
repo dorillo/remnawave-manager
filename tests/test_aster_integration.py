@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from remnawave_manager.disguise import _aster_policy_changes, apply_template, copy_template
+from remnawave_manager.disguise import _site_policy_changes, apply_template, copy_template
 from remnawave_manager.errors import TransactionError, ValidationError
 from remnawave_manager.models import Component, Inventory, ManagedFile
 from remnawave_manager.runner import sha256_file
@@ -19,6 +19,11 @@ from remnawave_manager.site_policy import (
 
 
 class AsterIntegrationTests(unittest.TestCase):
+    def setUp(self):
+        patcher = mock.patch("remnawave_manager.disguise._site_roots", return_value={"/var/www/html"})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_metadata_proxy_is_fixed_and_installed(self):
         from remnawave_manager.aster_proxy import metadata_upstream
         from remnawave_manager.site_policy import ASTER_METADATA_PROXY
@@ -86,7 +91,7 @@ class AsterIntegrationTests(unittest.TestCase):
         index = site / "index.html"
         index.write_text("original", encoding="utf-8")
         config = root / "nginx.conf"
-        config.write_text(f'add_header Content-Security-Policy "{LEGACY_NODE_CSP}" always;\n', encoding="utf-8")
+        config.write_text(f'server {{\n root /var/www/html;\n add_header Content-Security-Policy "{LEGACY_NODE_CSP}" always;\n}}\n', encoding="utf-8")
         inventory = Inventory(
             schema_version=1, role="node", install_dir=str(root), compose_file=str(root / "compose.yml"),
             env_file=None, webserver="nginx", nginx_files=[str(config)], site_dirs=[str(site)],
@@ -121,7 +126,7 @@ class AsterIntegrationTests(unittest.TestCase):
             inventory, _site, config = self.fixture(Path(temporary))
             config.write_text("operator edit", encoding="utf-8")
             with self.assertRaises(ValidationError):
-                _aster_policy_changes(inventory)
+                _site_policy_changes(inventory, "02-aster-observatory", {"/var/www/html"})
             self.assertEqual(config.read_text(), "operator edit")
 
 

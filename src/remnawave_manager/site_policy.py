@@ -483,3 +483,14 @@ SVOD_WIKIPEDIA_PROXY = harden_proxy(SVOD_WIKIPEDIA_PROXY, 'svod')
 _PROXY_REVISIONS.extend(zip(_raw_proxies, (
     ASTER_SEARCH_PROXY, ANSWERS_MAIL_PROXY, MORROW_YAPPY_PROXY, SVOD_WIKIPEDIA_PROXY,
 )))
+
+
+TEMPLATE_POLICIES = {
+    "01-northline": upgrade_northline_policy,
+    "02-aster-observatory": upgrade_aster_policy,
+    "03-morrow-coffee": upgrade_morrow_policy,
+    "04-signal-works": upgrade_answers_policy,
+    "05-field-notes": upgrade_svod_policy,
+    "06-loop-archive": upgrade_loop_policy,
+    "07-fokus-news": upgrade_fokus_policy,
+}

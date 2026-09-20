@@ -20,6 +20,11 @@ from remnawave_manager.site_policy import (
 
 
 class AnswersIntegrationTests(unittest.TestCase):
+    def setUp(self):
+        patcher = mock.patch("remnawave_manager.disguise._site_roots", return_value={"/var/www/html"})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_preview_routes_are_narrow_and_read_only(self) -> None:
         script = Path(__file__).parents[1] / "scripts/preview_answers.py"
         spec = importlib.util.spec_from_file_location("preview_answers", script)
@@ -73,7 +78,7 @@ class AnswersIntegrationTests(unittest.TestCase):
                 index = site / "index.html"
                 index.write_text("original")
                 config = root / "nginx.conf"
-                original = f'add_header Content-Security-Policy "{ASTER_NODE_CSP}" always;\n'.encode()
+                original = f'server {{\n root /var/www/html;\n add_header Content-Security-Policy "{ASTER_NODE_CSP}" always;\n}}\n'.encode()
                 config.write_bytes(original)
                 inventory = Inventory(
                     schema_version=1, role="node", install_dir=str(root),

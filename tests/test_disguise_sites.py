@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
 import unittest
 from html.parser import HTMLParser
 from pathlib import Path
@@ -16,9 +15,6 @@ EXPECTED_IDS = (
     "05-field-notes",
     "06-loop-archive",
     "07-fokus-news",
-    "08-vector-docs",
-    "09-pulse-monitor",
-    "10-dev-circle",
 )
 
 
@@ -51,7 +47,7 @@ class SiteParser(HTMLParser):
 
 
 class DisguiseSiteTests(unittest.TestCase):
-    def test_catalog_and_directories_define_exactly_ten_sites(self) -> None:
+    def test_catalog_and_directories_define_exactly_seven_sites(self) -> None:
         catalog = json.loads((SITES_ROOT / "catalog.json").read_text(encoding="utf-8"))
         ids = tuple(item["id"] for item in catalog["templates"])
         directories = tuple(
@@ -60,8 +56,8 @@ class DisguiseSiteTests(unittest.TestCase):
 
         self.assertEqual(ids, EXPECTED_IDS)
         self.assertEqual(directories, EXPECTED_IDS)
-        self.assertEqual(len({item["name"] for item in catalog["templates"]}), 10)
-        self.assertEqual(len({item["description"] for item in catalog["templates"]}), 10)
+        self.assertEqual(len({item["name"] for item in catalog["templates"]}), 7)
+        self.assertEqual(len({item["description"] for item in catalog["templates"]}), 7)
 
     def test_sites_are_self_contained_and_hardened(self) -> None:
         titles: set[str] = set()
@@ -97,8 +93,6 @@ class DisguiseSiteTests(unittest.TestCase):
                     self.assertNotIn("site-runtime.js", html)
                     self.assertIn('rel="icon" href="favicon.svg"', html)
                     self.assertTrue((site / "favicon.svg").is_file())
-                else:
-                    self.assertIn("connect-src 'none'", html)
                 self.assertEqual(parser.inline_scripts, 0)
                 self.assertEqual([asset.split("?", 1)[0] for asset in parser.assets].count("styles.css"), 1)
                 self.assertEqual([asset.split("?", 1)[0] for asset in parser.assets].count("app.js"), 1)
@@ -118,18 +112,12 @@ class DisguiseSiteTests(unittest.TestCase):
                 self.assertNotIn(title, titles)
                 titles.add(title)
 
-    def test_sites_have_distinct_document_structures(self) -> None:
-        fingerprints: set[tuple[int, ...]] = set()
-        tags = ("aside", "article", "section", "table", "figure", "form", "nav")
+    def test_sites_define_module_app_shells(self) -> None:
         for template_id in EXPECTED_IDS:
-            html = (SITES_ROOT / template_id / "index.html").read_text(encoding="utf-8")
-            if template_id in {"01-northline", "02-aster-observatory", "03-morrow-coffee", "04-signal-works", "05-field-notes", "06-loop-archive", "07-fokus-news"}:
-                # App shells render their distinct structures in browser tests.
+            with self.subTest(template=template_id):
+                html = (SITES_ROOT / template_id / "index.html").read_text(encoding="utf-8")
                 self.assertIn('data-app="', html)
-                continue
-            fingerprint = tuple(len(re.findall(fr"<{tag}(?:\s|>)", html)) for tag in tags)
-            self.assertNotIn(fingerprint, fingerprints, template_id)
-            fingerprints.add(fingerprint)
+                self.assertNotIn("site-runtime.js", html)
 
     def test_sites_start_anonymous_and_define_restricted_login(self) -> None:
         authenticated_state_markers = (
@@ -159,11 +147,6 @@ class DisguiseSiteTests(unittest.TestCase):
                     self.assertIn('data-app="loop"', html)
                 elif template_id == "07-fokus-news":
                     self.assertIn('data-app="fokus"', html)
-                else:
-                    self.assertIn("data-auth", html)
-                    self.assertIn('type="email"', html)
-                    self.assertIn('type="password"', html)
-                    self.assertIn("Войти", html)
                 # A public route title does not imply an authenticated interface.
                 body = html.split("</head>", 1)[-1]
                 for marker in authenticated_state_markers:

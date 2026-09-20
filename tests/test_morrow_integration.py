@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from remnawave_manager.disguise import _aster_policy_changes, apply_template, copy_template
+from remnawave_manager.disguise import _site_policy_changes, apply_template, copy_template
 from remnawave_manager.errors import TransactionError, ValidationError
 from remnawave_manager.models import Component, Inventory, ManagedFile
 from remnawave_manager.runner import sha256_file
@@ -23,6 +23,11 @@ from remnawave_manager.site_policy import (
 
 
 class MorrowIntegrationTests(unittest.TestCase):
+    def setUp(self):
+        patcher = mock.patch("remnawave_manager.disguise._site_roots", return_value={"/var/www/html"})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_preview_proxy_accepts_only_known_read_routes(self) -> None:
         script = Path(__file__).parents[1] / "scripts" / "preview_morrow.py"
         spec = importlib.util.spec_from_file_location("preview_morrow", script)
@@ -99,7 +104,7 @@ class MorrowIntegrationTests(unittest.TestCase):
                 index = site / 'index.html'
                 index.write_text('original', encoding='utf-8')
                 config = root / 'nginx.conf'
-                old = f'add_header Content-Security-Policy "{ASTER_NODE_CSP}" always;\r\n'.encode()
+                old = f'server {{\r\n root /var/www/html;\r\n add_header Content-Security-Policy "{ASTER_NODE_CSP}" always;\r\n}}\r\n'.encode()
                 config.write_bytes(old)
                 inventory = Inventory(
                     schema_version=1, role='node', install_dir=str(root),
@@ -130,4 +135,4 @@ class MorrowIntegrationTests(unittest.TestCase):
                         self.assertEqual(next(f.sha256 for f in saved.managed_files if f.path == str(config)), sha256_file(config))
                         config.write_text('operator edit', encoding='utf-8')
                         with self.assertRaises(ValidationError):
-                            _aster_policy_changes(saved, morrow=True)
+                            _site_policy_changes(saved, "03-morrow-coffee", {"/var/www/html"})

@@ -1,5 +1,4 @@
 include install.sh
-include scripts/preview_svod.py
-include scripts/preview_northline.py
+recursive-include scripts *.py *.cjs
 prune tests
 global-exclude *.py[cod]
