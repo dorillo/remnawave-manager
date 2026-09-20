@@ -195,6 +195,41 @@ class CliParserTests(unittest.TestCase):
 
 
 class CliDispatchTests(unittest.TestCase):
+    def test_inventory_displays_site_separately_and_tracks_template_changes(self) -> None:
+        site = Path(self.temporary.name) / "site"
+        site.mkdir()
+        current = inventory()
+        current.site_dirs = [str(site)]
+        marker = site / ".rwm-template.json"
+        cases = [
+            (None, "собственный сайт (без метки шаблона)"),
+            ('{"schema_version": 1, "template": "01-northline"}', "01-northline"),
+            ('{"schema_version": 1, "template": "03-morrow-coffee"}', "03-morrow-coffee"),
+            ("broken", "метка недоступна или повреждена"),
+            ("[]", "некорректная метка"),
+        ]
+        for contents, expected in cases:
+            with self.subTest(contents=contents):
+                if contents is not None:
+                    marker.write_text(contents, encoding="utf-8")
+                self.stdout.seek(0)
+                self.stdout.truncate()
+                with mock.patch(
+                    "remnawave_manager.cli.StateStore.load_inventory", return_value=current
+                ):
+                    self.assertEqual(self.run_main(["inventory"]), 0)
+                output = self.stdout.getvalue()
+                self.assertIn("Сайт-заглушка: ", output)
+                self.assertIn(expected, output)
+                self.assertIn(str(site), output)
+
+    def test_inventory_displays_absent_site(self) -> None:
+        with mock.patch(
+            "remnawave_manager.cli.StateStore.load_inventory", return_value=inventory()
+        ):
+            self.assertEqual(self.run_main(["inventory"]), 0)
+        self.assertIn("Сайт-заглушка: не обнаружен", self.stdout.getvalue())
+
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)

@@ -209,6 +209,53 @@ server {
             )
             self.assertTrue(features["xhttp_stream_separation"])
 
+    def test_site_asset_proxies_do_not_imply_yandex_cdn(self) -> None:
+        snippets = [
+            "location /images/ { proxy_pass https://cdn-st.yappy.media; }",
+            "location /images/ { proxy_pass https://avatars.mds.yandex.net; }",
+            "# Yandex CDN is not configured here",
+            "# proxy_set_header X-Yandex-CDN yes;",
+            'add_header Content-Security-Policy "img-src https://yandex.ru";',
+            'return 200 "proxy_set_header X-Yandex-CDN yes;";',
+            "upstream unused_yandex { server 127.0.0.1:2092; }",
+            "upstream yandex_images { server avatars.mds.yandex.net:443; }\n"
+            "location /images/ {\n    proxy_pass https://yandex_images;\n}",
+        ]
+        with tempfile.TemporaryDirectory() as temporary:
+            config = Path(temporary) / "nginx.conf"
+            for snippet in snippets:
+                with self.subTest(snippet=snippet):
+                    config.write_text(
+                        "server {\n"
+                        "    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;\n"
+                        "    proxy_set_header X-Real-IP $proxy_protocol_addr;\n"
+                        + snippet + "\n}\n",
+                        encoding="utf-8",
+                    )
+                    sockets, features = _nginx_features([config])
+                    self.assertFalse(features["yandex_cdn"])
+                    self.assertTrue(features["xhttp_stream_separation"])
+                    self.assertEqual(sockets, ["/dev/shm/nginx.sock"])
+
+    def test_explicit_yandex_cdn_markers_are_detected(self) -> None:
+        snippets = [
+            "server { proxy_set_header X-Yandex-CDN yes; }",
+            'server { proxy_set_header X-Yandex-CDN "yes"; }',
+            "upstream xray_yandex_xhttp { server 127.0.0.1:2092; }\n"
+            "server {\n    proxy_pass http://xray_yandex_xhttp;\n}\n",
+            # Both providers may be configured on the same node.
+            "upstream beeline_xhttp { server 127.0.0.1:7443; }\n"
+            "server {\n    proxy_pass http://beeline_xhttp;\n"
+            "    proxy_set_header X-Yandex-CDN yes;\n}\n",
+        ]
+        with tempfile.TemporaryDirectory() as temporary:
+            config = Path(temporary) / "nginx.conf"
+            for snippet in snippets:
+                with self.subTest(snippet=snippet):
+                    config.write_text(snippet, encoding="utf-8")
+                    _, features = _nginx_features([config])
+                    self.assertTrue(features["yandex_cdn"])
+
     def test_site_bind_root_symlink_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

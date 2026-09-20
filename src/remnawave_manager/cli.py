@@ -46,7 +46,7 @@ from .certificates import (
 from .compat import component_target
 from .compose import inspect_compose
 from .diagnose import repair_permissions, run_diagnostics
-from .disguise import DISGUISE_TEMPLATE_COUNT, apply_template, template_catalog
+from .disguise import DISGUISE_TEMPLATE_COUNT, apply_template, installed_site_description, template_catalog
 from .errors import (
     ManagerError,
     NodeSecretValidationError,
@@ -1013,6 +1013,13 @@ def _show_inventory(context: CliContext, inventory: Inventory) -> None:
     context.write(f"Роль: {inventory.role}")
     context.write(f"Каталог: {inventory.install_dir}")
     context.write(f"Compose: {inventory.compose_file}")
+    if inventory.site_dirs:
+        for directory in inventory.site_dirs:
+            context.write(
+                f"Сайт-заглушка: {installed_site_description(Path(directory))}; {directory}"
+            )
+    else:
+        context.write("Сайт-заглушка: не обнаружен")
     context.write("Компоненты:")
     for name, component in sorted(inventory.components.items()):
         image = (

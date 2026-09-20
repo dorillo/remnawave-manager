@@ -77,6 +77,27 @@ def template_catalog() -> list[dict[str, str]]:
     return normalized
 
 
+def installed_site_description(directory: Path) -> str:
+    if not directory.is_dir() or directory.is_symlink():
+        return "каталог недоступен"
+    marker = directory / ".rwm-template.json"
+    if not marker.exists() and not marker.is_symlink():
+        return "собственный сайт (без метки шаблона)"
+    try:
+        snapshot = read_stable_regular_file(
+            marker, max_size=16 * 1024, label="Метка шаблона сайта"
+        )
+        metadata = json.loads(snapshot.data.decode("utf-8"))
+        if not isinstance(metadata, dict) or metadata.get("schema_version") != 1:
+            return "шаблон не определён (некорректная метка)"
+        for template in template_catalog():
+            if template["id"] == metadata.get("template"):
+                return f"{template['name']} ({template['id']})"
+        return "неизвестный шаблон"
+    except (OSError, UnicodeError, ValueError, ManagerError):
+        return "шаблон не определён (метка недоступна или повреждена)"
+
+
 def _template(template_id: str) -> Path:
     available = {item["id"] for item in template_catalog()}
     if template_id not in available:

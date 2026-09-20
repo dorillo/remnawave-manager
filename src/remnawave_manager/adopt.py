@@ -11,6 +11,7 @@ from .compose import inspect_compose
 from .errors import ValidationError
 from .journal import TransactionJournal
 from .models import Component, Inventory, ManagedFile, Role
+from .nginx import _structural_text
 from .runner import (
     Runner,
     read_stable_regular_file,
@@ -271,10 +272,20 @@ def _nginx_features(paths: list[Path]) -> tuple[list[str], dict[str, bool]]:
     sockets = sorted(sockets)
     beeline_post = _nginx_uses_upstream(combined, "beeline_xhttp")
     beeline_get = _nginx_uses_upstream(combined, "xray_beeline_xhttp")
-    yandex = "yandex" in lowered or (
-        "proxy_protocol_addr" in combined
-        and "cdn" in lowered
-        and not (beeline_get or beeline_post)
+    # Site asset proxies also contain CDN hostnames and can share a server
+    # using PROXY protocol. Neither is evidence of a Yandex CDN origin.
+    # Ignore comments and quoted site content when looking for explicit markers.
+    structural = _structural_text(combined)
+    yandex = bool(re.search(
+        r"(?:^|[;{}])\s*proxy_set_header\s+X-Yandex-CDN\s+[^;{}]+;",
+        structural,
+        re.IGNORECASE,
+    )) or any(
+        _nginx_uses_upstream(structural, name)
+        for name in re.findall(
+            r"(?mi)^\s*upstream\s+(\w*yandex\w*)\s*\{", structural
+        )
+        if "xhttp" in name.lower() or "cdn" in name.lower()
     )
     features = {
         "xhttp_stream_separation": bool(sockets) or "xhttp" in lowered,
