@@ -84,6 +84,16 @@ const root = path.resolve(
         });
       });
     }
+    const online = await article('<meta property="og:title" content="Онлайн-репортаж"><div class="article m-white_online"><div class="online__item-time">10:04</div><div class="online__item-text">Новая <strong>запись</strong><script>bad()</script></div><div class="article__block" data-type="list"><ul><li>Итог</li></ul></div></div>');
+    assert.ok(online.blocks.some(block => block.html?.includes('Новая <strong>запись</strong>')));
+    assert.ok(online.blocks.some(block => block.html === '<h3>10:04</h3>'));
+    assert.ok(online.blocks.every(block => !block.html?.includes('<script')));
+    if (process.env.FOKUS_ONLINE_FIXTURE) {
+      const live = await article(await fs.readFile(process.env.FOKUS_ONLINE_FIXTURE, 'utf8'));
+      assert.ok(live.blocks.length > 20, 'Real online report parses its timeline');
+      console.log('Online report blocks:', live.blocks.length);
+    }
+
     const img = "https://cdnn21.img.ria.ru/images/123_80.jpg";
     let parsed = await article(
       `<meta property="og:title" content="Тестовый лонгрид"><div class="article__body m-longread"><div class="white-longread__block white-longread__header" data-type="header"><div class="white-longread__header-author">Автор</div><div class="white-longread__header-media"><img src="data:image/svg+xml,placeholder" data-src="${img}"></div></div><div class="white-longread__block" data-type="text"><div class="white-longread__text-body" style="color:red">Первый абзац <strong>лонгрида</strong></div></div><div class="white-longread__block" data-type="h3"><div class="white-longread__width">Подзаголовок</div></div><div class="white-longread__block" data-type="media-image"><img src="data:image/svg+xml,placeholder" data-src="${img}"><div class="white-longread__media-description">Подпись</div></div><div class="white-longread__block" data-type="text"><div class="white-longread__text-body">Конец статьи</div></div></div>`,

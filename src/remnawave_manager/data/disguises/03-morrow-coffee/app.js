@@ -1170,7 +1170,9 @@ function settingsPage() {
     el("div", { class: "page-container settings-page" }, content),
   );
 }
+let sessionError = null;
 async function route() {
+  if (sessionError) { main.replaceChildren(errorView(sessionError, restoreAccount)); return; }
   const version = ++routeVersion;
   routeController?.abort();
   routeController = new AbortController();
@@ -1277,16 +1279,24 @@ window.addEventListener("hashchange", route);
 window.addEventListener("pagehide", () => pauseAll());
 renderChrome();
 main.replaceChildren(el("div", { class: "empty-state" }, loadingIndicator()));
-try {
-  account = await restoreSession();
-  if (account) {
-    store = await new ProfileStore(account).load();
-    economy = store.data.economy;
+async function restoreAccount() {
+  try {
+    const restored = await restoreSession();
+    const restoredStore = restored ? await new ProfileStore(restored).load() : null;
+    account = restored;
+    store = restoredStore;
+    if (store) economy = store.data.economy;
+    sessionError = null;
+  } catch (error) {
+    sessionError = error;
   }
-} catch (e) {
-  account = null;
-  store = null;
-  notice(t(e.message));
+  await route();
 }
 if (!location.hash) history.replaceState(null, "", "#/feed");
-route();
+await restoreAccount();
+
+window.addEventListener("storage", async event => {
+  if (event.key !== "morrow:session:v1" || event.oldValue === event.newValue) return;
+  for (const dialog of document.querySelectorAll("dialog[open]")) dialog.close();
+  restoreAccount();
+});

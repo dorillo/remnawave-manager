@@ -1,5 +1,6 @@
+import { persistentSession } from '../shared/session.js';
+const activeSession = persistentSession('answers:session:v1', 'storage');
 const DB = 'answers:workspace:v1';
-const SESSION = 'answers:session:v1';
 const empty = () => ({ accounts: [], questions: [], answers: [], comments: [], votes: {}, saves: {}, snapshots: {}, version: 1 });
 const record = (value) => value && typeof value === 'object' && !Array.isArray(value);
 const records = (value) => Array.isArray(value) ? value.filter(record) : [];
@@ -61,6 +62,6 @@ export async function change(mutator) {
 }
 
 export const newId = () => crypto.randomUUID();
-export function getSession() { try { return sessionStorage.getItem(SESSION) || ''; } catch { return ''; } }
-export function setSession(id) { try { if (id) sessionStorage.setItem(SESSION, id); else sessionStorage.removeItem(SESSION); } catch {} }
+export function getSession() { return activeSession.get(); }
+export function setSession(id) { activeSession.set(id); }
 export function watch(callback) { try { const channel = new BroadcastChannel(DB); channel.onmessage = callback; return () => channel.close(); } catch { return () => {}; } }

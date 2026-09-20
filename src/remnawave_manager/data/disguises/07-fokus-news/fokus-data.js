@@ -319,13 +319,17 @@ function article(raw, ref) {
   const modified =
     raw.match(/"dateModified"\s*:\s*"([^"]+)"/)?.[1]?.trim() || "";
   const d = inert(raw),
-    body = d.querySelector(".article__body");
+    body = d.querySelector(".article__body, .article.m-white_online");
   if (!body) throw new Error("schema");
   const blocks = [],
     related = [];
   for (const x of body.querySelectorAll(
-    ".article__block, .white-longread__block",
+    ".article__block, .white-longread__block, .online__item-text, .online__item-time",
   )) {
+    if (x.matches('.online__item-text, .online__item-time')) {
+      if (x.textContent.trim()) blocks.push({ type: 'text', html: x.matches('.online__item-time') ? `<h3>${safeInline(x)}</h3>` : safeInline(x) });
+      continue;
+    }
     const type = x.getAttribute("data-type");
     if (type === "text" || type === "quote") {
       const node = x.querySelector(
@@ -606,7 +610,7 @@ export async function load(
     default:
       throw new Error("invalid");
   }
-  const key = kind === 'article' ? 'article-v2:' + path : path;
+  const key = kind === 'article' ? 'article-v3:' + path : path;
   let old = await cached(key);
   if (old) {
     const v = old.value;

@@ -430,7 +430,7 @@ let browser;
   );
   assert.equal(
     await page.locator('.comment-form-inline').getByRole('button').count(),
-    1,
+    2,
   );
   await page.getByLabel('Напишите ответ…').fill('Ответ на комментарий');
   await page.locator('.comment-form-inline button[type=submit]').click();

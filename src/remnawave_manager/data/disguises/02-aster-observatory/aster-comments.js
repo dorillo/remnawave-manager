@@ -181,6 +181,7 @@ export function comments(video, guard, signal, onUpdate = () => {}) {
           });
         },
       },
+      button('×', closeInline, { class: 'reply-editor-close', 'aria-label': t('close') }),
       replyInput,
       el('button', { type: 'submit', class: 'primary' }, t(edit ? 'save' : 'sendComment')),
     );

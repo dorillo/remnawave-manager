@@ -20,6 +20,7 @@ const sites = [
     for (const [site, brand, hash, section] of sites) {
       const context = await browser.newContext({ locale: 'ru-RU', viewport: { width: 1440, height: 1000 } });
       const page = await context.newPage(), errors = [];
+      await page.clock.setFixedTime(new Date('2037-07-15T12:00:00Z'));
       page.on('pageerror', error => errors.push(error.message));
       let release;
       const pending = new Promise(resolve => { release = resolve; });
@@ -40,6 +41,7 @@ const sites = [
         await page.locator('header').first().waitFor();
         await page.waitForFunction(brand => document.title.startsWith(brand + ' — '), brand);
         assert.ok(await page.locator('nav').count(), brand + ': navigation before data');
+        if (['Line', 'Spros'].includes(brand)) await page.getByText(`© 2037 ${brand}`, { exact: true }).waitFor();
         await page.evaluate(hash => { location.hash = hash; }, hash);
         await page.waitForFunction(() => !!document.querySelector('main')?.textContent.trim());
         await page.waitForFunction(([brand, section]) => document.title === `${brand} — ${section}`, [brand, section]);
@@ -67,6 +69,24 @@ const sites = [
             assert.equal(rgb.every(value => value < 80), theme === 'dark', 'Line empty state uses the current palette');
           }
           await page.screenshot({ path: `/tmp/ux-${engine}-${brand}-${theme}.png` });
+        }
+        // Multiline titles must not vertically centre the close control.
+        for (const width of [320, 1440]) {
+          await page.setViewportSize({ width, height: 900 });
+          const position = await page.evaluate(brand => {
+            const classes = { Line: 'modal-header', Aster: 'dialog-head', Morrow: '', Spros: 'modal-head', Svod: 'dialog-head', Loop: 'dialog-heading', Fokus: 'dialog-top' };
+            const dialog = document.createElement('dialog');
+            if (['Line', 'Spros'].includes(brand)) dialog.className = 'modal';
+            const header = document.createElement('header'); header.className = classes[brand];
+            const title = document.createElement('h2'); title.textContent = 'Удалить аккаунт вместе с библиотекой и историей? Это действие нельзя отменить.';
+            const close = document.createElement('button'); close.textContent = '×';
+            if (brand === 'Fokus') { header.append(close); dialog.append(header, title); }
+            else { header.append(title, close); dialog.append(header); }
+            document.body.append(dialog); dialog.showModal();
+            const result = { close: close.getBoundingClientRect().top, header: header.getBoundingClientRect().top, padding: parseFloat(getComputedStyle(header).paddingTop) };
+            dialog.close(); dialog.remove(); return result;
+          }, brand);
+          assert.ok(Math.abs(position.close - position.header - position.padding) < 2, `${brand}: top-aligned close button at ${width}`);
         }
         const indicator = await page.evaluate(async () => {
           const { loadingNode } = await import('/shared/feedback.js');

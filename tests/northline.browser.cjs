@@ -484,8 +484,8 @@ let browser;
   await page.locator('.reply-prompt textarea').focus();
   const commentField = page.getByLabel('Текст комментария').last();
   assert.equal(await commentField.getAttribute('maxlength'), '5000');
-  await page.locator('.comment-form').last().getByText('До 4 вложений', { exact: true }).waitFor();
-  await page.locator('.comment-form').last().getByText('0 / 5000', { exact: true }).waitFor();
+  assert.equal(await page.locator('.comment-form').last().getByText('До 4 вложений', { exact: true }).count(), 0);
+  assert.equal(await page.locator('.comment-form .compose-status').last().isVisible(), false);
   const commentLayout = await page.locator('.comment-form').evaluate((modal) => {
     const field = modal.querySelector('.compose-text').getBoundingClientRect();
     const action = modal.querySelector('.form-actions .button').getBoundingClientRect();
@@ -494,7 +494,7 @@ let browser;
   assert(commentLayout.actionTop > commentLayout.fieldBottom, 'Comment action must not overlap textarea');
   await page.locator('.comment-form').screenshot({ path: path.join(__dirname, '.tmp/northline-comment-editor.png') });
   await commentField.fill('Первый ответ на свою историю');
-  await page.locator('.comment-form').last().getByText('28 / 5000', { exact: true }).waitFor();
+  assert.equal(await page.locator('.comment-form .compose-status').last().isVisible(), false);
   await page.getByLabel('Добавить фото к комментарию').setInputFiles({
     name: 'comment.png', mimeType: 'image/png', buffer: png,
   });

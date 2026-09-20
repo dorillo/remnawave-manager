@@ -74,7 +74,7 @@ function toast(message) {
 }
 
 function attachmentControl() {
-  return `<label class="attachment-picker"><input name="attachments" type="file" multiple data-attachment-input>${icon('attach')}${e(t('attachFile'))}</label><span class="attachment-selection" data-attachment-selection aria-live="polite"></span><small class="attachment-hint">${e(t('attachmentHint'))}</small>`;
+  return `<label class="attachment-picker"><input name="attachments" type="file" multiple data-attachment-input>${icon('attach')}${e(t('attachFile'))}</label><span class="attachment-selection" data-attachment-selection aria-live="polite"></span>`;
 }
 function storedAttachments(value) {
   return Array.isArray(value?.attachments) ? value.attachments.filter((item) => typeof item?.name === 'string' && item.name.length <= 160 && typeof item?.data === 'string' && item.data.startsWith('data:')).slice(0, 3) : [];
@@ -85,9 +85,36 @@ function attachments(item) {
     ? `<a class="attachment-image" href="${e(file.data)}" download="${e(file.name)}"><img src="${e(file.data)}" alt="${e(file.name)}" loading="lazy"><span>${e(file.name)}</span></a>`
     : `<a class="attachment" href="${e(file.data)}" download="${e(file.name)}"><span aria-hidden="true">⌁</span>${e(file.name)}</a>`).join('')}</div>` : '';
 }
+function drawAttachments(form) {
+  const selection = form.querySelector('[data-attachment-selection]');
+  if (!selection) return;
+  selection.replaceChildren();
+  const input = form.elements.attachments;
+  const transfer = new DataTransfer();
+  for (const file of input?._attachments || []) transfer.items.add(file);
+  if (input) input.files = transfer.files;
+  for (const [index, file] of (form.elements.attachments?._attachments || []).entries()) {
+    const chip = document.createElement('span');
+    chip.className = 'attachment-chip';
+    const name = document.createElement('span');
+    name.textContent = file.name;
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.textContent = '×';
+    remove.setAttribute('aria-label', `${t('remove')}: ${file.name}`);
+    remove.addEventListener('click', () => {
+      form.elements.attachments._attachments.splice(index, 1);
+      form.querySelector('.form-error').textContent = '';
+      drawAttachments(form);
+    });
+    chip.append(name, remove);
+    selection.append(chip);
+  }
+}
 async function selectedAttachments(form) {
-  const files = [...(form.elements.attachments?.files || [])];
-  if (files.length > 3) throw new Error('attachment');
+  const files = form.elements.attachments?._attachments || [...(form.elements.attachments?.files || [])];
+  const existing = ['question', 'text'].includes(form.dataset.form) ? storedAttachments(modalPayload?.item).length : 0;
+  if (files.length + existing > 3) throw new Error('attachment');
   return Promise.all(files.map((file) => new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => typeof reader.result === 'string' ? resolve({ name:file.name.slice(0,160) || 'file', data:reader.result }) : reject(new Error('attachment'));
@@ -96,7 +123,7 @@ async function selectedAttachments(form) {
   })));
 }
 async function profileImage(file) {
-  if (!file || !['image/jpeg','image/png','image/webp'].includes(file.type) || file.size > 5000000) throw new Error('avatar');
+  if (!file || !['image/jpeg','image/png','image/webp'].includes(file.type)) throw new Error('avatar');
   const bitmap = await createImageBitmap(file);
   try {
     const canvas = document.createElement('canvas');
@@ -203,7 +230,7 @@ function commentTree(parentId, depth = 0) {
 }
 function inlineReplyForm(parentId, questionId) {
   if (!user() || replyTarget?.parentId !== parentId) return '';
-  return `<form class="inline-reply" data-form="comment" data-question="${e(questionId)}" data-parent="${e(parentId)}"><label class="field">${e(t('writeComment'))}<textarea name="body" required minlength="2" maxlength="5000" rows="3" autofocus></textarea></label>${attachmentControl()}<div class="inline-reply-actions"><button class="primary">${e(t('publish'))}</button><button class="ghost" type="button" data-action="cancel-reply">${e(t('cancel'))}</button></div><p class="form-error" aria-live="polite"></p></form>`;
+  return `<form class="inline-reply" data-form="comment" data-question="${e(questionId)}" data-parent="${e(parentId)}"><button class="icon-btn reply-editor-close" type="button" data-action="cancel-reply" aria-label="${e(t('close'))}">×</button><label class="field">${e(t('writeComment'))}<textarea name="body" required minlength="2" maxlength="5000" rows="3" autofocus></textarea></label>${attachmentControl()}<div class="inline-reply-actions"><button class="primary">${e(t('publish'))}</button></div><p class="form-error" aria-live="polite"></p></form>`;
 }
 function answerCard(answer, question, local) {
   const person = user();
@@ -292,7 +319,7 @@ function captureDrafts() {
       key:draftKey(form),
       fields:fields.map((field) => {
         const caret = field === document.activeElement && (field.tagName === 'TEXTAREA' || ['text','search','password'].includes(field.type));
-        return { value:field.value, files:field.type === 'file' ? field.files : null, fileNode:field.type === 'file' ? field : null,
+        return { attachments:field._attachments, value:field.value, files:field.type === 'file' ? field.files : null, fileNode:field.type === 'file' ? field : null,
           start:caret ? field.selectionStart : null, end:caret ? field.selectionEnd : null };
       }),
       focused,
@@ -311,6 +338,7 @@ function restoreDrafts(drafts) {
     fields.forEach((field, index) => {
       const old = draft.fields[index];
       if (field.type === 'file') {
+        field._attachments = old.attachments;
         if (old.files?.length) {
           try { field.files = old.files; }
           catch { field.replaceWith(old.fileNode); fields[index] = old.fileNode; }
@@ -320,7 +348,7 @@ function restoreDrafts(drafts) {
     const error = form.querySelector('.form-error');
     if (error) error.textContent = draft.error;
     const selection = form.querySelector('[data-attachment-selection]');
-    if (selection) selection.textContent = draft.selection;
+    if (selection) drawAttachments(form);
     if (draft.focused >= 0 && (!modal || form.closest('.modal'))) {
       const field = fields[draft.focused];
       field.focus({ preventScroll:true });
@@ -488,9 +516,19 @@ root.addEventListener('change', async (event) => {
     return;
   }
   if (event.target.matches('[data-attachment-input]')) {
-    const files = [...event.target.files];
-    const selection = event.target.closest('form')?.querySelector('[data-attachment-selection]');
-    if (selection) selection.textContent = files.length ? files.map((file) => file.name).join(', ') : '';
+    const input = event.target, form = input.closest('form');
+    const old = input._attachments || [];
+    const added = [...input.files].filter(file => !old.some(previous => previous.name === file.name && previous.size === file.size && previous.lastModified === file.lastModified));
+    const existing = ['question', 'text'].includes(form.dataset.form) ? storedAttachments(modalPayload?.item).length : 0;
+    input.value = '';
+    if (old.length + added.length + existing > 3) {
+      form.querySelector('.form-error').textContent = t('attachmentError');
+      drawAttachments(form);
+      return;
+    }
+    input._attachments = [...old, ...added];
+    form.querySelector('.form-error').textContent = '';
+    drawAttachments(form);
   }
 });
 document.addEventListener('keydown', (event) => {
@@ -534,3 +572,10 @@ restoreRemoteProfiles();
 history.replaceState({ ...(history.state || {}), answersRouteIndex:routeIndex },'',location.href);
 onRoute();
 spaces().then((items)=>{spaceList=items;render();}).catch(()=>{});
+
+window.addEventListener("storage", async event => {
+  if (event.key !== "answers:session:v1" || event.oldValue === event.newValue) return;
+  for (const form of root.querySelectorAll("form")) form.reset();
+  modal = null; modalPayload = null; replyTarget = null;
+  try { state = await read(); render(); } catch { toast(t("noStorage")); }
+});

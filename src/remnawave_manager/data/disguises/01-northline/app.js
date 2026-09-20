@@ -1160,6 +1160,7 @@ function commentComposer(post, parent = null) {
       toast(parent ? 'Ответ опубликован' : 'Комментарий опубликован');
     },
   }, [
+    parent && iconButton('Закрыть', 'close', () => { commentDrafts.delete(key); activeCommentReply = ''; form.remove(); }, { className: 'icon-button reply-editor-close' }),
     parent && el('div', { class: 'comment-replying-to' }, [
       el('span', { text: 'Ответ для' }),
       el('strong', { text: `@${parent.username || 'user'}` }),
@@ -1167,16 +1168,13 @@ function commentComposer(post, parent = null) {
     ]),
     input,
     attachmentInput,
-    el('div', { class: 'composer-media-actions' }, [
+    attachmentList,
+    el('div', { class: 'compose-status', hidden: true }, [mediaStatus, count]),
+    el('div', { class: 'form-actions' }, [
       button('Добавить фото', () => attachmentInput.click(), {
         className: 'button secondary', symbol: 'camera',
       }),
-      el('small', { text: `До ${MAX_ATTACHMENTS} вложений` }),
-    ]),
-    attachmentList,
-    el('div', { class: 'compose-status' }, [mediaStatus, count]),
-    el('div', { class: 'form-actions' }, [
-      parent && button('Отмена', () => { commentDrafts.delete(key); activeCommentReply = ''; form.remove(); }, { className: 'button secondary' }),
+
       el('button', { type: 'submit', class: 'button primary' }, [icon('message'), el('span', { text: 'Опубликовать' })]),
     ]),
   ]);
@@ -2353,9 +2351,9 @@ function showComposer(id) {
     draft.text = text;
     draft.media = attachments;
     draft.updatedAt = new Date().toISOString();
-    status.textContent = translate(writeReader(reader)
-      ? 'Черновик сохранён'
-      : 'Не удалось сохранить черновик');
+    const saved = writeReader(reader);
+    status.textContent = translate(saved ? 'Черновик сохранён' : 'Не удалось сохранить черновик');
+    if (!saved) toast('Не удалось сохранить черновик');
   }
   const modal = dialog('Новая история', {
     onClose: () => {
@@ -2382,19 +2380,12 @@ function showComposer(id) {
     ]),
     textarea,
     attachmentInput,
-    el('div', { class: 'composer-media-actions' }, [
+    attachmentList,
+    el('div', { class: 'compose-status', hidden: true }, [status, count]),
+    el('div', { class: 'form-actions' }, [
       button('Добавить фото', () => attachmentInput.click(), {
         className: 'button secondary', symbol: 'camera',
       }),
-      el('small', { text: `До ${MAX_ATTACHMENTS} вложений` }),
-    ]),
-    attachmentList,
-    el('div', { class: 'compose-status' }, [status, count]),
-    el('p', {
-      class: 'muted composer-autosave',
-      text: 'Черновик сохраняется автоматически.',
-    }),
-    el('div', { class: 'form-actions' }, [
       button('Опубликовать', () => {
         if (attachmentInput.disabled) { toast('Дождитесь подготовки вложений'); return; }
         const text = textarea.value.trim();

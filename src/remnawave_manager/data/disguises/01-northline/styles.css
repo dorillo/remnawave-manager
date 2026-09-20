@@ -2346,3 +2346,22 @@ small {
   .search-submit { display: inline-flex; }
   .topbar-actions { grid-row: 1; grid-column: 2; }
 }
+
+/* Both publishing controls sit directly below the editor, aligned left. */
+.modal .form-actions, .modal .dialog-actions, .comment-form .form-actions { justify-content: flex-start; justify-self: start; }
+.story-editor.editor-dialog, .comment-form { grid-template-columns: minmax(0, 1fr); }
+.story-editor .composer-media-actions, .comment-form .composer-media-actions { margin: 0; }
+.story-editor .form-actions, .comment-form .form-actions { margin: 0; padding: 0; border: 0; grid-column: 1 / -1; }
+.story-editor .compose-status[hidden], .comment-form .compose-status[hidden] { display: none; }
+
+.modal-header { align-items: flex-start; }
+.modal-header > button { flex-shrink: 0; align-self: flex-start; }
+.modal-header > h2 { min-width: 0; margin-top: 0; }
+.modal .form-actions { flex-wrap: wrap; }
+
+ .comment-form:has(.comment-replying-to) { position: relative; padding-top: 48px; }
+.comment-form > .reply-editor-close { position: absolute; top: 8px; right: 8px; }
+@media(max-width: 720px) {
+  .comment-form .form-actions, .modal .form-actions { width: 100%; justify-self: stretch; }
+  .comment-form .form-actions > .button, .modal .form-actions > .button { width: 100%; justify-content: center; }
+}

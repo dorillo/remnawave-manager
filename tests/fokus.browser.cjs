@@ -684,10 +684,11 @@ const comment = {
     });
     failArticle = true;
     await page.reload();
-    await page.locator("main [data-action=refresh]").waitFor();
+    await page.waitForURL('**/#/latest');
     assert.equal(await page.locator(".article-body").count(), 0);
+    assert.equal(await page.locator('.error-text').count(), 0);
     ((failArticle = false), (missingLikes = false), (failNext = false));
-    await page.locator("main [data-action=refresh]").click();
+    await page.goto(origin + '/#/article/20260919/test-2118660370.html');
     await page.locator(".article-body").waitFor();
     // Broken storage never prevents reading and never reports a successful signup.
     const blocked = await context.newPage();
@@ -993,6 +994,13 @@ const comment = {
     assert.equal(await exhausted.locator('#next-article .error-text').count(), 0);
     assert.equal(failedIds.length, 2);
     assert.equal(new Set(failedIds).size, 2, 'Each failed candidate is tried only once');
+    await exhausted.evaluate(async () => (await import('./fokus-store.js')).change(s => { s.cache = []; }, false));
+    failedIds.length = 0;
+    await exhausted.goto(origin + '/#/article/20260919/test-9001.html');
+    await exhausted.waitForURL('**/#/article/20260919/test-9000.html');
+    await exhausted.locator('.article-body').waitFor();
+    assert.equal(await exhausted.locator('.error-text').count(), 0, 'Direct article failure redirects silently');
+    assert.equal(failedIds.length, 1);
     await exhausted.close();
     await stream.goto(origin + "/#/home");
     await stream.locator(".lead-story").waitFor();

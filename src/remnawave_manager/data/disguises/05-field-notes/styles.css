@@ -1451,3 +1451,7 @@ dialog > button {
   .personal-item .actions { display: flex; flex-wrap: wrap; gap: 8px; }
   .personal-item .actions > button { min-height: 44px; }
 }
+
+.dialog-head { align-items: flex-start; }
+.dialog-head > button { flex-shrink: 0; align-self: flex-start; }
+.dialog-head > h2 { min-width: 0; margin-top: 0; }

@@ -1060,7 +1060,6 @@ async function render() {
     account = await store.current();
     storageOK = true;
   } catch {
-    account = null;
     storageOK = false;
   }
   if (token !== epoch) return;
@@ -1156,4 +1155,10 @@ matchMedia("(max-width: 800px)").addEventListener("change", (event) => {
     for (const node of app.querySelectorAll(".header,main,.footer"))
       node.inert = false;
   }
+});
+
+window.addEventListener("storage", async event => {
+  if (event.key !== "svod:wikipedia:session" || event.oldValue === event.newValue) return;
+  for (const dialog of document.querySelectorAll("dialog[open]")) dialog.close();
+  render();
 });

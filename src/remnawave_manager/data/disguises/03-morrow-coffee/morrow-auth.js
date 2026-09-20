@@ -1,3 +1,4 @@
+import { persistentSession } from '../shared/session.js';
 import {
   createAccount,
   findAccount,
@@ -6,7 +7,7 @@ import {
 } from "./morrow-db.js";
 import { blankProfile } from "./morrow-store.js";
 import { removeOwnerVideos } from "./morrow-uploads.js";
-const SESSION = "morrow:session:v1";
+const session = persistentSession("morrow:session:v1", "storage");
 const encode = (bytes) => btoa(String.fromCharCode(...bytes));
 async function derive(password, salt) {
   const key = await crypto.subtle.importKey(
@@ -27,13 +28,11 @@ async function derive(password, salt) {
   );
 }
 export async function restoreSession() {
-  let id;
-  try {
-    id = sessionStorage.getItem(SESSION);
-  } catch {
-    return null;
-  }
-  return id ? (await read("accounts", id)) || null : null;
+  const id = session.get();
+  if (!id) return null;
+  const account = await read("accounts", id);
+  if (!account) throw new Error("storage");
+  return account;
 }
 export async function authenticate(login, password, register = false) {
   login = login.trim().toLowerCase();
@@ -61,20 +60,10 @@ export async function authenticate(login, password, register = false) {
   ) {
     throw new Error("credentials");
   }
-  try {
-    sessionStorage.setItem(SESSION, account.id);
-  } catch {
-    /* Remains signed in until reload. */
-  }
+  session.set(account.id);
   return account;
 }
-export function logout() {
-  try {
-    sessionStorage.removeItem(SESSION);
-  } catch {
-    /* No persistent session. */
-  }
-}
+export function logout() { session.set(""); }
 export async function removeAccount(id) {
   await removeOwnerVideos(id);
   await deleteAccount(id);

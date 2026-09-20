@@ -1,3 +1,5 @@
+import { persistentSession } from '../shared/session.js';
+const activeSession = persistentSession('svod:wikipedia:session', 'storageError');
 const DB = "svod:wikipedia:v1";
 let connection;
 export function database() {
@@ -48,17 +50,12 @@ export const put = (store, value) =>
   transaction(store, "readwrite", (s) => s.put(value));
 export const remove = (store, id) =>
   transaction(store, "readwrite", (s) => s.delete(id));
-export function session() {
-  try {
-    return sessionStorage.getItem("svod:wikipedia:session");
-  } catch {
-    return null;
-  }
-}
+export const session = () => activeSession.get();
 export async function current() {
   const id = session();
   if (!id) return null;
   const value = await get("accounts", id);
+  if (!value) throw new Error("storageError");
   if (
     value &&
     (!value.name ||
@@ -69,12 +66,8 @@ export async function current() {
     throw new Error("storageError");
   return value;
 }
-export function signOut() {
-  sessionStorage.removeItem("svod:wikipedia:session");
-}
-export function signIn(id) {
-  sessionStorage.setItem("svod:wikipedia:session", id);
-}
+export function signOut() { activeSession.set(''); }
+export function signIn(id) { activeSession.set(id); }
 export const owned = async (store) => {
   const rows = (await list(store)).filter((x) => x.owner === session());
   if (

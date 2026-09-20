@@ -19,8 +19,8 @@ export function validateProfile(raw) {
   const fail = () => {
     throw new Error("invalidData");
   };
-  if (!raw || raw.version !== 2 || JSON.stringify(raw).length > 8000000) fail();
-  const str = (v, n) => {
+  if (!raw || raw.version !== 2) fail();
+  const str = (v, n = Infinity) => {
     if (typeof v !== "string" || v.length > n) fail();
     return v;
   };
@@ -38,7 +38,7 @@ export function validateProfile(raw) {
   out.profile = {
     name: str(raw.profile?.name, 80),
     about: str(raw.profile?.about, 2000),
-    avatar: str(raw.profile?.avatar, 180000),
+    avatar: str(raw.profile?.avatar),
   };
   if (
     out.profile.avatar &&

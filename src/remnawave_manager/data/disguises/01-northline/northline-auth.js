@@ -37,7 +37,7 @@ export async function hashPassword(password) {
 export async function verifyPassword(password, record) { try { const iterations = Number(record?.iterations) || 120000; return Boolean(record?.salt && record?.hash) && (await derivePassword(password, base64ToBytes(record.salt), iterations)) === record.hash; } catch { return false; } }
 export function currentUser(state) { return state.session ? state.accounts.find((account) => account.id === state.session.userId) || null : null; }
 export function createSession(state, userId) { state.session = { userId, authenticatedAt: Date.now(), lastActiveAt: Date.now() }; return writeState(state); }
-export function logout(state) { state.session = null; return writeState(state); }
+export function logout(state) { if (!writeState({ ...state, session: null })) return false; state.session = null; return true; }
 export function validateEmail(value) { return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(String(value || '').trim()); }
 export function validatePassword(value) { return typeof value === 'string' && value.length >= 8 && value.length <= 128; }
 export function newId(prefix = 'id') { return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`; }

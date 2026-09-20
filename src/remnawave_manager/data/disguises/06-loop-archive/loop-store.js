@@ -1,3 +1,5 @@
+import { persistentSession } from '../shared/session.js';
+const activeSession = persistentSession('loop:session', 'storageError');
 let connection;
 export function db() {
   if (!connection)
@@ -65,32 +67,14 @@ export const put = (name, value) =>
   tx(name, "readwrite", (t) => t.objectStore(name).put(value));
 export const remove = (name, id) =>
   tx(name, "readwrite", (t) => t.objectStore(name).delete(id));
-export function session() {
-  try {
-    return sessionStorage.getItem("loop:session");
-  } catch {
-    return null;
-  }
-}
-export function signIn(id) {
-  try {
-    sessionStorage.setItem("loop:session", id);
-  } catch {
-    throw new Error("storageError");
-  }
-}
-export function signOut() {
-  try {
-    sessionStorage.removeItem("loop:session");
-  } catch {
-    throw new Error("storageError");
-  }
-}
+export const session = () => activeSession.get();
+export function signIn(id) { activeSession.set(id); }
+export function signOut() { activeSession.set(''); }
 export async function current() {
   const id = session();
   if (!id) return null;
   const account = await get("accounts", id);
-  if (!account && session() === id) signOut();
+  if (!account) throw new Error("storageError");
   return account || null;
 }
 export async function owned(name) {

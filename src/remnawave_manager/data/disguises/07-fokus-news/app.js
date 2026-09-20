@@ -721,11 +721,42 @@ async function navigate(force = false) {
       view.cursor = data.cursor;
       remember(data.items);
     } else if (view.kind === "article") {
-      const data = await load("article", {
-        ref: view.ref,
-        signal: controller.signal,
-        force,
-      });
+      const signal = controller.signal;
+      const skipped = new Set();
+      let candidate = view.ref, data, refreshed = false;
+      while (candidate && !signal.aborted) {
+        skipped.add(candidate.id);
+        try {
+          data = await load("article", { ref: candidate, signal, force });
+          break;
+        } catch (error) {
+          if (current !== token || signal.aborted || error.name === 'AbortError') return;
+          if (!refreshed) {
+            refreshed = true;
+            try {
+              const result = await load("feed", { signal });
+              if (current !== token) return;
+              feed = result.items;
+              remember(feed);
+            } catch { if (current !== token || signal.aborted) return; }
+          }
+          candidate = [...feed, ...home, ...known.values()].find(item => !skipped.has(item.id));
+        }
+      }
+      if (current !== token || signal.aborted) return;
+      if (!data) {
+        history.replaceState(null, '', '#/latest');
+        lastHash = '#/latest';
+        view = { kind: 'latest', items: feed.slice(0, 24), limit: 24, loading: false };
+        return;
+      }
+      skipped.delete(data.id);
+      view.skippedArticles = skipped;
+      if (data.id !== view.ref.id) {
+        view.ref = articleRef(data.path || data.url);
+        history.replaceState(null, '', route(data));
+        lastHash = location.hash;
+      }
       if (current !== token) return;
       view.article = data;
       remember([data, ...data.related]);
@@ -1235,3 +1266,10 @@ view = { kind: "home", loading: true };
 render(false);
 db = await store.read();
 await navigate();
+
+window.addEventListener("storage", async event => {
+  if (event.key !== "fokus:ria:v1" || event.oldValue === event.newValue) return;
+  closeModal();
+  db = await store.read();
+  navigate();
+});

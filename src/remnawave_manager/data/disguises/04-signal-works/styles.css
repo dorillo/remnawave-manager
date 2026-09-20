@@ -62,3 +62,22 @@ body:has(.modal-backdrop) { overflow: hidden; }
   .profile-actions > * { min-height: 44px; width: 100%; justify-content: center; }
   .profile-actions svg { flex-shrink: 0; }
 }
+
+.form-error:empty, .attachment-selection:empty { display: none; }
+.attachment-selection:not(:empty) { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.attachment-chip { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; border: 1px solid currentColor; border-radius: 8px; padding: 4px 8px; }
+.attachment-chip > span { min-width: 0; overflow-wrap: anywhere; }
+.attachment-chip button { flex: none; border: 0; background: transparent; color: inherit; padding: 4px; }
+.composer > .primary { display: flex; margin-top: 12px; }
+[data-form="question"] .modal-footer, [data-form="text"] .modal-footer { margin-top: 12px; }
+
+.modal-head { align-items: flex-start; }
+.modal-head > button { flex-shrink: 0; align-self: flex-start; }
+.modal-head > h2 { min-width: 0; margin-top: 0; }
+
+ .inline-reply { position: relative; padding-top: 38px; }
+.inline-reply > .reply-editor-close { position: absolute; top: 6px; right: 6px; }
+@media(max-width: 760px) {
+  .composer > .primary, .inline-reply-actions > .primary, .attachment-picker, .modal-footer > button { width: 100%; justify-content: center; }
+  .modal-footer { flex-wrap: wrap; }
+}

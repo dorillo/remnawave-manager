@@ -458,3 +458,13 @@ body:has(dialog[open]) { overflow: hidden; }
 .channel-banner > .channel-avatar { width: 66px; height: 66px; }
 
 .watch-channel-copy .channel-title { display: block; max-width: 230px; width: 100%; }
+
+.dialog-head { align-items: flex-start; }
+.dialog-head > button { flex-shrink: 0; align-self: flex-start; }
+.dialog-head > h2 { min-width: 0; margin-top: 0; }
+
+ .comment-form-inline { position: relative; padding-top: 44px; }
+.comment-form-inline > .reply-editor-close { position: absolute; top: 4px; right: 4px; width: 34px; height: 34px; padding: 0; font-size: 24px; }
+@media(max-width: 700px) {
+  .comment-form > button[type="submit"], dialog form button[type="submit"], dialog .button-row > button { width: 100%; }
+}

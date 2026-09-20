@@ -132,15 +132,13 @@ function read() {
           typeof a.email === 'string' &&
           a.password,
       )
-      .slice(0, 30)
       .map((a) => ({
         ...a,
         name: String(a.name || '').slice(0, 80),
         bio: String(a.bio || '').slice(0, 500),
         avatar:
           typeof a.avatar === 'string' &&
-          /^data:image\/(jpeg|png|webp);base64,/.test(a.avatar) &&
-          a.avatar.length < 400000
+          /^data:image\/(jpeg|png|webp);base64,/.test(a.avatar)
             ? a.avatar
             : '',
         library: cleanLibrary(a.library),

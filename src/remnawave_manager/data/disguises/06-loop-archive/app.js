@@ -1739,3 +1739,9 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 await render();
+
+window.addEventListener("storage", async event => {
+  if (event.key !== "loop:session" || event.oldValue === event.newValue) return;
+  for (const dialog of document.querySelectorAll("dialog[open]")) dialog.close();
+  render();
+});

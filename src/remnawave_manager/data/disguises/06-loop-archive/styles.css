@@ -1465,3 +1465,7 @@ main:focus {
 }
 
 .collection-picker .button[aria-pressed="true"] { border-color: var(--accent); background: var(--soft); }
+
+.dialog-heading { align-items: flex-start; }
+.dialog-heading > button { flex-shrink: 0; align-self: flex-start; }
+.dialog-heading > h2 { min-width: 0; margin-top: 0; }

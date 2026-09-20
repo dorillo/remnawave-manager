@@ -1,3 +1,5 @@
+import { persistentSession } from '../shared/session.js';
+const activeSession = persistentSession('fokus:ria:v1', 'storage');
 const DB = "fokus:ria:v1";
 export const empty = () => ({
   accounts: [],
@@ -11,27 +13,9 @@ let connection, opening;
 export let available = true;
 export const channel =
   typeof BroadcastChannel === "function" ? new BroadcastChannel(DB) : null;
-export const session = () => {
-  try {
-    return sessionStorage.getItem(DB) || "";
-  } catch {
-    return "";
-  }
-};
-export function signIn(id) {
-  try {
-    sessionStorage.setItem(DB, id);
-  } catch {
-    throw new Error("storage");
-  }
-}
-export function signOut() {
-  try {
-    sessionStorage.removeItem(DB);
-  } catch {
-    throw new Error("storage");
-  }
-}
+export const session = () => activeSession.get();
+export function signIn(id) { activeSession.set(id); }
+export function signOut() { activeSession.set(''); }
 // Remove the entire local thread, including replies from other local profiles.
 function removeThreads(state, ids) {
   if (!ids.length) return;

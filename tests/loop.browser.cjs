@@ -782,16 +782,17 @@ let browser,
       rejected = true;
     }
     const exists = !!(await store.get("accounts", id));
-    const current = await store.current();
-    const cleared = store.session() === null;
+    let error;
+    try { await store.current(); } catch (failure) { error = failure.message; }
+    const preserved = store.session() === id;
     store.signIn(previous);
-    return { rejected, exists, current, cleared };
+    return { rejected, exists, error, preserved };
   });
   assert.deepEqual(stale, {
     rejected: true,
     exists: false,
-    current: null,
-    cleared: true,
+    error: "storageError",
+    preserved: true,
   });
   const denied = await context.newPage();
   denied.on("pageerror", (e) => errors.push(e.message));
