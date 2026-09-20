@@ -146,7 +146,7 @@ const root = path.resolve(
     await page.keyboard.press("Escape");
     await page.locator("[data-action=auth]").first().click();
     await page.evaluate(() => window.finishDerive());
-    await page.waitForFunction(() => !!sessionStorage.getItem("fokus:ria:v1"));
+    await page.waitForFunction(() => !!localStorage.getItem("fokus:ria:v1"));
     await page.locator(".account-link").waitFor();
     assert(await page.locator("#modal").isVisible(), "new dialog stays open");
     await page.keyboard.press("Escape");

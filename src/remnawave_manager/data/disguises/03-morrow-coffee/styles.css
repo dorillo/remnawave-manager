@@ -925,7 +925,10 @@ hr {
   color: var(--accent);
 }
 .load-button {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   margin: 25px auto;
 }
 dialog {
@@ -1165,6 +1168,9 @@ details p {
   font-size: 12px;
 }
 .loading-spinner {
+  display: inline-block;
+  flex: 0 0 16px;
+  vertical-align: middle;
   width: 16px;
   height: 16px;
   border: 2px solid var(--line);
@@ -1172,6 +1178,8 @@ details p {
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
+button > .loading-spinner { margin-inline-end: 8px; }
+.load-button > .loading-spinner { margin-inline-end: 0; }
 .loading-indicator {
   display: flex;
   align-items: center;

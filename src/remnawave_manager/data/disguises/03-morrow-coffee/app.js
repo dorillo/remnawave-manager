@@ -334,6 +334,10 @@ function toggleVideo(v, key) {
     }
   });
 }
+function followersText(author) {
+  const count = author.followers + Number(Boolean(store?.data.following.includes(author.id)));
+  return new Intl.NumberFormat(getLanguage() === 'ru' ? 'ru-RU' : 'en-US').format(count) + ' ' + t('followers');
+}
 function follow(author) {
   gate(async () => {
     try {
@@ -342,6 +346,9 @@ function follow(author) {
         d.authors = [author, ...d.authors.filter((a) => a.id !== author.id)];
       });
       renderChrome();
+      for (const node of document.querySelectorAll('[data-followers]')) {
+        if (node.dataset.followers === author.id) node.textContent = followersText(author);
+      }
       document
         .querySelectorAll('[data-follow="' + author.id + '"]')
         .forEach((b) => {
@@ -771,7 +778,7 @@ async function authorPage(id, signal) {
       el("p", {}, author.about),
       author.followers == null
         ? null
-        : el("p", {}, number(author.followers) + " " + t("followers")),
+        : el("p", { 'data-followers': id }, followersText(author)),
       followButton,
     ),
   );

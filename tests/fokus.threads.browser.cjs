@@ -24,7 +24,7 @@ const { chromium } = require("./.tmp/node_modules/playwright-core");
               body: await fs.readFile(
                 path.join(
                   __dirname,
-                  "../src/remnawave_manager/data/disguises/07-fokus-news",
+                  pathname.startsWith("/shared/") ? "../src/remnawave_manager/data/disguises" : "../src/remnawave_manager/data/disguises/07-fokus-news",
                   pathname,
                 ),
               ),

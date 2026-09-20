@@ -103,11 +103,12 @@ let browser,
         body: JSON.stringify(data),
       });
     }
+    const base = url.pathname.startsWith("/shared/") ? path.dirname(root) : root;
     const file = path.join(
-      root,
+      base,
       url.pathname === "/" ? "index.html" : url.pathname,
     );
-    assert(file.startsWith(root + path.sep));
+    assert(file.startsWith(base + path.sep));
     try {
       return route.fulfill({
         body: await fs.readFile(file),
@@ -661,7 +662,7 @@ let browser,
     .getByRole("dialog")
     .getByRole("button", { name: "Подтвердить", exact: true })
     .click();
-  await page.getByRole("heading", { name: "Собери свою коллекцию" }).waitFor();
+  await page.getByRole("heading", { name: "Ваш профиль ждёт" }).waitFor();
   assert.deepEqual(
     await page.evaluate(async () => {
       const store = await import("./loop-store.js");

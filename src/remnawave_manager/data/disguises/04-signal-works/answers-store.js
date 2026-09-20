@@ -18,18 +18,32 @@ const normalize = (value) => {
     version: 1,
   };
 };
-let database;
+let database, opening;
 
 async function open() {
   if (database) return database;
-  database = await new Promise((resolve, reject) => {
+  if (opening) return opening;
+  opening = new Promise((resolve, reject) => {
+    let failed = false;
     const request = indexedDB.open(DB, 1);
     request.onupgradeneeded = () => request.result.createObjectStore('kv');
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const db = request.result;
+      if (failed) { db.close(); return; }
+      database = db;
+      db.onversionchange = db.onclose = () => {
+        db.close();
+        if (database === db) database = null;
+      };
+      resolve(db);
+    };
+    request.onerror = request.onblocked = () => {
+      failed = true;
+      reject(new Error('storage'));
+    };
   });
-  database.onversionchange = () => { database.close(); database = null; };
-  return database;
+  try { return await opening; }
+  finally { opening = null; }
 }
 
 export async function read() {

@@ -36,6 +36,8 @@ export async function signIn(email, password) {
   }
   if (!matches) throw new Error('authError');
   commit((state) => {
+    if (!state.accounts.some(a => a.id === account.id && a.password?.hash === account.password.hash))
+      throw new Error('authError');
     state.session = account.id;
   });
 }

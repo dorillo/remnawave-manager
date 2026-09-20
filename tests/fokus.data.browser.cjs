@@ -41,7 +41,7 @@ const root = path.resolve(
           },
         });
       await route.fulfill({
-        body: await fs.readFile(path.join(root, url.pathname)),
+        body: await fs.readFile(path.join(url.pathname.startsWith("/shared/") ? path.dirname(root) : root, url.pathname)),
         contentType: "text/javascript",
       });
     });

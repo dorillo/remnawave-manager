@@ -3,13 +3,21 @@ const STORE = "videos";
 
 function database() {
   return new Promise((resolve, reject) => {
+    let failed = false;
     const request = indexedDB.open(DATABASE, 1);
     request.onupgradeneeded = () => {
       const store = request.result.createObjectStore(STORE, { keyPath: "id" });
       store.createIndex("ownerId", "ownerId");
     };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = request.onblocked = () => reject(new Error("storage"));
+    request.onsuccess = () => {
+      if (failed) { request.result.close(); return; }
+      request.result.onversionchange = () => request.result.close();
+      resolve(request.result);
+    };
+    request.onerror = request.onblocked = () => {
+      failed = true;
+      reject(new Error("storage"));
+    };
   });
 }
 function result(request) {
@@ -26,8 +34,9 @@ async function withStore(mode, action) {
       tx.oncomplete = resolve;
       tx.onerror = tx.onabort = () => reject(new Error("storage"));
     });
-    const value = await action(tx.objectStore(STORE));
-    await complete;
+    const [value] = await Promise.all([
+      (async () => action(tx.objectStore(STORE)))(), complete,
+    ]);
     return value;
   } finally {
     db.close();

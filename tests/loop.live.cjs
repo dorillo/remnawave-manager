@@ -150,7 +150,8 @@ let server, browser;
           })
           .every((c) => c.dataset.ready === "true"),
       {},
-      { timeout: 30000 },
+      // A visible batch queues behind earlier media requests on the same origin.
+      { timeout: 60000 },
     );
     await page.screenshot({ path: `/tmp/loop-bottom-${type}.png` });
     const count = await page.locator(".card").count();

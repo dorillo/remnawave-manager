@@ -55,6 +55,21 @@ const root = path.resolve(__dirname, '../src/remnawave_manager/data/disguises');
     failDescription = false;
     await page.locator('.description button').click();
     await page.getByText('Live description <script>untrusted()</script>', { exact: true }).waitFor();
+
+    await page.evaluate(async () => {
+      await (await import('/02-aster-observatory/aster-auth.js')).register('Reader', 'reader@example.test', 'test-password');
+    });
+    await page.reload();
+    const subscribers = page.locator('.watch-channel .subscriber-count');
+    await page.waitForFunction(() => document.querySelector('.watch-channel .subscriber-count')?.textContent.replace(/\D/g, '') === '1234');
+    await page.locator('.watch-channel button[aria-pressed]').click();
+    assert.equal((await subscribers.innerText()).replace(/\D/g, ''), '1235');
+    await page.evaluate(() => { location.hash = '/channel/7'; });
+    await page.waitForFunction(() => document.querySelector('.channel-banner .subscriber-count')?.textContent.replace(/\D/g, '') === '1235');
+    await page.reload();
+    await page.waitForFunction(() => document.querySelector('.channel-banner .subscriber-count')?.textContent.replace(/\D/g, '') === '1235');
+    await page.locator('.channel-banner button[aria-pressed]').click();
+    assert.equal((await page.locator('.subscriber-count').innerText()).replace(/\D/g, ''), '1234');
     assert.deepEqual(errors, []);
     console.log('PASS: live descriptions, subscribers, fresh commenter profile, direct reload, truthful errors, retry and text sanitization.');
   } finally { await browser.close(); }

@@ -4,6 +4,7 @@ const DB = "svod:wikipedia:v1";
 let connection;
 export function database() {
   return (connection ||= new Promise((resolve, reject) => {
+    let failed = false;
     const request = indexedDB.open(DB, 1);
     request.onupgradeneeded = () => {
       for (const name of [
@@ -19,12 +20,17 @@ export function database() {
       }
     };
     request.onsuccess = () => {
-      request.result.onversionchange = () => request.result.close();
-      resolve(request.result);
+      const db = request.result;
+      if (failed) { db.close(); return; }
+      const reset = () => { db.close(); connection = null; };
+      db.onversionchange = db.onclose = reset;
+      resolve(db);
     };
-    request.onerror = request.onblocked = () =>
+    request.onerror = request.onblocked = () => {
+      failed = true;
       reject(new Error("storageError"));
-  }));
+    };
+  }).catch(error => { connection = null; throw error; }));
 }
 export async function transaction(store, mode, operation) {
   const db = await database();
@@ -96,7 +102,7 @@ export async function deleteOwned(store, owner) {
       }
     };
     tx.oncomplete = resolve;
-    tx.onerror = () => reject(new Error("storageError"));
+    tx.onerror = tx.onabort = () => reject(new Error("storageError"));
   });
 }
 export async function deleteAccount() {
@@ -119,7 +125,7 @@ export async function deleteAccount() {
       };
     }
     tx.oncomplete = resolve;
-    tx.onerror = () => reject(new Error("storageError"));
+    tx.onerror = tx.onabort = () => reject(new Error("storageError"));
   });
   signOut();
 }
@@ -193,6 +199,6 @@ export async function removeSaved(id) {
       }
     };
     tx.oncomplete = resolve;
-    tx.onerror = () => reject(new Error("storageError"));
+    tx.onerror = tx.onabort = () => reject(new Error("storageError"));
   });
 }

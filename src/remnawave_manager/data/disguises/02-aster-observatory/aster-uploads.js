@@ -3,14 +3,21 @@ const STORE = 'videos';
 
 function database() {
   return new Promise((resolve, reject) => {
+    let failed = false;
     const request = indexedDB.open(DATABASE, 1);
     request.onupgradeneeded = () => {
       const store = request.result.createObjectStore(STORE, { keyPath: 'id' });
       store.createIndex('ownerId', 'ownerId');
     };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-    request.onblocked = () => reject(new Error('storageError'));
+    request.onsuccess = () => {
+      if (failed) { request.result.close(); return; }
+      request.result.onversionchange = () => request.result.close();
+      resolve(request.result);
+    };
+    request.onerror = request.onblocked = () => {
+      failed = true;
+      reject(new Error('storageError'));
+    };
   });
 }
 
@@ -30,8 +37,10 @@ async function withStore(mode, action) {
       transaction.onerror = () => reject(transaction.error);
       transaction.onabort = () => reject(transaction.error);
     });
-    const result = await action(transaction.objectStore(STORE));
-    await completed;
+    // Observe both failures immediately; a failed request also aborts its transaction.
+    const [result] = await Promise.all([
+      (async () => action(transaction.objectStore(STORE)))(), completed,
+    ]);
     return result;
   } finally {
     db.close();

@@ -70,6 +70,15 @@ const sites = [
           }
           await page.screenshot({ path: `/tmp/ux-${engine}-${brand}-${theme}.png` });
         }
+        if (brand === 'Morrow') {
+          await page.waitForFunction(() => !!document.querySelector('.load-button .loading-spinner'));
+          const spinner = page.locator('.load-button .loading-spinner');
+          for (const width of [320, 1440]) {
+            await page.setViewportSize({ width, height: 900 });
+            const size = await spinner.evaluate(node => ({ width: node.offsetWidth, height: node.offsetHeight }));
+            assert.ok(size.width >= 16 && size.height >= 16, 'Morrow: the loading spinner keeps its size in a button');
+          }
+        }
         // Multiline titles must not vertically centre the close control.
         for (const width of [320, 1440]) {
           await page.setViewportSize({ width, height: 900 });

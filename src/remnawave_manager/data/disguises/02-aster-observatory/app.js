@@ -112,13 +112,16 @@ function rememberDiscussion(video) {
   recentDiscussions.set(video.id, video);
   if (recentDiscussions.size > 50) recentDiscussions.delete(recentDiscussions.keys().next().value);
 }
-function subscribersNode(value = null) {
-  return el('small', { class: 'subscriber-count', hidden: value === null },
-    value === null ? '' : `${new Intl.NumberFormat(locale()).format(value)} ${t('subscribers')}`);
+function subscribersNode(value = null, channelId = '') {
+  const node = el('small', { class: 'subscriber-count', 'data-channel-id': channelId });
+  showSubscribers(node, value);
+  return node;
 }
 function showSubscribers(node, value) {
+  node.dataset.subscribers = value === null ? '' : String(value);
   node.hidden = value === null;
-  node.textContent = value === null ? '' : `${new Intl.NumberFormat(locale()).format(value)} ${t('subscribers')}`;
+  const count = value + Number(library().follows.includes(node.dataset.channelId));
+  node.textContent = value === null ? '' : `${new Intl.NumberFormat(locale()).format(count)} ${t('subscribers')}`;
 }
 function route() {
   const [path, query = ''] = location.hash.slice(1).split('?');
@@ -705,6 +708,10 @@ function followButton(id) {
     () =>
       guard(() => {
         toggle('follows', id);
+        for (const node of document.querySelectorAll('.subscriber-count')) {
+          if (node.dataset.channelId === id)
+            showSubscribers(node, node.dataset.subscribers === '' ? null : Number(node.dataset.subscribers));
+        }
         control.textContent = t(
           library().follows.includes(id) ? 'following' : 'follow',
         );
@@ -855,7 +862,7 @@ function watch(main, id, uploaded = null) {
     }
     return control;
   };
-  const subscribers = subscribersNode(video.subscribers ?? null);
+  const subscribers = subscribersNode(video.subscribers ?? null, video.channelId);
   primary.append(
     el(
       'div',
@@ -987,7 +994,7 @@ function channel(main, id) {
       el('div', { class: 'channel-copy' },
         el('span', { class: 'eyebrow' }, t('channel')),
         el('h1', {}, profile.name),
-        subscribersNode(profile.subscribers ?? null),
+        subscribersNode(profile.subscribers ?? null, id),
         el('p', {}, `${profile.videoCount ?? videos.length} ${t('count')}`)),
       followButton(id));
   };
@@ -1011,7 +1018,7 @@ function publicUser(main, id) {
     el('div', { class: 'channel-copy' },
       el('span', { class: 'eyebrow' }, t('profile')),
       el('h1', {}, profile.name),
-      subscribersNode(profile.subscribers ?? null)),
+      subscribersNode(profile.subscribers ?? null, id)),
     link(t('channel'), `#/channel/${id}`, { class: 'primary' }));
   if (entries.length) drawHeader({ name: entries[0].comment.author, avatar: entries[0].comment.avatar });
   else header.append(loadingNode(t('loading')));

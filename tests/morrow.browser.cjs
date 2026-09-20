@@ -244,6 +244,18 @@ let browser;
   );
   assert.ok((await page.locator("video").count()) <= 3);
   await register("morrow_one");
+  await open('#/author/remote/' + id(900));
+  const followerCount = page.locator('[data-followers]');
+  await followerCount.waitFor();
+  assert.equal((await followerCount.innerText()).replace(/\D/g, ''), '12400');
+  await page.locator('[data-follow]').click();
+  await page.waitForFunction(() => document.querySelector('[data-followers]')?.textContent.replace(/\D/g, '') === '12401');
+  await page.reload();
+  await followerCount.waitFor();
+  assert.equal((await followerCount.innerText()).replace(/\D/g, ''), '12401');
+  await page.locator('[data-follow]').click();
+  await page.waitForFunction(() => document.querySelector('[data-followers]')?.textContent.replace(/\D/g, '') === '12400');
+
   await require('./personal-empty.helpers.cjs')(page, [['#/profile?tab=likes', 'likedVideos'], ['#/profile?tab=saved', 'savedVideos'], ['#/following', 'following']]);
   await page.evaluate(() => { location.hash = '#/following'; });
   await page.locator('[data-empty-section=following]').waitFor();

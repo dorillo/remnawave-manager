@@ -2,6 +2,7 @@ let connection;
 export function openDatabase() {
   if (!connection)
     connection = new Promise((resolve, reject) => {
+      let failed = false;
       const request = indexedDB.open("morrow:workspace:v1", 2);
       request.onupgradeneeded = () => {
         const db = request.result;
@@ -17,17 +18,18 @@ export function openDatabase() {
           db.createObjectStore("videos", { keyPath: "id" });
       };
       request.onerror = request.onblocked = () => {
-        connection = null;
+        failed = true;
         reject(new Error("storage"));
       };
       request.onsuccess = () => {
-        request.result.onversionchange = () => {
+        if (failed) { request.result.close(); return; }
+        request.result.onversionchange = request.result.onclose = () => {
           request.result.close();
           connection = null;
         };
         resolve(request.result);
       };
-    });
+    }).catch(error => { connection = null; throw error; });
   return connection;
 }
 export async function transaction(stores, mode, work) {

@@ -85,6 +85,7 @@ function replace(target, ...children) {
   );
 }
 let reader = readReader();
+let readerOwner = currentUser(readState())?.id || null;
 const MAX_ATTACHMENTS = 4;
 function localMedia(value) {
   return Array.isArray(value)
@@ -174,6 +175,7 @@ function route() {
   };
 }
 function persist(state) {
+  if ((activeUser()?.id || null) !== readerOwner) return false;
   const saved = writeReader(reader, state);
   if (!saved)
     toast('Не удалось сохранить изменения. Попробуйте ещё раз.');
@@ -181,6 +183,7 @@ function persist(state) {
 }
 function reloadReader() {
   reader = readReader();
+  readerOwner = activeUser()?.id || null;
   feeds.delete('following');
   feeds.delete('overview');
   for (const [id, post] of posts) if (post.local) posts.delete(id);
@@ -275,7 +278,7 @@ function showAuthDialog(onAuthenticated = null, startRegistration = false) {
                 showError('Пароль должен содержать от 8 до 128 символов.', password);
                 return;
               }
-              const state = readState();
+              let state = readState();
               if (state.accounts.some((account) => account.username === username)) {
                 showError('Этот логин уже занят.', login);
                 return;
@@ -288,6 +291,12 @@ function showAuthDialog(onAuthenticated = null, startRegistration = false) {
                 password: await hashPassword(secret),
                 createdAt: new Date().toISOString(),
               };
+              // Password derivation yields: another tab may have changed the accounts.
+              state = readState();
+              if (state.accounts.some((item) => item.username === username)) {
+                showError('Этот логин уже занят.', login);
+                return;
+              }
               state.accounts.push(account);
               state.profiles[account.id] = {
                 reader: { ...guest, name: account.displayName, username, bio: '', avatar: '', saved: {}, favourites: {}, likes: {}, boosts: {}, votes: {}, follows: {}, drafts: [], localPosts: [] },
@@ -301,13 +310,18 @@ function showAuthDialog(onAuthenticated = null, startRegistration = false) {
               toast(`Профиль @${username} создан`);
               return;
             }
-            const state = readState();
+            let state = readState();
             const account = state.accounts.find((item) => item.username === username);
             if (!account || !(await verifyPassword(secret, account.password))) {
               showError('Неверный логин или пароль.', password);
               return;
             }
             if (!form.isConnected) return;
+            state = readState();
+            if (!state.accounts.some(item => item.id === account.id && item.password?.hash === account.password?.hash)) {
+              showError('Неверный логин или пароль.', password);
+              return;
+            }
             if (!createSession(state, account.id)) { showError('Не удалось сохранить вход. Повторите попытку.'); return; }
             reloadReader();
             if (typeof onAuthenticated === 'function') onAuthenticated(account);
@@ -566,7 +580,7 @@ function followButton(account, compact = false) {
       if (!requireAuth('Войдите, чтобы добавлять авторов в свою подборку')) return;
       if (reader.follows[account.id]) delete reader.follows[account.id];
       else reader.follows[account.id] = account;
-      persist();
+      if (!persist()) { reloadReader(); render(); return; }
       feeds.delete('following');
       toast(
         reader.follows[account.id] ? 'Автор добавлен в вашу подборку' : 'Автор удалён из подборки',
@@ -1581,10 +1595,10 @@ async function renderProfile(id, version) {
         { class: 'profile-stats' },
         [
           [account.statuses, 'публикаций'],
-          [account.followers, 'подписчиков'],
+          [account.followers + Number(Boolean(reader.follows[account.id])), 'подписчиков'],
           [account.following, 'подписок'],
         ].map(([count, label]) =>
-          el('span', {}, [el('strong', { text: number(count) }), ` ${label}`]),
+          el('span', {}, [el('strong', { text: label === 'подписчиков' ? new Intl.NumberFormat(getInterfaceLocale()).format(count) : number(count) }), ` ${label}`]),
         ),
       ),
       account.joined &&
@@ -2270,6 +2284,7 @@ function showPreferences() {
 }
 function showComposer(id) {
   if (!requireAuth('Войдите, чтобы создавать истории')) return;
+  const owner = activeUser().id;
   let draft = reader.drafts.find((d) => d.id === id);
   const textarea = el('textarea', {
     class: 'compose-text',
@@ -2336,6 +2351,7 @@ function showComposer(id) {
     }
   });
   function save() {
+    if (activeUser()?.id !== owner || readerOwner !== owner) return;
     const text = textarea.value;
     if (!text.trim() && !attachments.length && !draft) return;
     if (!text.trim() && !attachments.length && draft) {
@@ -2387,6 +2403,7 @@ function showComposer(id) {
         className: 'button secondary', symbol: 'camera',
       }),
       button('Опубликовать', () => {
+        if (activeUser()?.id !== owner || readerOwner !== owner) return;
         if (attachmentInput.disabled) { toast('Дождитесь подготовки вложений'); return; }
         const text = textarea.value.trim();
         if (!text && !attachments.length) { textarea.focus(); return; }
@@ -2485,7 +2502,10 @@ window.addEventListener(
   { passive: true },
 );
 window.addEventListener('storage', (event) => {
-  if (event.key === `disguise:${AUTH_KEY}` && !document.querySelector('dialog[open]')) {
+  if (event.key === `disguise:${AUTH_KEY}`) {
+    if ((activeUser()?.id || null) !== readerOwner) {
+      for (const modal of document.querySelectorAll('dialog[open]')) modal.close();
+    } else if (document.querySelector('dialog[open]')) return;
     reloadReader();
     render();
   }

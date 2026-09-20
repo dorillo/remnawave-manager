@@ -1,11 +1,35 @@
 /* Anonymous first-party requests used only while preparing the static snapshot. */
-const { chromium } = require('../tests/.tmp/node_modules/playwright-core');
+const { existsSync } = require('node:fs');
+const { homedir } = require('node:os');
+const path = require('node:path');
 
-(async () => {
+function playwright() {
+  for (const module of ['playwright-core', '../tests/.tmp/node_modules/playwright-core']) {
+    try { return require(module); }
+    catch (error) { if (error.code !== 'MODULE_NOT_FOUND') throw error; }
+  }
+  throw new Error('Install playwright-core: npm install --prefix tests/.tmp --no-save playwright-core');
+}
+function browserPath(chromium) {
+  if (process.env.ASTER_BROWSER) {
+    if (!existsSync(process.env.ASTER_BROWSER)) throw new Error('ASTER_BROWSER does not point to a browser executable');
+    return process.env.ASTER_BROWSER;
+  }
+  const candidates = process.platform === 'darwin' ? [
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    path.join(homedir(), 'Applications/Google Chrome.app/Contents/MacOS/Google Chrome'),
+  ] : process.platform === 'win32' ? [
+    ...['PROGRAMFILES', 'PROGRAMFILES(X86)', 'LOCALAPPDATA'].filter(key => process.env[key])
+      .map(key => path.join(process.env[key], 'Google/Chrome/Application/chrome.exe')),
+  ] : ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/bin/chromium-browser', '/snap/bin/chromium'];
+  const executable = [...candidates, chromium.executablePath()].find(existsSync);
+  if (!executable) throw new Error('Chrome/Chromium was not found. Set ASTER_BROWSER to its executable path.');
+  return executable;
+}
+async function main() {
+  const { chromium } = playwright();
   const browser = await chromium.launch({
-    executablePath:
-      process.env.ASTER_BROWSER ||
-      'C:/Program Files/Google/Chrome/Application/chrome.exe',
+    executablePath: browserPath(chromium),
     headless: true,
   });
   try {
@@ -185,7 +209,9 @@ const { chromium } = require('../tests/.tmp/node_modules/playwright-core');
   } finally {
     await browser.close();
   }
-})().catch((error) => {
+}
+module.exports = { browserPath, playwright };
+if (require.main === module) main().catch((error) => {
   console.error(error.message);
   process.exitCode = 1;
 });

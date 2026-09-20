@@ -143,10 +143,10 @@ VS Code Live Server не подходит для этого шаблона. Он
 python scripts/preview_morrow.py
 ```
 
-Откройте `http://127.0.0.1:5500/`. Если порт занят:
+Откройте `http://127.0.0.1:5503/`. Если порт занят:
 
 ```sh
-python scripts/preview_morrow.py --port 5501
+python scripts/preview_morrow.py --port 5513
 ```
 
 Инструмент не требует внешних Python-зависимостей. Он раздаёт только каталог

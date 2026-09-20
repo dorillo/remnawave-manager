@@ -22,7 +22,7 @@ export function db() {
           req.result.close();
           return;
         }
-        req.result.onversionchange = () => {
+        req.result.onversionchange = req.result.onclose = () => {
           req.result.close();
           connection = null;
         };

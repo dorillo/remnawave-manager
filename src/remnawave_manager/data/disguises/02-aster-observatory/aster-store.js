@@ -117,8 +117,14 @@ export function cleanLibrary(value = {}) {
   }));
   return result;
 }
-function read() {
-  const value = storage.get(KEY);
+function read(strict = false) {
+  let value;
+  if (strict) {
+    try {
+      value = JSON.parse(localStorage.getItem(`disguise:${KEY}`));
+      if (value !== null && (value?.version !== 1 || !Array.isArray(value.accounts))) throw new Error();
+    } catch { throw new Error('storageError'); }
+  } else value = storage.get(KEY);
   if (value?.version !== 1 || !Array.isArray(value.accounts))
     return { version: 1, accounts: [], session: null };
   return {
@@ -151,7 +157,8 @@ export const user = () =>
 export const library = () => user()?.library || blankLibrary();
 export const accounts = () => state.accounts;
 export function commit(change) {
-  const next = structuredClone(state);
+  // A storage event can be delayed in a background tab. Never write its old snapshot.
+  const next = structuredClone(read(true));
   change(next);
   next.accounts.forEach((account) => {
     account.library = cleanLibrary(account.library);
@@ -160,8 +167,13 @@ export function commit(change) {
   state = next;
 }
 export function updateUser(change) {
-  if (!user()) throw new Error('needLogin');
-  commit((next) => change(next.accounts.find((a) => a.id === next.session)));
+  const id = user()?.id;
+  if (!id) throw new Error('needLogin');
+  commit((next) => {
+    const account = next.accounts.find(a => a.id === id);
+    if (next.session !== id || !account) throw new Error('needLogin');
+    change(account);
+  });
 }
 export function toggle(field, id) {
   updateUser((account) => {
@@ -185,7 +197,8 @@ export function remember(video, time, complete = false) {
 }
 window.addEventListener('storage', (event) => {
   if (event.key === `disguise:${KEY}` || event.key === null) {
-    state = read();
+    try { state = read(true); }
+    catch { return; } // A transient read failure must not replace the active session.
     window.dispatchEvent(new Event('aster:state'));
   }
 });
