@@ -22,6 +22,9 @@ from remnawave_manager.site_policy import (
 
 class LoopIntegrationTests(unittest.TestCase):
     def setUp(self):
+        dns = mock.patch("remnawave_manager.site_ipv4.system_resolvers", return_value=("127.0.0.53",))
+        dns.start()
+        self.addCleanup(dns.stop)
         patcher = mock.patch("remnawave_manager.disguise._site_roots", return_value={"/var/www/html"})
         patcher.start()
         self.addCleanup(patcher.stop)

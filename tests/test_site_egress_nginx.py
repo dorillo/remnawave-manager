@@ -5,6 +5,8 @@ import json
 import re
 import shutil
 import socket
+import socketserver
+import struct
 import subprocess
 import tempfile
 import threading
@@ -20,7 +22,7 @@ from remnawave_manager.errors import TransactionError, ValidationError
 from remnawave_manager.models import Component, Inventory, ManagedFile
 from remnawave_manager.runner import Runner, sha256_file
 from remnawave_manager.site_config import upgrade_site_config
-from remnawave_manager.site_egress import SourceAddress, _probe, set_egress
+from remnawave_manager.site_egress import PROBES, SourceAddress, _probe, set_egress
 from remnawave_manager.site_egress_config import validate_source
 
 
@@ -60,6 +62,30 @@ class EgressNginxTests(unittest.TestCase):
         self.exercise(True)
 
     def exercise(self, unix_listener):
+        dns_patch = mock.patch("remnawave_manager.site_ipv4.system_resolvers", return_value=("127.0.0.53",))
+        dns_patch.start()
+        self.addCleanup(dns_patch.stop)
+        dns_queries = []
+
+        class DNS(socketserver.BaseRequestHandler):
+            def handle(self):
+                packet, udp = self.request
+                end = 12
+                while packet[end]:
+                    end += packet[end] + 1
+                end += 1
+                kind = struct.unpack("!H", packet[end:end + 2])[0]
+                dns_queries.append(kind)
+                address = socket.inet_pton(socket.AF_INET6 if kind == 28 else socket.AF_INET, "::1" if kind == 28 else "127.0.0.1")
+                question = packet[12:end + 4]
+                answer = b"\xc0\x0c" + struct.pack("!HHIH", kind, 1, 1, len(address)) + address
+                response = packet[:2] + struct.pack("!HHHHH", 0x8180, 1, 1, 0, 0) + question + answer
+                udp.sendto(response, self.client_address)
+
+        dns = socketserver.ThreadingUDPServer(("127.0.0.1", 0), DNS)
+        threading.Thread(target=dns.serve_forever, daemon=True).start()
+        self.addCleanup(dns.server_close)
+        self.addCleanup(dns.shutdown)
         source = local_source()
         observed = []
         reject_selected = False
@@ -129,7 +155,12 @@ class EgressNginxTests(unittest.TestCase):
                 generation += 1
                 # Change only the upstream transport for this offline fixture.
                 # Source bindings, rewrite rules and all manager transactions are real.
-                text = re.sub(r"proxy_pass https://[^/;]+", f"proxy_set_header X-Egress-Test nginx;\n        proxy_pass http://127.0.0.1:{upstream.server_port}", production.read_text())
+                text = production.read_text()
+                # Preserve the actual IPv4-only DNS upstreams; point their origins at
+                # the offline fixture without replacing the proxy routing semantics.
+                text = text.replace('resolver 127.0.0.53 ipv6=off;', f'resolver 127.0.0.1:{dns.server_address[1]} ipv6=off;')
+                text = re.sub(r'server ([a-z0-9.-]+):443 resolve;', rf'server \1:{upstream.server_port} resolve;', text)
+                text = re.sub(r"proxy_pass https://([^/;]+)", lambda match: 'proxy_set_header X-Egress-Test nginx;\n        proxy_pass http://' + (match[1] if match[1].startswith('rwm_site_ipv4_') else f'127.0.0.1:{upstream.server_port}'), text)
                 text = re.sub(r"^.*proxy_ssl_.*\n", "", text, flags=re.M)
                 text = text.replace(f"root {site};", f"root {site};\n    location = /ready {{ return 200 '{generation}'; }}")
                 runtime.write_text(f"pid {root}/nginx.pid;\nerror_log {root}/error.log;\nevents {{}}\nhttp {{ access_log off;\n{text}\n}}")
@@ -176,13 +207,28 @@ class EgressNginxTests(unittest.TestCase):
                 ):
                     result = set_egress(Runner(), store, source)
                     self.assertTrue(result["checked"])
-                    self.assertEqual(request_source(), source)
+                    for _ in range(12):
+                        self.assertEqual(request_source(), source)
+                    self.assertIn(1, dns_queries)
+                    self.assertNotIn(28, dns_queries)
+                    image = json.loads(read_response('/_images/mastodon.ml/a%20b.jpg?x=a%2Bb'))
+                    self.assertEqual(image['source'], source)
+                    self.assertIn((source, '/a%20b.jpg?x=a%2Bb'), observed)
                     self.assertEqual(request_source("/transport-control"), "127.0.0.1")
                     # Template replacement must carry the binding to new routes too.
                     production.write_text(upgrade_site_config(production.read_text(), "02-aster-observatory", roots)[0])
                     inventory.managed_files[0].sha256 = sha256_file(production)
                     activate()
                     self.assertEqual(request_source("/_aster/rutube-search?query=test&page=1"), source)
+                    for template, probes in PROBES.items():
+                        with self.subTest(template=template, unix=unix_listener):
+                            production.write_text(upgrade_site_config(production.read_text(), template, roots)[0])
+                            inventory.managed_files[0].sha256 = sha256_file(production)
+                            activate()
+                            for _, route in probes:
+                                for _ in range(3):
+                                    self.assertEqual(request_source(route), source)
+                    self.assertNotIn(28, dns_queries)
                     # Re-read persisted configuration after a complete nginx restart.
                     process.terminate()
                     process.wait(timeout=5)

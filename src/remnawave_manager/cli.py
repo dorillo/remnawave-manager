@@ -1631,7 +1631,9 @@ def dispatch(args: argparse.Namespace, context: CliContext) -> int:
             context.emit(results)
         else:
             for probe in results:
-                context.write(f"{probe.source} → {probe.url}: {probe.detail}; {probe.seconds:.2f} с; local={probe.local_ip or '—'}")
+                context.write(f"{'Через nginx' if probe.via == 'nginx' else probe.source} → {probe.url}: {probe.detail}; {probe.seconds:.2f} с; local={probe.local_ip or '—'}")
+            if not any(probe.via == "nginx" for probe in results):
+                context.write("Проверен прямой доступ с выбранного IP. Проверка через nginx выполняется для текущего IP сайта и после применения нового.")
         return 0 if all(probe.ok for probe in results) else 1
     if handler == "site-egress-set":
         _confirm(context, f"Исходящий IP внешних запросов сайта: {args.address}. Будет создан backup и применена конфигурация nginx."

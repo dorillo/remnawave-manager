@@ -7,6 +7,11 @@ import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from xml.etree import ElementTree
+from urllib.parse import urlsplit
+
+from .image_proxy import upstream_url as image_upstream
+from .loop_proxy import MEDIA_PATTERN
+from .fokus_proxy import upstream as fokus_upstream
 
 from .backup import create_backup
 from .compose import inspect_compose
@@ -36,6 +41,8 @@ class Probe:
     remote_ip: str
     seconds: float
     detail: str
+    via: str = "direct"
+    samples: tuple[tuple[str, str], ...] = ()
 
 
 # Only anonymous, read-only requests used by the shipped sites. The second
@@ -44,7 +51,7 @@ PROBES = {
     "01-northline": (("https://mastodon.ml/api/v1/directory?local=true&order=active&limit=20", "/_northline/mastodon/api/v1/directory?local=true&order=active&limit=20"),),
     "02-aster-observatory": (("https://rutube.ru/api/search/video/?query=nature&page=1", "/_aster/rutube-search?query=nature&page=1"),),
     "03-morrow-coffee": tuple((f"https://yappy.media/api/feed?page={page}&fingerprint=", f"/_morrow/yappy/feed?page={page}") for page in (1, 2)),
-    "04-signal-works": (("https://otvet.mail.ru/api/topic/feed", "/_answers/mail/feed"),),
+    "04-signal-works": (("https://otvet.mail.ru/api/topic/feed?limit=20", "/_answers/mail/feed?limit=20"),),
     "05-field-notes": (("https://ru.wikipedia.org/w/api.php?format=json&action=query&list=random&rnnamespace=0&rnlimit=1", "/_svod/wikipedia/random"),),
     "06-loop-archive": (("https://gifs.ru/api/v1/Popular?contentType=1&skip=0&take=24", "/_loop/gifs/popular?contentType=1&skip=0&take=24"),),
     "07-fokus-news": (("https://ria.ru/export/rss2/archive/index.xml", "/_fokus/ria/feed"),),
@@ -132,10 +139,67 @@ def _template_probes(target: Path) -> tuple[tuple[str, str], ...]:
         raise ValidationError("Не удалось определить шаблон для проверки источника; примените штатный шаблон сайта.") from error
 
 
+def _media_route(url: str) -> str | None:
+    parsed = urlsplit(url)
+    if parsed.scheme != "https" or parsed.username or parsed.password or parsed.fragment:
+        return None
+    route = "/_images/" + parsed.netloc + parsed.path + ("?" + parsed.query if parsed.query else "")
+    if image_upstream(route) == url:
+        return route
+    if parsed.netloc == "media.gifs.ru" and not parsed.query and re.fullmatch("/" + MEDIA_PATTERN, parsed.path):
+        return "/_loop/media" + parsed.path
+    route = "/_fokus/media" + parsed.path
+    if fokus_upstream(route, parsed.query) == url:
+        return route
+    return None
+
+
+def _sample_routes(value: object, url: str) -> tuple[tuple[str, str], ...]:
+    result = []
+    if "/api/v1/directory" in url and isinstance(value, list) and value:
+        identity = str(value[0].get("id", "")) if isinstance(value[0], dict) else ""
+        if re.fullmatch(r"[0-9]{1,20}", identity):
+            path = f"/api/v1/accounts/{identity}/statuses?limit=20&exclude_replies=true&exclude_reblogs=true"
+            result.append(("https://mastodon.ml" + path, "/_northline/mastodon" + path))
+    if ("/api/v1/Popular" in url or "/_loop/gifs/popular" in url) and isinstance(value, dict):
+        rows = value.get("result")
+        identity = str(rows[0].get("id", "")) if isinstance(rows, list) and rows and isinstance(rows[0], dict) else ""
+        if re.fullmatch(r"[A-Za-z0-9]{1,12}", identity):
+            result.append(("https://gifs.ru/api/v1/File/FileById/" + identity, "/_loop/gifs/item/" + identity))
+    # Select a bounded, allowlisted image sample, never an arbitrary API-provided URL.
+    def strings(node, depth=0):
+        if depth > 6:
+            return
+        if isinstance(node, str):
+            yield node
+        elif isinstance(node, list):
+            for item in node[:3]:
+                yield from strings(item, depth + 1)
+        elif isinstance(node, dict):
+            if isinstance(node.get("cloudSource300"), str):
+                yield node["cloudSource300"]
+            for item in list(node.values())[:40]:
+                yield from strings(item, depth + 1)
+    for index, sample in enumerate(strings(value)):
+        if index >= 300:
+            break
+        try:
+            route = _media_route(sample)
+        except ValueError:
+            continue
+        if route:
+            result.append((sample, route))
+            break
+    return tuple(result)
+
+
 def _probe(runner: Runner, url: str, source: str | None, extra: tuple[str, ...] = ()) -> Probe:
     command = ["curl", "-q", "--noproxy", "*", "-sS", "--connect-timeout", "5", "--max-time", "18",
                "--max-filesize", "4194304", "--proto", "=http,https", "-A", "Mozilla/5.0 (compatible; MorrowVideo/1.0)",
                "-H", "Accept: application/json", "-w", "\nRWM_EGRESS_META:%{json}"]
+    media = urlsplit(url).path.startswith(("/_images/", "/_loop/media/", "/_fokus/media/")) or _media_route(url) is not None
+    if media:
+        command += ["--range", "0-1023", "--output", "/dev/null"]
     if "--unix-socket" not in extra:
         command.append("-4")
     if source:
@@ -155,25 +219,38 @@ def _probe(runner: Runner, url: str, source: str | None, extra: tuple[str, ...] 
     detail = "OK" if ok else f"curl={result.returncode}, HTTP={status}"
     if result.returncode and result.stderr:
         detail += ": " + sanitize_external_text(result.stderr, limit=600)
-    if ok:
+    samples = ()
+    if ok and not media:
         try:
             if "ria.ru/" in url or "/_fokus/" in url:
-                ElementTree.fromstring(body)
-            elif not isinstance(json.loads(body), (dict, list)):
-                raise ValueError("not structured data")
+                xml = ElementTree.fromstring(body)
+                value = [item.attrib for item in xml.iter("enclosure")]
+            else:
+                value = json.loads(body)
+                if not isinstance(value, (dict, list)):
+                    raise ValueError("not structured data")
+            samples = _sample_routes(value, url)
         except (ValueError, ElementTree.ParseError):
             ok, detail = False, "Источник вернул неожиданный формат данных"
     if ok and source and info.get("local_ip") != source:
         ok, detail = False, "Исходящий локальный IP не совпал с выбранным"
-    return Probe(source or "auto", url, ok, status, info.get("local_ip", ""), info.get("remote_ip", ""), elapsed, detail)
+    return Probe(source or "auto", url, ok, status, info.get("local_ip", ""), info.get("remote_ip", ""), elapsed, detail, "nginx" if extra else "direct", samples)
 
 
 def check_egress(runner: Runner, store: StateStore, source: str | None) -> list[Probe]:
     if source is not None:
         source = validate_source(source)
-    _, target, _, _, _ = _context(runner, store)
+    inventory, target, service, roots, snapshots = _context(runner, store)
     _assigned_source(runner, source)
-    return [_probe(runner, url, source) for url, _ in _template_probes(target)]
+    probes = _template_probes(target)
+    results = [_probe(runner, url, source) for url, _ in probes]
+    current, _ = _current(snapshots, roots)
+    if source == current:
+        if not nginx_is_running(runner, inventory):
+            results.append(Probe(source or "auto", "nginx", False, 0, "", "", 0, "nginx не запущен", "nginx"))
+        else:
+            results.extend(_live_results(runner, _local_target(snapshots, roots, service), probes))
+    return results
 
 
 def _local_target(snapshots: ConfigSnapshots, roots: set[str], service: dict) -> tuple[str, tuple[str, ...]]:
@@ -216,14 +293,28 @@ def _local_target(snapshots: ConfigSnapshots, roots: set[str], service: dict) ->
     raise ValidationError("Не найден локальный listener nginx для проверки сайта.")
 
 
+def _live_results(runner: Runner, target: tuple[str, tuple[str, ...]], probes: tuple[tuple[str, str], ...]) -> list[Probe]:
+    origin, extra = target
+    results = []
+    samples = []
+    for _, route in probes:
+        for attempt in range(3):
+            result = _probe(runner, origin + route, None, extra)
+            results.append(result)
+            if attempt == 0 and result.ok:
+                samples.extend(result.samples)
+    for _, route in dict.fromkeys(samples):
+        for _ in range(3):
+            results.append(_probe(runner, origin + route, None, extra))
+    return results
+
+
 def _check_live(runner: Runner, target: tuple[str, tuple[str, ...]] | None, probes: tuple[tuple[str, str], ...]) -> None:
     if target is None:
         return
-    origin, extra = target
-    for _, route in probes:
-        result = _probe(runner, origin + route, None, extra)
+    for result in _live_results(runner, target, probes):
         if not result.ok:
-            raise TransactionError(f"Проверка сайта через nginx не прошла: {route}: {result.detail}")
+            raise TransactionError(f"Проверка сайта через nginx не прошла: {result.url}: {result.detail}")
 
 
 def set_egress(runner: Runner, store: StateStore, source: str | None, *, skip_check: bool = False) -> dict:

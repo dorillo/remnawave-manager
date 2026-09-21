@@ -5,6 +5,7 @@ import ipaddress
 import re
 
 from .errors import ValidationError
+from .site_ipv4 import bind_origins, unbind_origins, synchronize_upstreams
 from .nginx import _brace_depths, _server_blocks, _structural_text
 from .site_policy import (
     ASTER_COMMENTS_PROXY, ASTER_METADATA_PROXY, ASTER_SEARCH_PROXY,
@@ -51,18 +52,21 @@ def site_servers(text: str, roots: set[str]) -> list[tuple[int, int]]:
 def strip_bindings(body: str) -> tuple[str, str | None]:
     """Operate on LF text; validate markers before removing our own directives."""
     values = _BIND.findall(body)
-    plain = _BIND.sub("", body)
+    plain = unbind_origins(_BIND.sub("", body))
     if MARKER in plain or len(set(values)) > 1:
         raise ValidationError("Настройка исходящего IP сайта повреждена или неоднозначна.")
     source = validate_source(values[0]) if values else None
+    if source is None and plain != body:
+        raise ValidationError("IPv4-источники сайта не имеют исходящего IP.")
     if source is not None:
         restored, _ = bind_body(plain, source)
-        if restored != body:
+        legacy, _ = bind_body(plain, source, legacy=True)
+        if body not in (restored, legacy):
             raise ValidationError("Исходящий IP задан не во всех известных маршрутах сайта или вне них.")
     return plain, source
 
 
-def bind_body(body: str, source: str | None) -> tuple[str, int]:
+def bind_body(body: str, source: str | None, *, legacy: bool = False) -> tuple[str, int]:
     if source is not None:
         source = validate_source(source)
     # Reject custom bindings rather than guessing how they interact with ours.
@@ -88,6 +92,8 @@ def bind_body(body: str, source: str | None) -> tuple[str, int]:
         occurrences = remainder.count(block)
         count += len(_PASS.findall(block)) * occurrences
         replacement = _PASS.sub(lambda m: f"        proxy_bind {source}; {MARKER}\n" + m[0], block) if source else block
+        if source and not legacy:
+            replacement = bind_origins(replacement)
         remainder = remainder.replace(block, token)
         replacements.append((token, replacement))
     structure = _structural_text(remainder)
@@ -116,4 +122,4 @@ def configure_egress(text: str, roots: set[str], source: str | None) -> tuple[st
         count += routes
         previous.append(old_source)
         text = text[:opening + 1] + updated.replace("\n", newline) + text[closing:]
-    return text, count, previous
+    return synchronize_upstreams(text), count, previous

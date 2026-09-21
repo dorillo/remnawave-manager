@@ -4,6 +4,7 @@ from __future__ import annotations
 import re
 
 from .errors import ValidationError
+from .site_ipv4 import synchronize_upstreams
 from .nginx import _brace_depths, _server_blocks, _structural_text
 from .site_egress_config import bind_body, strip_bindings
 from .site_policy import (
@@ -84,4 +85,4 @@ def upgrade_site_config(text: str, template_id: str, roots: set[str]) -> tuple[s
             body, _ = bind_body(body, source_ip)
         text = text[:opening + 1] + body.replace('\n', newline) + text[closing:]
         matched += 1
-    return text, matched
+    return synchronize_upstreams(text), matched

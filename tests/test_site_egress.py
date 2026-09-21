@@ -39,7 +39,14 @@ def ip_output():
     ])
 
 
-class EgressConfigTests(unittest.TestCase):
+class EgressDNSTestCase(unittest.TestCase):
+    def setUp(self):
+        patch = mock.patch("remnawave_manager.site_ipv4.system_resolvers", return_value=("127.0.0.53",))
+        patch.start()
+        self.addCleanup(patch.stop)
+
+
+class EgressConfigTests(EgressDNSTestCase):
     def test_every_template_and_transition_preserves_binding_and_transports(self):
         for template in TEMPLATE_POLICIES:
             original = config(template)
@@ -129,7 +136,7 @@ class EgressProbeTests(unittest.TestCase):
             self.assertEqual(validate(parsed.path, parsed.query), url)
 
 
-class EgressContextTests(unittest.TestCase):
+class EgressContextTests(EgressDNSTestCase):
     def test_real_inventory_mounts_and_network_validation(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
@@ -165,8 +172,9 @@ class EgressContextTests(unittest.TestCase):
             _current([(Path("nginx.conf"), original + selected, 0o600)], ROOTS)
 
 
-class EgressTransactionTests(unittest.TestCase):
+class EgressTransactionTests(EgressDNSTestCase):
     def setUp(self):
+        super().setUp()
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         root = Path(self.temporary.name)
@@ -208,7 +216,7 @@ class EgressTransactionTests(unittest.TestCase):
         self.assertEqual(self.path.stat().st_mode & 0o777, 0o600)
         saved = self.store.save_inventory.call_args.args[0]
         self.assertEqual(saved.managed_files[0].sha256, sha256_file(self.path))
-        self.assertEqual(self.mocks["_probe"].call_count, 4)
+        self.assertEqual(self.mocks["_probe"].call_count, 8)
         self.mocks["create_backup"].assert_called_once()
         self.assertIn(TRANSPORT, self.path.read_text())
 
@@ -235,7 +243,7 @@ class EgressTransactionTests(unittest.TestCase):
 
     def test_live_site_failure_rolls_back(self):
         good = self.mocks["_probe"].return_value
-        self.mocks["_probe"].side_effect = [good, good, Probe("auto", "url", False, 504, "", "", 5, "HTTP=504")]
+        self.mocks["_probe"].side_effect = [good, good, Probe("auto", "url", False, 504, "", "", 5, "HTTP=504"), *([good] * 5)]
         with self.assertRaisesRegex(TransactionError, "Проверка сайта"):
             set_egress(self.runner, self.store, NEW)
         self.assertEqual(self.path.read_text(), self.original)
@@ -316,3 +324,55 @@ class EgressCliTests(unittest.TestCase):
         with mock.patch("remnawave_manager.cli.set_egress", return_value={"source": "auto", "changed": True}) as setting:
             self.assertEqual(dispatch(arguments, context), 0)
         setting.assert_called_once_with(context.runner, context.store, None, skip_check=True)
+
+class ExpandedProbeTests(EgressDNSTestCase):
+    def test_live_probe_catches_alternating_success_failure(self):
+        from remnawave_manager.site_egress import _check_live
+        good = Probe('auto', 'url', True, 200, '', '', 0.1, 'OK')
+        bad = Probe('auto', 'url', False, 500, '', '', 0.1, 'HTTP=500')
+        with mock.patch('remnawave_manager.site_egress._probe', side_effect=[good, bad, good]) as probe:
+            with self.assertRaises(TransactionError):
+                _check_live(mock.Mock(), ('https://site.test', ('--unix-socket', '/socket')), (('url', '/api'),))
+        self.assertEqual(probe.call_count, 3)
+
+    def test_live_probe_exercises_discovered_media_and_posts(self):
+        from remnawave_manager.site_egress import _live_results, _sample_routes
+        value = [{'id': '123', 'avatar': 'https://mastodon.ml/system/avatar.jpg'}]
+        samples = _sample_routes(value, 'https://mastodon.ml/api/v1/directory')
+        self.assertEqual(len(samples), 2)
+        good = Probe('auto', 'url', True, 200, '', '', 0.1, 'OK', 'nginx', samples)
+        with mock.patch('remnawave_manager.site_egress._probe', return_value=good) as probe:
+            results = _live_results(mock.Mock(), ('https://site.test', ('--unix-socket', '/socket')), (('url', '/api'),))
+        self.assertEqual(len(results), 9)
+        self.assertTrue(any('/_images/' in call.args[1] for call in probe.call_args_list))
+        self.assertTrue(any('/statuses?' in call.args[1] for call in probe.call_args_list))
+
+    def test_api_payload_cannot_choose_arbitrary_probe_destinations(self):
+        from remnawave_manager.site_egress import _sample_routes
+        values = [{'id': '../admin', 'avatar': 'https://127.0.0.1/admin', 'url': 'https://evil.example/x.jpg', 'image': 'https://user:pw@mastodon.ml/x.jpg'}]
+        self.assertEqual(_sample_routes(values, 'https://mastodon.ml/api/v1/directory'), ())
+        loop = _sample_routes({'result': [{'id': '8kyX1o', 'cloudSource300': 'https://media.gifs.ru/' + 'a' * 40 + '_300.webp'}]}, 'https://site.test/_loop/gifs/popular')
+        self.assertEqual(loop[0][1], '/_loop/gifs/item/8kyX1o')
+        self.assertTrue(loop[1][1].startswith('/_loop/media/'))
+
+    def test_spros_probe_uses_required_feed_limit(self):
+        self.assertEqual(PROBES['04-signal-works'], ((
+            'https://otvet.mail.ru/api/topic/feed?limit=20', '/_answers/mail/feed?limit=20',
+        ),))
+
+    def test_current_ip_check_includes_nginx_and_other_ip_does_not(self):
+        from remnawave_manager.site_egress import check_egress
+        good = Probe(NEW, 'url', True, 200, NEW, '', 0.1, 'OK')
+        with (
+            mock.patch('remnawave_manager.site_egress._context', return_value=(mock.Mock(), mock.Mock(), {}, ROOTS, [])),
+            mock.patch('remnawave_manager.site_egress._assigned_source'),
+            mock.patch('remnawave_manager.site_egress._template_probes', return_value=(('url', '/api'),)),
+            mock.patch('remnawave_manager.site_egress._current', return_value=(NEW, 1)),
+            mock.patch('remnawave_manager.site_egress._local_target', return_value=('https://site.test', ())),
+            mock.patch('remnawave_manager.site_egress.nginx_is_running', return_value=True),
+            mock.patch('remnawave_manager.site_egress._probe', return_value=good),
+            mock.patch('remnawave_manager.site_egress._live_results', return_value=[good] * 3) as live,
+        ):
+            self.assertEqual(len(check_egress(mock.Mock(), mock.Mock(), NEW)), 4)
+            self.assertEqual(len(check_egress(mock.Mock(), mock.Mock(), OLD)), 1)
+            live.assert_called_once()
