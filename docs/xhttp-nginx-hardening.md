@@ -1,5 +1,7 @@
 # XHTTP через nginx: уникальный путь и снижение шаблонности
 
+> Для Remnawave Manager 0.1.22: [единые настройки и маркеры транспорта](node-config-standard.md).
+
 Инструкция относится к отдельной Node, установленной `remnawave-manager`, и к
 Remnawave Node `3.4.1`. В этом образе используется Xray Core `v26.7.28`.
 
@@ -111,6 +113,8 @@ inbound:
 
 ```nginx
 location ^~ XHTTP_PATH {
+    # remnawave-manager: transport=xhttp provider=none
+    gzip off;
     client_max_body_size 2m;
     client_body_timeout 5m;
 

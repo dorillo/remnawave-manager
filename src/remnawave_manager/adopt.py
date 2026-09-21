@@ -12,6 +12,7 @@ from .errors import ValidationError
 from .journal import TransactionJournal
 from .models import Component, Inventory, ManagedFile, Role
 from .nginx import _structural_text
+from .node_transport import transport_features
 from .runner import (
     Runner,
     read_stable_regular_file,
@@ -253,11 +254,11 @@ def _nginx_uses_upstream(config: str, name: str) -> bool:
 
 def _nginx_features(paths: list[Path]) -> tuple[list[str], dict[str, bool]]:
     combined = "\n".join(_read_nginx_text(path) for path in paths)
-    lowered = combined.lower()
+    structural = _structural_text(combined)
     sockets = set(
         re.findall(
             r"(?:listen|server)[ \t]+(?:unix:)?(/(?:dev/shm|run)/[^; \t]+\.sock(?:et)?)",
-            combined,
+            structural,
         )
     )
     # XHTTP stream separation commonly points nginx directly at an Xray Unix
@@ -265,13 +266,13 @@ def _nginx_features(paths: list[Path]) -> tuple[list[str], dict[str, bool]]:
     sockets.update(
         re.findall(
             r"\bproxy_pass[ \t]+https?://unix:(/(?:dev/shm|run)/[^;:\s]+\.sock(?:et)?)(?::[^;]*)?;",
-            combined,
+            structural,
             re.IGNORECASE,
         )
     )
     sockets = sorted(sockets)
-    beeline_post = _nginx_uses_upstream(combined, "beeline_xhttp")
-    beeline_get = _nginx_uses_upstream(combined, "xray_beeline_xhttp")
+    beeline_post = _nginx_uses_upstream(structural, "beeline_xhttp")
+    beeline_get = _nginx_uses_upstream(structural, "xray_beeline_xhttp")
     # Site asset proxies also contain CDN hostnames and can share a server
     # using PROXY protocol. Neither is evidence of a Yandex CDN origin.
     # Ignore comments and quoted site content when looking for explicit markers.
@@ -287,17 +288,35 @@ def _nginx_features(paths: list[Path]) -> tuple[list[str], dict[str, bool]]:
         )
         if "xhttp" in name.lower() or "cdn" in name.lower()
     )
+    routes = transport_features(combined)
     features = {
-        "xhttp_stream_separation": bool(sockets) or "xhttp" in lowered,
+        **routes,
         "yandex_cdn": yandex,
         "beeline_cdn_get": beeline_get,
         "beeline_cdn_post": beeline_post,
         "cookie_gate": "$http_cookie" in combined
         or "$cookie_" in combined
         or "auth_cookie" in combined,
-        "gzip": bool(re.search(r"(?m)^\s*gzip\s+on\s*;", combined)),
+        "gzip": bool(re.search(r"(?:^|[;{}])\s*gzip\s+on\s*;", structural)),
     }
+    # Explicit per-location declarations take precedence over legacy names.
+    if routes["xhttp_provider_explicit"]:
+        features.update(routes)
     return sockets, features
+
+
+def inspect_inventory(runner: Runner, inventory: Inventory) -> Inventory:
+    """Read current observations without adopting drift or changing Certbot/state."""
+    current = Inventory.from_dict(inventory.to_dict())
+    current.xhttp_sockets, nginx_features = _nginx_features(
+        [Path(path) for path in current.nginx_files]
+    )
+    current.features.update(nginx_features)
+    current.warp_interfaces = _warp_interfaces(runner)
+    current.features["warp"] = bool(current.warp_interfaces)
+    for component in current.components.values():
+        _inspect_container(runner, component)
+    return current
 
 
 def adopt(

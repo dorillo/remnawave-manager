@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from . import __version__
-from .adopt import adopt
+from .adopt import adopt, inspect_inventory
 from .api import (
     RemnawaveApi,
     complete_reality_credentials_handoff,
@@ -360,6 +360,7 @@ def build_parser() -> RussianArgumentParser:
     inventory = commands.add_parser(
         "inventory", help="Показать сохранённую инвентаризацию."
     )
+    inventory.add_argument("--refresh", action="store_true", help="Проверить текущие nginx, контейнеры и WARP без изменения контрольных сумм и Certbot.")
     inventory.set_defaults(handler="inventory")
 
     install = commands.add_parser(
@@ -1025,6 +1026,13 @@ def _show_inventory(context: CliContext, inventory: Inventory) -> None:
     context.write(f"Роль: {inventory.role}")
     context.write(f"Каталог: {inventory.install_dir}")
     context.write(f"Compose: {inventory.compose_file}")
+    if inventory.role == "node" and inventory.features.get("xhttp_stream_separation"):
+        providers = [label for key, label in (
+            ("xhttp_direct", "без CDN"), ("yandex_cdn", "Yandex CDN"),
+            ("beeline_cdn_get", "Beeline CDN GET"), ("beeline_cdn_post", "Beeline CDN POST"),
+            ("xhttp_provider_unknown", "есть маршрут с неуказанным провайдером"),
+        ) if inventory.features.get(key)]
+        context.write("XHTTP: " + (", ".join(providers) or "провайдер не указан"))
     if inventory.site_dirs:
         for directory in inventory.site_dirs:
             context.write(
@@ -1087,7 +1095,10 @@ def dispatch(args: argparse.Namespace, context: CliContext) -> int:
                 context.write("Старое cron-задание Certbot заменено certbot.timer.")
         return 0
     if handler == "inventory":
-        _show_inventory(context, context.store.load_inventory())
+        current = context.store.load_inventory()
+        if args.refresh:
+            current = inspect_inventory(context.runner, current)
+        _show_inventory(context, current)
         return 0
     if handler == "install-panel":
         password = _optional_environment_secret("RWM_ADMIN_PASSWORD")
@@ -2645,7 +2656,7 @@ def _interactive_arguments(context: CliContext, section: int) -> list[str] | Non
         )
         return ["security", "emergency-open", "--minutes", str(minutes)]
     if section == 14:
-        return ["inventory"]
+        return ["inventory", "--refresh"]
     if section == 15:
         action = _choose(
             context,

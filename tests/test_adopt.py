@@ -234,7 +234,7 @@ server {
                     )
                     sockets, features = _nginx_features([config])
                     self.assertFalse(features["yandex_cdn"])
-                    self.assertTrue(features["xhttp_stream_separation"])
+                    self.assertFalse(features["xhttp_stream_separation"])
                     self.assertEqual(sockets, ["/dev/shm/nginx.sock"])
 
     def test_explicit_yandex_cdn_markers_are_detected(self) -> None:

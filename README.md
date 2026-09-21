@@ -509,3 +509,9 @@ RWM_BACKEND_CONTRACT_PATH="$PWD/tests/.tmp/upstream-contract/node_modules/@remna
 `wgcf` является неофициальным клиентом Cloudflare WARP и загружается из upstream-релизов [ViRb3/wgcf](https://github.com/ViRb3/wgcf) во время операции WARP. Он не является частью исходного кода менеджера. Panel, Backend, Node и Subscription Page являются внешним ПО Remnawave под AGPL-3.0 и также не бандлятся в этот репозиторий. Полные уведомления: [NOTICE](NOTICE).
 
 Remnawave Manager не аффилирован с Remnawave, Cloudflare, Яндекс или Unsplash. Названия и товарные знаки принадлежат соответствующим правообладателям.
+
+## Inventory и настройки Node в 0.1.22
+
+[Явные маркеры CDN/XHTTP, gzip и проверка текущего состояния](docs/node-config-standard.md).
+Меню inventory читает текущие nginx, контейнеры и WARP без принятия drift;
+в CLI используйте `rwm inventory --refresh`.
