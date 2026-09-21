@@ -240,6 +240,21 @@ def _site_policy_changes(
     """Prepare scoped upgrades only for unchanged managed nginx files."""
     changes: list[tuple[Path, str, str, int]] = []
     matched = 0
+    for path, old, mode in _managed_nginx_configs(inventory):
+        new, count = upgrade_site_config(old, template_id, site_roots)
+        matched += count
+        if old != new:
+            changes.append((path, old, new, mode))
+    if not matched:
+        raise ValidationError(
+            "Не найден управляемый server nginx с root выбранного сайта. "
+            "Проверьте bind mounts, root и inventory перед заменой."
+        )
+    return changes
+
+
+def _managed_nginx_configs(inventory: Inventory) -> list[tuple[Path, str, int]]:
+    snapshots: list[tuple[Path, str, int]] = []
     nginx_roots = [Path(value).resolve() for value in inventory.nginx_files]
     install_root = Path(inventory.install_dir).resolve()
     for item in inventory.managed_files:
@@ -257,16 +272,8 @@ def _site_policy_changes(
             raise ValidationError(f"Конфигурация nginx изменена после adoption: {path}")
         # Decode bytes directly so rollback preserves CRLF as well as LF.
         old = snapshot.data.decode("utf-8")
-        new, count = upgrade_site_config(old, template_id, site_roots)
-        matched += count
-        if old != new:
-            changes.append((path, old, new, snapshot.mode))
-    if not matched:
-        raise ValidationError(
-            "Не найден управляемый server nginx с root выбранного сайта. "
-            "Проверьте bind mounts, root и inventory перед заменой."
-        )
-    return changes
+        snapshots.append((path, old, snapshot.mode))
+    return snapshots
 
 
 def _site_roots(runner: Runner, inventory: Inventory, target: Path) -> set[str]:

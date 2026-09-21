@@ -47,6 +47,7 @@ from .compat import component_target
 from .compose import inspect_compose
 from .diagnose import repair_permissions, run_diagnostics
 from .disguise import DISGUISE_TEMPLATE_COUNT, apply_template, template_catalog
+from .site_egress import check_egress, egress_status, set_egress
 from .errors import (
     ManagerError,
     NodeSecretValidationError,
@@ -685,6 +686,17 @@ def build_parser() -> RussianArgumentParser:
     disguise_apply.add_argument("template", choices=DISGUISE_IDS)
     _add_yes(disguise_apply)
     disguise_apply.set_defaults(handler="disguise-apply")
+    egress = disguise_commands.add_parser("egress", help="Исходящий IPv4 для внешних запросов сайта.")
+    egress_commands = egress.add_subparsers(dest="egress_action", required=True, metavar="ДЕЙСТВИЕ")
+    egress_commands.add_parser("status", help="Текущий IP и доступные адреса сервера.").set_defaults(handler="site-egress-status")
+    egress_check = egress_commands.add_parser("check", help="Проверить источник сайта через выбранный IPv4 без изменения настроек.")
+    egress_check.add_argument("address", help="Локальный IPv4 или auto — системный маршрут.")
+    egress_check.set_defaults(handler="site-egress-check")
+    egress_set = egress_commands.add_parser("set", help="Выбрать IPv4 сайта с backup, проверкой и откатом.")
+    egress_set.add_argument("address", help="Локальный IPv4 или auto — системный маршрут.")
+    egress_set.add_argument("--skip-check", action="store_true", help="Пропустить сетевые проверки; nginx -t и backup остаются обязательными.")
+    _add_yes(egress_set)
+    egress_set.set_defaults(handler="site-egress-set")
 
     api = commands.add_parser(
         "api", help="Безопасные операции через Remnawave Panel API."
@@ -1583,6 +1595,33 @@ def dispatch(args: argparse.Namespace, context: CliContext) -> int:
             for item in catalog:
                 context.write(f"{item['id']}: {item['name']} — {item['description']}")
         return 0
+    if handler == "site-egress-status":
+        value = egress_status(context.runner, context.store)
+        if context.json_output:
+            context.emit(value)
+        else:
+            context.write(f"Исходящий IP сайта: {value['source']}" + (" (адрес отсутствует на сервере)" if not value['available'] else ""))
+            context.write(f"Внешних маршрутов сайта: {value['proxy_routes']}")
+            context.write("auto — по настройкам системы")
+            for item in value["addresses"]:
+                context.write(f"{item['address']} — {item['interface']}")
+        return 0 if value["available"] else 1
+    if handler == "site-egress-check":
+        results = check_egress(context.runner, context.store, None if args.address == "auto" else args.address)
+        if context.json_output:
+            context.emit(results)
+        else:
+            for probe in results:
+                context.write(f"{probe.source} → {probe.url}: {probe.detail}; {probe.seconds:.2f} с; local={probe.local_ip or '—'}")
+        return 0 if all(probe.ok for probe in results) else 1
+    if handler == "site-egress-set":
+        _confirm(context, f"Исходящий IP внешних запросов сайта: {args.address}. Будет создан backup и применена конфигурация nginx."
+                 + (" Сетевые проверки отключены." if args.skip_check else ""), assume_yes=args.yes)
+        value = set_egress(context.runner, context.store, None if args.address == "auto" else args.address, skip_check=args.skip_check)
+        context.emit(value) if context.json_output else context.write(
+            f"Исходящий IP сайта: {value['source']}. " + ("Настройка применена." if value['changed'] else "Уже настроен.")
+        )
+        return 0
     if handler == "disguise-apply":
         _confirm(
             context,
@@ -1988,6 +2027,8 @@ def _is_mutating(args: argparse.Namespace) -> bool:
         "warp-scan",
         "warp-status",
         "disguise-list",
+        "site-egress-status",
+        "site-egress-check",
         "certificate-status",
         "firewall-status",
         "system-status",
@@ -2423,12 +2464,27 @@ def _interactive_arguments(context: CliContext, section: int) -> list[str] | Non
         return result
     if section == 8:
         action = _choose(
-            context, "Сайты-заглушки:", ("Показать шаблоны", "Установить шаблон")
+            context, "Сайты-заглушки:", ("Показать шаблоны", "Установить шаблон", "Исходящий IP сайта")
         )
         if action == 0:
             return None
         if action == 1:
             return ["disguise", "list"]
+        if action == 3:
+            value = egress_status(context.runner, context.store)
+            context.write(f"Текущий IP сайта: {value['source']}" + (" — отсутствует на сервере" if not value["available"] else ""))
+            context.write("IPv4 для запросов сайта к источникам ленты, поиска и изображений.")
+            operation = _choose(context, "Исходящий IP сайта:", ("Показать статус", "Проверить источник через IP", "Изменить IP"))
+            if operation == 0:
+                return None
+            if operation == 1:
+                return ["disguise", "egress", "status"]
+            addresses = ["auto"] + [item["address"] for item in value["addresses"]]
+            labels = ("По настройкам системы (auto)",) + tuple(f"{item['address']} — {item['interface']}" for item in value["addresses"])
+            selected = _choose(context, "Исходящий IPv4:", labels)
+            if selected == 0:
+                return None
+            return ["disguise", "egress", "check" if operation == 2 else "set", addresses[selected - 1]]
         catalog = template_catalog()
         selected = _choose(
             context,
