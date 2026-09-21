@@ -7,7 +7,7 @@ const root = path.resolve(
   "../src/remnawave_manager/data/disguises/06-loop-archive",
 );
 const raw = (n) => ({
-  id: n,
+  id: n === 1 ? "8kyX1o" : n,
   fileType: 1,
   title: n === 1 ? "Кот с хорошим настроением" : `Реакция ${n}`,
   tags: ["кот", "радость", "ОченьДлинныйТегБезПробелов".repeat(4)],
@@ -72,7 +72,7 @@ let browser,
       else if (u.pathname.endsWith("/trending"))
         result = [{ key: "кот" }, { key: "смех" }, { key: "пятница" }];
       else if (u.pathname.includes("/item/"))
-        result = raw(Number(u.pathname.split("/").pop()));
+        result = raw(u.pathname.endsWith("/8kyX1o") ? 1 : Number(u.pathname.split("/").pop()));
       else
         result = {
           isSuccess: true,
@@ -134,6 +134,12 @@ let browser,
     }),
     ["", "", "", "", null, null],
   );
+  assert.deepEqual(await page.evaluate(async () => {
+    const { normalize, item } = await import("./loop-data.js");
+    const ids = ["8kyX1o", "123", 123, "000123", "../bad", "a/b", "a?b", "a".repeat(13), {}, -1, 0, "0", null];
+    const normalized = ids.map(id => normalize({ id, fileType: 1 })?.id ?? null);
+    return { normalized, item: (await item("8kyX1o")).id };
+  }), { normalized: ["8kyX1o", 123, 123, "000123", null, null, null, null, null, null, null, "0", null], item: "8kyX1o" });
   assert.equal(await page.locator("input[type=search]").count(), 1);
   for (const width of [
     320, 375, 520, 600, 768, 801, 900, 1024, 1150, 1440, 1920,
@@ -337,14 +343,14 @@ let browser,
     await page
       .getByRole("link", { name: "Скачать", exact: true })
       .getAttribute("download"),
-    "loop-1.gif",
+    "loop-8kyX1o.gif",
   );
   await page.getByRole("button", { name: "Встроить", exact: true }).click();
   const code = await page
     .getByRole("textbox", { name: "HTML-код" })
     .inputValue();
   assert(code.startsWith("<img "));
-  assert(code.includes('src="loop-1.gif"'));
+  assert(code.includes('src="loop-8kyX1o.gif"'));
   assert(!code.includes("gifs.ru"));
   assert.equal(await page.locator(".source-link").count(), 0);
   assert(!code.includes("localhost"));
@@ -618,6 +624,12 @@ let browser,
     () => document.querySelectorAll(".card").length === 2,
   );
   assert.equal(await page.locator(".load-more button").count(), 0);
+  assert.deepEqual(await page.evaluate(async () => {
+    const { normalize, item } = await import("./loop-data.js");
+    const ids = ["8kyX1o", "123", 123, "000123", "../bad", "a/b", "a?b", "a".repeat(13), {}, -1, 0, "0", null];
+    const normalized = ids.map(id => normalize({ id, fileType: 1 })?.id ?? null);
+    return { normalized, item: (await item("8kyX1o")).id };
+  }), { normalized: ["8kyX1o", 123, 123, "000123", null, null, null, null, null, null, null, "0", null], item: "8kyX1o" });
   assert.equal(await page.locator("input[type=search]").count(), 1);
   // Exercise all local lists beyond two pages, including keeping the expanded
   // list after removing a liked item.

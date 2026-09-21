@@ -399,7 +399,7 @@ function interfaceLanguageSelect() {
   return el('div', { class: 'interface-language' }, [
     el('button', { type: 'button', 'aria-label': 'Язык интерфейса',
       onclick: () => setInterfaceLanguage(getInterfaceLanguage() === 'ru' ? 'en' : 'ru') }, getInterfaceLanguage() === 'ru' ? 'EN' : 'RU'),
-    el('button', { type: 'button', 'aria-label': 'Switch theme / Сменить тему', onclick: toggleTheme }, '◐'),
+    el('button', { type: 'button', 'aria-label': 'Switch theme / Сменить тему', onclick: toggleTheme }, icon('sun')),
   ]);
 }
 replace(

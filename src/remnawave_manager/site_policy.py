@@ -476,6 +476,8 @@ _PROXY_REVISIONS = [
     (render_aster_comments_proxy(secure=False), ASTER_COMMENTS_PROXY),
     (render_proxy(secure=False), NORTHLINE_PROXY),
     (LEGACY_NORTHLINE_PROXY, NORTHLINE_PROXY),
+    (render_loop_proxy(legacy_numeric_ids=True), LOOP_GIFS_PROXY),
+    (render_loop_proxy(secure=False, legacy_numeric_ids=True), LOOP_GIFS_PROXY),
     (render_loop_proxy(secure=False), LOOP_GIFS_PROXY),
     (render_fokus_proxy(secure=False), FOKUS_RIA_PROXY),
     (render_fokus_proxy(include_search=False, secure=False), FOKUS_RIA_PROXY),

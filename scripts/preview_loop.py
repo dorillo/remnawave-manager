@@ -12,7 +12,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from remnawave_manager.loop_proxy import MEDIA_PATTERN, ROUTES
+from remnawave_manager.loop_proxy import ITEM_ID_PATTERN, MEDIA_PATTERN, ROUTES
 from remnawave_manager.site_assets import FreshAssetsHandler
 
 SITE = Path(__file__).resolve().parents[1] / "src/remnawave_manager/data/disguises/06-loop-archive"
@@ -42,7 +42,7 @@ class LoopPreviewHandler(FreshAssetsHandler):
             expected, upstream, pattern = ROUTES[name]
             if method == expected and re.fullmatch(pattern, query):
                 return 'https://gifs.ru' + upstream + ('?' + query if query else '')
-        match = re.fullmatch(r'/_loop/gifs/item/([0-9]{1,12})', path)
+        match = re.fullmatch(rf'/_loop/gifs/item/({ITEM_ID_PATTERN})', path)
         if match and not query and method == 'GET':
             return 'https://gifs.ru/api/v1/File/FileById/' + match[1]
         match = re.fullmatch(r'/_loop/media/(' + MEDIA_PATTERN + ')', path)

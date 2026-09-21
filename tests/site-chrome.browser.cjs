@@ -30,7 +30,7 @@ const sites = [
         const pending = new Promise(resolve => { release = resolve; });
         await context.route('**/*', async route => {
           const u = new URL(route.request().url());
-          if (u.pathname.startsWith('/_') || u.origin !== 'https://ui.test') {
+          if (u.pathname.startsWith('/_') || u.pathname === '/data/catalog.json' || u.origin !== 'https://ui.test') {
             await pending;
             return route.fulfill({ status: 503, body: '{}' }).catch(() => {});
           }
@@ -76,6 +76,38 @@ const sites = [
             }
           }
 
+          if (['Line', 'Aster'].includes(brand)) {
+            for (const width of [320, 375, 390, 560, 700, 950, 1440, 1920]) {
+              await page.setViewportSize({ width, height: 1000 });
+              const language = page.getByRole('button', { name: /Язык интерфейса|^Язык$/ }).first();
+              const theme = page.getByRole('button', { name: /Switch theme/ }).first();
+              const a = await language.boundingBox(), b = await theme.boundingBox();
+              assert.ok(Math.abs(a.width - 44) < 0.01, `${brand} language at ${width}`);
+              assert.ok(Math.abs(b.width - a.width) < 0.01, `${brand} theme width at ${width}`);
+              assert.ok(Math.abs(b.height - a.height) < 0.01, `${brand} theme height at ${width}`);
+              assert.equal(await theme.locator('svg').count(), 1);
+              const icon = await theme.locator('svg').boundingBox();
+              assert.ok(icon.width >= 20 && icon.height >= 20, `${brand} icon at ${width}: ${JSON.stringify(icon)}`);
+              assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${brand} overflow at ${width}`);
+              if (brand === 'Aster') {
+                const columns = await page.locator('.skeleton-grid').evaluate(node => {
+                  const feed = document.createElement('div');
+                  feed.className = 'video-grid';
+                  feed.append(...Array.from({ length: 6 }, () => document.createElement('div')));
+                  node.after(feed);
+                  const result = [getComputedStyle(node).gridTemplateColumns, getComputedStyle(feed).gridTemplateColumns];
+                  feed.remove();
+                  return result;
+                });
+                const loadingWidths = columns[0].split(' ').map(parseFloat);
+                const videoWidths = columns[1].split(' ').map(parseFloat);
+                assert.equal(loadingWidths.length, videoWidths.length, `Aster loading columns at ${width}`);
+                loadingWidths.forEach((size, i) => assert.ok(Math.abs(size - videoWidths[i]) <= 1, `Aster loading width at ${width}: ${columns.join(" / ")}`));
+                if (width <= 560) assert.equal(columns[0].split(' ').length, 1);
+              }
+            }
+            await page.setViewportSize({ width: 1440, height: 1000 });
+          }
           assert.doesNotMatch(await page.locator('body').innerText(), /Loading Line|Loading Aster/);
           await page.evaluate(hash => { location.hash = hash; }, hash);
           await page.waitForFunction(([title, brand]) => document.title === `${brand} — ${title}`, [ru, brand]);

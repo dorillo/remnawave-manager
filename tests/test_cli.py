@@ -1222,6 +1222,45 @@ class CliDispatchTests(unittest.TestCase):
         self.assertIn(str(backup), terminal.getvalue())
         self.assertIn("Нажмите Enter, чтобы продолжить", prompts[2])
 
+    def test_egress_commands_return_to_egress_menu_even_on_failure(self) -> None:
+        class TerminalBuffer(io.StringIO):
+            def isatty(self) -> bool:
+                return True
+
+        for operation in ("1", "2", "3"):
+            for failed in (False, True):
+                with self.subTest(operation=operation, failed=failed):
+                    output = TerminalBuffer()
+                    answers = iter(["8", "3", operation] + ([] if operation == "1" else ["1"]) + ["", "0", "0", "0"])
+                    with (
+                        mock.patch("remnawave_manager.cli.execute", return_value=1 if failed else 0) as execute,
+                        mock.patch("remnawave_manager.cli.egress_status", return_value={"source": "auto", "available": True, "addresses": []}),
+                    ):
+                        code = main([], runtime_paths=self.paths, runner=mock.Mock(), input_fn=lambda _: next(answers), stdout=output, stderr=self.stderr)
+                    self.assertEqual(code, 0)
+                    execute.assert_called_once()
+                    self.assertEqual(output.getvalue().count("Исходящий IP сайта:"), 2)
+                    self.assertEqual(output.getvalue().count("Сайты-заглушки:"), 2)
+                    self.assertEqual(output.getvalue().count("Главное меню:"), 2)
+
+    def test_nested_back_returns_to_parent_without_running_a_command(self) -> None:
+        for answers, title, count in (
+            (["8", "3", "2", "0", "0", "0", "0"], "Исходящий IP сайта:", 2),
+            (["8", "2", "0", "0", "0"], "Сайты-заглушки:", 2),
+            (["4", "3", "0", "0", "0"], "Backup:", 2),
+        ):
+            with self.subTest(answers=answers):
+                self.stdout.seek(0)
+                self.stdout.truncate()
+                with (
+                    mock.patch("remnawave_manager.cli.execute") as execute,
+                    mock.patch("remnawave_manager.cli.list_backups", return_value=[Path("/backup.tar.gz")]),
+                    mock.patch("remnawave_manager.cli.egress_status", return_value={"source": "auto", "available": True, "addresses": []}),
+                ):
+                    self.assertEqual(self.run_main([], answers=answers), 0)
+                execute.assert_not_called()
+                self.assertEqual(self.stdout.getvalue().count(title), count)
+
     def test_all_sections_with_action_menus_remain_open(self) -> None:
         sections = (2, 4, 5, 6, 7, 8, 9, 11, 12, 13, 15)
         for section in sections:

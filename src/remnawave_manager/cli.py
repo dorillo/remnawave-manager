@@ -173,6 +173,7 @@ class CliContext:
     input_fn: InputFunction
     secret_fn: SecretFunction
     json_output: bool = False
+    active_submenu: str | None = None
 
     def write(self, message: str = "") -> None:
         print(_terminal_safe_text(message), file=self.stdout)
@@ -2331,7 +2332,7 @@ def _interactive_arguments(context: CliContext, section: int) -> list[str] | Non
         if action == 3:
             selected = _ask_backup_selection(context)
             if not selected:
-                return None
+                return []
             return ["backup", "delete", *(str(path) for path in selected)]
         if action == 6:
             return ["backup", "schedule-status"]
@@ -2481,36 +2482,39 @@ def _interactive_arguments(context: CliContext, section: int) -> list[str] | Non
             result.append("--purge-credentials")
         return result
     if section == 8:
-        action = _choose(
-            context, "Сайты-заглушки:", ("Показать шаблоны", "Установить шаблон", "Исходящий IP сайта")
-        )
-        if action == 0:
-            return None
-        if action == 1:
-            return ["disguise", "list"]
-        if action == 3:
+        while True:
+            if context.active_submenu != "site-egress":
+                action = _choose(
+                    context, "Сайты-заглушки:", ("Показать шаблоны", "Установить шаблон", "Исходящий IP сайта")
+                )
+                if action == 0:
+                    return None
+                if action == 1:
+                    return ["disguise", "list"]
+                if action == 2:
+                    catalog = template_catalog()
+                    selected = _choose(
+                        context, "Шаблон:", tuple(item["name"] for item in catalog),
+                    )
+                    if selected == 0:
+                        continue
+                    return ["disguise", "apply", catalog[selected - 1]["id"]]
+                context.active_submenu = "site-egress"
+            operation = _choose(context, "Исходящий IP сайта:", ("Показать статус", "Проверить источник через IP", "Изменить IP"))
+            if operation == 0:
+                context.active_submenu = None
+                continue
+            if operation == 1:
+                return ["disguise", "egress", "status"]
             value = egress_status(context.runner, context.store)
             context.write(f"Текущий IP сайта: {value['source']}" + (" — отсутствует на сервере" if not value["available"] else ""))
             context.write("IPv4 для запросов сайта к источникам ленты, поиска и изображений.")
-            operation = _choose(context, "Исходящий IP сайта:", ("Показать статус", "Проверить источник через IP", "Изменить IP"))
-            if operation == 0:
-                return None
-            if operation == 1:
-                return ["disguise", "egress", "status"]
             addresses = ["auto"] + [item["address"] for item in value["addresses"]]
             labels = ("По настройкам системы (auto)",) + tuple(f"{item['address']} — {item['interface']}" for item in value["addresses"])
             selected = _choose(context, "Исходящий IPv4:", labels)
             if selected == 0:
-                return None
+                continue
             return ["disguise", "egress", "check" if operation == 2 else "set", addresses[selected - 1]]
-        catalog = template_catalog()
-        selected = _choose(
-            context,
-            "Шаблон:",
-            tuple(item["name"] for item in catalog),
-            allow_back=False,
-        )
-        return ["disguise", "apply", catalog[selected - 1]["id"]]
     if section == 9:
         action = _choose(
             context,
@@ -2705,12 +2709,15 @@ def interactive_menu(parser: RussianArgumentParser, context: CliContext) -> int:
         if selected == 0:
             context.write("Работа завершена.")
             return 0
+        context.active_submenu = None
         while True:
             pause_after_result = False
             try:
                 arguments = _interactive_arguments(context, selected)
                 if arguments is None:
                     break
+                if not arguments:
+                    continue
                 pause_after_result = True
                 args = parser.parse_args(arguments)
                 args.json = False

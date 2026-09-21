@@ -2284,8 +2284,8 @@ small {
 }
 [data-theme="dark"] :is(.topbar,.modal,.modal-header,.skip-link,.composer-attachment .icon-button) { background: var(--surface); }
 [data-theme="dark"] .primary { background: #24735b; color: #fff; }
-.interface-language button { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; color: var(--muted); border: 0; border-radius: 9px; background: transparent; cursor: pointer; transition: background-color .18s, color .18s; }
-.interface-language button svg { width: 20px; height: 20px; }
+.interface-language button { display: grid; place-items: center; width: 44px; height: 44px; flex: 0 0 44px; padding: 0; color: var(--muted); border: 0; border-radius: 9px; background: transparent; cursor: pointer; transition: background-color .18s, color .18s; }
+.interface-language button .icon { width: 22px; height: 22px; }
 
 .interface-language { width: auto; height: auto; padding: 0; border: 0; background: transparent; flex-shrink: 0; }
 .interface-language .icon { display: block; }

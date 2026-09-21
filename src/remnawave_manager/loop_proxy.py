@@ -2,6 +2,7 @@
 
 from .proxy_policy import harden_proxy
 
+ITEM_ID_PATTERN = r"[A-Za-z0-9]{1,12}"
 MEDIA_PATTERN = r"[a-f0-9]{32,64}(?:_(?:150|300|500|preview))?\.(?:gif|webp|mp4|png|jpg)"
 # name -> (method, upstream path, exact allowed query expression)
 ROUTES = {
@@ -42,7 +43,8 @@ def _upstream(host: str, *, media: bool = False, post: bool = False) -> str:
 ''' if media else "")
 
 
-def render_proxy(*, secure: bool = True) -> str:
+def render_proxy(*, secure: bool = True, legacy_numeric_ids: bool = False) -> str:
+    item_pattern = r"[0-9]{1,12}" if legacy_numeric_ids else ITEM_ID_PATTERN
     blocks = []
     for name, (method, path, query) in ROUTES.items():
         guard = f'if ($args !~ "^{query}$") {{ return 400; }}' if query else 'if ($args != "") { return 400; }'
@@ -51,7 +53,7 @@ def render_proxy(*, secure: bool = True) -> str:
         {guard}
         rewrite ^ {path} break;
 {_upstream("gifs.ru", post=method == "POST")}    }}''')
-    blocks.append(f'''    location ~ "^/_loop/gifs/item/(?<loop_id>[0-9]{{1,12}})$" {{
+    blocks.append(f'''    location ~ "^/_loop/gifs/item/(?<loop_id>{item_pattern})$" {{
         if ($request_method != GET) {{ return 405; }}
         if ($args != "") {{ return 400; }}
         rewrite ^ /api/v1/File/FileById/$loop_id break;

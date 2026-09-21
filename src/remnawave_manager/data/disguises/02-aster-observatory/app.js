@@ -62,6 +62,7 @@ const navigation = [
   'profile',
 ];
 const navigationIcons = {
+  sun: 'M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1 1m12 12 1 1M5 19l1-1M18 6l1-1M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0',
   globe: 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0M3 12h18M12 3a18 18 0 0 1 0 18 18 18 0 0 1 0-18',
   home: 'm3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z',
   catalog: 'M4 4h6v6H4ZM14 4h6v6h-6ZM4 14h6v6H4ZM14 14h6v6h-6Z',
@@ -351,7 +352,7 @@ function shell() {
     if (!setLanguage(locale() === 'ru' ? 'en' : 'ru')) toast(t('storageError'));
     render();
   }, { class: 'icon-button', 'aria-label': t('interfaceLanguage') });
-  const appearanceButton = button('◐', toggleTheme, {
+  const appearanceButton = button(navigationIcon('sun'), toggleTheme, {
     class: 'icon-button', 'aria-label': 'Switch theme / Сменить тему',
   });
   const header = el(

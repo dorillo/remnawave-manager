@@ -18,6 +18,7 @@ export function el(tag, attrs = {}, children = []) {
   return node;
 }
 const paths = {
+  sun: 'M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1 1m12 12 1 1M5 19l1-1M18 6l1-1M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0',
   'brand-route': 'M4 17c3-8 6-11 9-9 2 1.3 1.1 5.4 3.5 6.8 1.2.7 2.5.2 3.5-.8M5 7h.01M19 17h.01',
   home: 'm3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z',
   compass: 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM16 8l-3 5-5 3 3-5Z',

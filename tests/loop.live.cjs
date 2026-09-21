@@ -95,7 +95,7 @@ let server, browser;
   const downloaded = await downloadEvent;
   assert.match(
     downloaded.suggestedFilename(),
-    /^loop-\d+\.(gif|webp|mp4|png|jpg)$/,
+    /^loop-[A-Za-z0-9]{1,12}\.(gif|webp|mp4|png|jpg)$/,
   );
   assert.equal(await downloaded.failure(), null);
   await page.getByRole("button", { name: "Встроить", exact: true }).click();

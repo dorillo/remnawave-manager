@@ -9,6 +9,7 @@ from unittest import mock
 
 from remnawave_manager.disguise import apply_template, copy_template
 from remnawave_manager.errors import TransactionError
+from remnawave_manager.loop_proxy import render_proxy
 from remnawave_manager.models import Component, Inventory, ManagedFile
 from remnawave_manager.runner import sha256_file
 from remnawave_manager.site_policy import (
@@ -33,6 +34,10 @@ class LoopIntegrationTests(unittest.TestCase):
         url = module.LoopPreviewHandler.upstream
         self.assertEqual(url("/_loop/gifs/search-gif", "", "POST"), "https://gifs.ru/api/v1/Gif/GetGifs")
         self.assertIn("Popular", url("/_loop/gifs/popular", "contentType=1&skip=0&take=24", "GET"))
+        for identity in ("8kyX1o", "123", "aB9"):
+            self.assertEqual(url(f"/_loop/gifs/item/{identity}", "", "GET"), f"https://gifs.ru/api/v1/File/FileById/{identity}")
+        for identity in ("../evil", "a/b", "a_b", "a-b", "a" * 13, ""):
+            self.assertIsNone(url(f"/_loop/gifs/item/{identity}", "", "GET"))
         for route, query, method in [
             ("search-gif", "", "GET"), ("popular", "contentType=1&skip=0&take=24&url=evil", "GET"),
             ("Auth/SignIn", "", "POST"), ("item/1", "", "POST"),
@@ -54,6 +59,26 @@ class LoopIntegrationTests(unittest.TestCase):
         self.assertEqual(upgrade_loop_policy(upgraded), upgraded)
         custom = 'add_header Content-Security-Policy "default-src custom" always;'
         self.assertEqual(upgrade_loop_policy(custom), custom)
+
+    def test_numeric_id_proxy_revisions_upgrade_without_duplicates(self) -> None:
+        from remnawave_manager.site_config import upgrade_site_config
+        from remnawave_manager.site_egress_config import configure_egress
+        from test_site_deployment import legacy_config, TRANSPORT
+
+        current, _ = upgrade_site_config(legacy_config(), "06-loop-archive", {"/var/www/decoy"})
+        for secure in (False, True):
+            for source in (None, "198.51.100.20"):
+                with self.subTest(secure=secure, source=source):
+                    old = current.replace(LOOP_GIFS_PROXY, render_proxy(secure=secure, legacy_numeric_ids=True))
+                    if source:
+                        old = configure_egress(old, {"/var/www/decoy"}, source)[0]
+                    upgraded, count = upgrade_site_config(old, "06-loop-archive", {"/var/www/decoy"})
+                    self.assertEqual(count, 1)
+                    self.assertEqual(upgraded.count("(?<loop_id>[A-Za-z0-9]{1,12})"), 1)
+                    self.assertNotIn("(?<loop_id>[0-9]{1,12})", upgraded)
+                    self.assertIn(TRANSPORT, upgraded)
+                    self.assertEqual(configure_egress(upgraded, {"/var/www/decoy"}, None)[2], [source])
+                    self.assertEqual(upgrade_site_config(upgraded, "06-loop-archive", {"/var/www/decoy"})[0], upgraded)
 
     def test_packaged_modules_and_atomic_apply(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

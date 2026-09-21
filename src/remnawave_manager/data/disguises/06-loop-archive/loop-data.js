@@ -27,12 +27,14 @@ function dimension(value) {
     ? Math.max(1, Math.min(Math.round(number), 10000))
     : 480;
 }
+function validId(id) {
+  return (typeof id === "string" && /^[A-Za-z0-9]{1,12}$/.test(id)) ||
+    (Number.isSafeInteger(id) && id > 0 && id <= 999999999999);
+}
 export function normalize(x) {
   if (
     !x ||
-    !Number.isSafeInteger(x.id) ||
-    x.id < 1 ||
-    x.id > 999999999999 ||
+    !validId(x.id) ||
     x.isDeleted ||
     ![1, 2, 3].includes(x.fileType)
   )
@@ -47,7 +49,8 @@ export function normalize(x) {
   const original = mediaURL(x.cloudSource),
     preview = mediaURL(x.cloudSource300) || mediaURL(x.cloudSource500);
   return {
-    id: x.id,
+    // Keep legacy numeric snapshots compatible without losing public-ID leading zeros.
+    id: /^[1-9][0-9]*$/.test(x.id) ? Number(x.id) : x.id,
     type,
     title: typeof x.title === "string" ? x.title.slice(0, 200) : "",
     tags,
@@ -131,7 +134,7 @@ async function feedPage(
   };
 }
 export async function item(id, signal) {
-  if (!/^[0-9]{1,12}$/.test(id)) throw new Error("notFound");
+  if (!validId(id)) throw new Error("notFound");
   const raw = await request(`item/${id}`, null, signal),
     result = normalize(raw?.result || raw);
   if (!result) throw new Error("notFound");
