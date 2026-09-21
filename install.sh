@@ -50,7 +50,9 @@ bootstrap_manager() {
 
     printf 'Загрузка Remnawave Manager из %s (%s)...\n' \
         "${DEFAULT_MANAGER_REPOSITORY}" "${DEFAULT_MANAGER_REF}"
-    if ! curl --disable --fail --silent --show-error --location --retry 3 \
+    if ! curl --disable --fail --show-error --location --http1.1 --progress-bar \
+        --connect-timeout 15 --max-time 120 --speed-limit 1024 --speed-time 30 \
+        --retry 2 --retry-max-time 150 \
         --proto '=https' --proto-redir '=https' --tlsv1.2 \
         "https://api.github.com/repos/${DEFAULT_MANAGER_REPOSITORY}/tarball/${DEFAULT_MANAGER_REF}" \
         --output "${archive}"; then
