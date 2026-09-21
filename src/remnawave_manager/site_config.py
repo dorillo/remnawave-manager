@@ -5,6 +5,7 @@ import re
 
 from .errors import ValidationError
 from .nginx import _brace_depths, _server_blocks, _structural_text
+from .site_egress_config import bind_body, strip_bindings
 from .site_policy import (
     KNOWN_NODE_CSPS, NODE_CSP,
     TEMPLATE_POLICIES, _PROXY_REVISIONS,
@@ -46,6 +47,9 @@ def upgrade_site_config(text: str, template_id: str, roots: set[str]) -> tuple[s
         # Includes may contain conflicting locations or an inherited custom CSP.
         if re.search(r'\binclude\s', structural):
             raise ValidationError("Server сайта содержит include; объедините настройки этого server перед заменой сайта.")
+        body, source_ip = strip_bindings(body)
+        structural = _structural_text(body)
+        depths = _brace_depths(structural)
         marker = f'add_header Content-Security-Policy "{NODE_CSP}" always;'
         headers = list(re.finditer(r'\badd_header\s+Content-Security-Policy\b[^;]*;', structural, re.I))
         known = {f'add_header Content-Security-Policy "{value}" always;'
@@ -76,6 +80,8 @@ def upgrade_site_config(text: str, template_id: str, roots: set[str]) -> tuple[s
         body = TEMPLATE_POLICIES[template_id](body)
         if not re.search(r'\blocation\s*=\s*/index\.html\s*\{', _structural_text(body)):
             body += '\n' + INDEX_LOCATION + '\n'
+        if source_ip is not None:
+            body, _ = bind_body(body, source_ip)
         text = text[:opening + 1] + body.replace('\n', newline) + text[closing:]
         matched += 1
     return text, matched

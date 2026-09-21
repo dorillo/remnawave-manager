@@ -31,6 +31,7 @@ from .runner import (
     sanitize_external_text,
 )
 from .state import _MAX_STATE_FILE_SIZE, StateStore, _read_private_json
+from .site_egress import configured_egress_health
 
 Level = Literal["ok", "warning", "error"]
 _LEGACY_LOG = "usr/local/remnawave_reverse/remnawave_reverse.log"
@@ -629,6 +630,13 @@ def run_diagnostics(runner: Runner, store: StateStore) -> list[Check]:
         checks.append(Check("ok", "Runtime", "компоненты прошли прикладную проверку"))
     except Exception as error:  # noqa: BLE001 - return the full diagnostic set
         checks.append(Check("error", "Runtime", str(error)))
+    try:
+        egress = configured_egress_health(runner, store, inventory)
+        if egress is not None:
+            checks.append(Check("ok" if egress["available"] else "error", "Исходящий IP сайта",
+                                f"{egress['source']}: " + ("назначен интерфейсу" if egress["available"] else "адрес отсутствует на сервере; выберите другой IP сайта")))
+    except Exception as error:  # noqa: BLE001 - report drift without stopping diagnostics
+        checks.append(Check("warning", "Исходящий IP сайта", str(error)))
     return checks
 
 
