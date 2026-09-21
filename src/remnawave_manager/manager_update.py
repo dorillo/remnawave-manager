@@ -40,7 +40,8 @@ def _validate_installer(path: Path) -> None:
         )
 
 
-def update_manager(runner: Runner) -> str:
+def update_manager(runner: Runner, *, http1_1: bool = False) -> str:
+    download_options = ["--http1.1"] if http1_1 else []
     temporary_root = "/tmp" if os.name == "posix" else None
     with tempfile.TemporaryDirectory(
         prefix="rwm-manager-update-", dir=temporary_root
@@ -54,7 +55,7 @@ def update_manager(runner: Runner) -> str:
                 "--silent",
                 "--show-error",
                 "--location",
-                "--http1.1",
+                *download_options,
                 "--retry",
                 "2",
                 "--retry-max-time",
@@ -78,7 +79,7 @@ def update_manager(runner: Runner) -> str:
             timeout=360,
         )
         _validate_installer(installer)
-        runner.interactive(["/bin/bash", str(installer), "install"])
+        runner.interactive(["/bin/bash", str(installer), "install", *download_options])
 
     result = runner.run(
         ["/usr/local/bin/rwm", "--version"], check=False, timeout=30

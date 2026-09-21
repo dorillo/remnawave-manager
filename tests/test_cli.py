@@ -823,11 +823,46 @@ class CliDispatchTests(unittest.TestCase):
             ) as update,
             mock.patch("remnawave_manager.cli.assert_no_active_certbot_renewal"),
         ):
-            code = self.run_main([], answers=["17", "y"])
+            code = self.run_main([], answers=["17", "1", "y"])
 
         self.assertEqual(code, 0, self.stderr.getvalue())
         update.assert_called_once()
         self.assertIn("следующий запуск использует новую версию", self.stdout.getvalue())
+
+    def test_interactive_manager_update_can_select_http1_1(self) -> None:
+        with (
+            mock.patch(
+                "remnawave_manager.cli.update_manager", return_value="rwm 0.1.24"
+            ) as update,
+            mock.patch("remnawave_manager.cli.assert_no_active_certbot_renewal"),
+        ):
+            code = self.run_main([], answers=["17", "2", "y"])
+
+        self.assertEqual(code, 0, self.stderr.getvalue())
+        update.assert_called_once_with(mock.ANY, http1_1=True)
+
+    def test_interactive_manager_update_can_go_back_without_downloading(self) -> None:
+        with mock.patch("remnawave_manager.cli.update_manager") as update:
+            code = self.run_main([], answers=["17", "0", "0"])
+
+        self.assertEqual(code, 0, self.stderr.getvalue())
+        update.assert_not_called()
+
+    def test_interactive_manager_update_can_retry_with_http1_1_after_failure(self) -> None:
+        with (
+            mock.patch(
+                "remnawave_manager.cli.update_manager",
+                side_effect=[ValidationError("Ошибка загрузки"), "rwm 0.1.24"],
+            ) as update,
+            mock.patch("remnawave_manager.cli.assert_no_active_certbot_renewal"),
+        ):
+            code = self.run_main([], answers=["17", "1", "y", "2", "y"])
+
+        self.assertEqual(code, 0, self.stderr.getvalue())
+        self.assertEqual(update.call_args_list, [
+            mock.call(mock.ANY, http1_1=False),
+            mock.call(mock.ANY, http1_1=True),
+        ])
 
     def test_interactive_ubuntu_section_can_update_packages(self) -> None:
         with (

@@ -25,13 +25,20 @@ die() {
 }
 
 usage() {
-    printf 'Использование: %s [install]\n' "${0##*/}"
+    printf 'Использование: %s [install [--http1.1]]\n' "${0##*/}"
 }
 
-if (( $# > 1 )) || [[ "${1:-install}" != 'install' ]]; then
+if (( $# > 2 )) || [[ "${1:-install}" != 'install' ]] \
+    || { (( $# == 2 )) && [[ "$2" != '--http1.1' ]]; }; then
     usage >&2
     exit 2
 fi
+
+DOWNLOAD_CURL_OPTIONS=(--location)
+if [[ "${2:-}" == '--http1.1' ]]; then
+    DOWNLOAD_CURL_OPTIONS+=(--http1.1)
+fi
+readonly -a DOWNLOAD_CURL_OPTIONS
 
 if [[ "${EUID}" -ne 0 ]]; then
     printf '%s\n' 'Установщик нужно запускать от root: sudo ./install.sh' >&2
@@ -50,7 +57,7 @@ bootstrap_manager() {
 
     printf 'Загрузка Remnawave Manager из %s (%s)...\n' \
         "${DEFAULT_MANAGER_REPOSITORY}" "${DEFAULT_MANAGER_REF}"
-    if ! curl --disable --fail --show-error --location --http1.1 --progress-bar \
+    if ! curl --disable --fail --show-error "${DOWNLOAD_CURL_OPTIONS[@]}" --progress-bar \
         --connect-timeout 15 --max-time 120 --speed-limit 1024 --speed-time 30 \
         --retry 2 --retry-max-time 150 \
         --proto '=https' --proto-redir '=https' --tlsv1.2 \
@@ -115,7 +122,7 @@ install_gcore_certbot_plugin() {
         || die 'Не удалось создать временный каталог для Certbot DNS-плагина Gcore.'
     wheel_path="${wheel_directory}/certbot_dns_gcore-${GCORE_PLUGIN_VERSION}-py3-none-any.whl"
 
-    if ! curl --disable --fail --silent --show-error --location \
+    if ! curl --disable --fail --silent --show-error "${DOWNLOAD_CURL_OPTIONS[@]}" \
         --proto '=https' --proto-redir '=https' --tlsv1.2 \
         "${GCORE_PLUGIN_URL}" --output "${wheel_path}"; then
         rm -rf -- "${wheel_directory}"

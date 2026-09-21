@@ -345,6 +345,10 @@ def build_parser() -> RussianArgumentParser:
         "update", help="Загрузить и атомарно установить версию из main."
     )
     _add_yes(manager_update)
+    manager_update.add_argument(
+        "--http1.1", dest="http1_1", action="store_true",
+        help="Скачивать через HTTP/1.1 при сбоях обычной загрузки.",
+    )
     manager_update.set_defaults(handler="manager-update")
 
     adoption = commands.add_parser(
@@ -1071,7 +1075,7 @@ def dispatch(args: argparse.Namespace, context: CliContext) -> int:
             "и атомарно переустановлен.",
             assume_yes=args.yes,
         )
-        installed_version = update_manager(context.runner)
+        installed_version = update_manager(context.runner, http1_1=args.http1_1)
         if context.json_output:
             context.emit({"status": "updated", "version": installed_version})
         else:
@@ -2679,11 +2683,21 @@ def _interactive_arguments(context: CliContext, section: int) -> list[str] | Non
     if section == 16:
         return ["maintenance", "archive-stack"]
     if section == 17:
-        return ["manager", "update"]
+        action = _choose(
+            context,
+            "Обновить Remnawave Manager:",
+            (
+                "Обычное обновление (автоматический выбор HTTP)",
+                "Обновление через HTTP/1.1 (при сбоях обычной загрузки)",
+            ),
+        )
+        if action == 0:
+            return None
+        return ["manager", "update", *(["--http1.1"] if action == 2 else [])]
     return None
 
 
-_SECTIONS_WITH_SUBMENU = frozenset({2, 4, 5, 6, 7, 8, 9, 11, 12, 13, 15})
+_SECTIONS_WITH_SUBMENU = frozenset({2, 4, 5, 6, 7, 8, 9, 11, 12, 13, 15, 17})
 
 
 def interactive_menu(parser: RussianArgumentParser, context: CliContext) -> int:

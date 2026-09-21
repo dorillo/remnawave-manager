@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -34,11 +35,25 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn('! -f "${SCRIPT_DIR}/pyproject.toml"', INSTALL_SCRIPT)
         self.assertLess(source_check, delegated_install)
 
-    def test_installer_accepts_only_the_optional_install_action(self) -> None:
-        self.assertIn(
-            'if (( $# > 1 )) || [[ "${1:-install}" != \'install\' ]]',
-            INSTALL_SCRIPT,
-        )
+    def test_installer_validates_download_mode_before_system_changes(self) -> None:
+        preflight = INSTALL_SCRIPT.split('if [[ "${EUID}" -ne 0 ]]; then', 1)[0]
+        for args, expected in (([], "--location"), (["install"], "--location"),
+                               (["install", "--http1.1"], "--location--http1.1")):
+            with self.subTest(args=args):
+                result = subprocess.run(
+                    ["bash", "-c", preflight + '\nprintf "%s" "${DOWNLOAD_CURL_OPTIONS[@]}"',
+                     "install.sh", *args], capture_output=True, text=True,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout, expected)
+        for args in (["remove"], ["--http1.1"], ["install", "--bad"],
+                     ["install", "--http1.1", "extra"]):
+            with self.subTest(args=args):
+                result = subprocess.run(
+                    ["bash", "-c", preflight, "install.sh", *args],
+                    capture_output=True, text=True,
+                )
+                self.assertEqual(result.returncode, 2)
 
     def test_installer_sanitizes_root_command_environment(self) -> None:
         platform_probe = INSTALL_SCRIPT.index("uname -s")

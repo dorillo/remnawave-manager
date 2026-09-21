@@ -48,6 +48,7 @@ class ManagerUpdateTests(unittest.TestCase):
         self.assertIsNotNone(runner.download)
         assert runner.download is not None
         self.assertIn("--proto", runner.download[0])
+        self.assertNotIn("--http1.1", runner.download[0])
         self.assertTrue(
             any(
                 item.startswith("https://raw.githubusercontent.com/")
@@ -62,6 +63,18 @@ class ManagerUpdateTests(unittest.TestCase):
         self.assertEqual(runner.version_args, ["/usr/local/bin/rwm", "--version"])
         self.assertIsNotNone(runner.downloaded_path)
         self.assertFalse(runner.downloaded_path.exists())
+
+    def test_http1_1_applies_to_download_and_delegated_installer(self) -> None:
+        runner = FakeRunner(VALID_INSTALLER)
+
+        update_manager(runner, http1_1=True)  # type: ignore[arg-type]
+
+        assert runner.download is not None
+        self.assertIn("--http1.1", runner.download[0])
+        self.assertEqual(
+            runner.interactive_args,
+            ["/bin/bash", str(runner.download[1]), "install", "--http1.1"],
+        )
 
     def test_rejects_unexpected_download_before_execution(self) -> None:
         runner = FakeRunner("#!/bin/bash\necho untrusted\n")
