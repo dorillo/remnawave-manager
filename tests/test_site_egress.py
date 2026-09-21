@@ -216,7 +216,7 @@ class EgressTransactionTests(EgressDNSTestCase):
         self.assertEqual(self.path.stat().st_mode & 0o777, 0o600)
         saved = self.store.save_inventory.call_args.args[0]
         self.assertEqual(saved.managed_files[0].sha256, sha256_file(self.path))
-        self.assertEqual(self.mocks["_probe"].call_count, 8)
+        self.assertEqual(self.mocks["_probe"].call_count, 4)
         self.mocks["create_backup"].assert_called_once()
         self.assertIn(TRANSPORT, self.path.read_text())
 
@@ -326,6 +326,25 @@ class EgressCliTests(unittest.TestCase):
         setting.assert_called_once_with(context.runner, context.store, None, skip_check=True)
 
 class ExpandedProbeTests(EgressDNSTestCase):
+    def test_yappy_keeps_one_request_per_feed_page(self):
+        from remnawave_manager.site_egress import _live_results
+        good = Probe('auto', 'url', True, 200, '', '', 0.1, 'OK')
+        with mock.patch('remnawave_manager.site_egress._probe', return_value=good) as probe:
+            results = _live_results(mock.Mock(), ('https://site.test', ()), PROBES['03-morrow-coffee'])
+        self.assertEqual(len(results), 2)
+        self.assertEqual([call.args[1] for call in probe.call_args_list], [
+            'https://site.test/_morrow/yappy/feed?page=1',
+            'https://site.test/_morrow/yappy/feed?page=2',
+        ])
+
+    def test_access_denied_or_rate_limit_stops_extra_requests(self):
+        from remnawave_manager.site_egress import _live_results
+        for status in (403, 429):
+            bad = Probe('auto', 'url', False, status, '', '', 0.1, 'blocked')
+            with self.subTest(status=status), mock.patch('remnawave_manager.site_egress._probe', return_value=bad) as probe:
+                self.assertEqual(_live_results(mock.Mock(), ('https://site.test', ()), PROBES['01-northline']), [bad])
+                self.assertEqual(probe.call_count, 1)
+
     def test_live_probe_catches_alternating_success_failure(self):
         from remnawave_manager.site_egress import _check_live
         good = Probe('auto', 'url', True, 200, '', '', 0.1, 'OK')

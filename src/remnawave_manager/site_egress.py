@@ -298,14 +298,22 @@ def _live_results(runner: Runner, target: tuple[str, tuple[str, ...]], probes: t
     results = []
     samples = []
     for _, route in probes:
-        for attempt in range(3):
+        # Yappy already has two distinct feed probes. Keep its previous request
+        # budget: duplicating each page can trigger the provider's anti-bot rules.
+        attempts = 1 if route.startswith('/_morrow/yappy/') else 3
+        for attempt in range(attempts):
             result = _probe(runner, origin + route, None, extra)
             results.append(result)
+            if result.http_status in (403, 429):
+                return results
             if attempt == 0 and result.ok:
                 samples.extend(result.samples)
     for _, route in dict.fromkeys(samples):
         for _ in range(3):
-            results.append(_probe(runner, origin + route, None, extra))
+            result = _probe(runner, origin + route, None, extra)
+            results.append(result)
+            if result.http_status in (403, 429):
+                return results
     return results
 
 
