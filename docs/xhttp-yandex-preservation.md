@@ -43,7 +43,7 @@ sudo rwm --json inventory
 
 Inventory формируется из нормализованного Compose и обнаруженных nginx-файлов. Для контейнерного nginx менеджер рассматривает существующие исходные файлы bind mounts, направленные в `/etc/nginx/`, а сайт-заглушку — каталоги, направленные в `/var/www/`. Для системного nginx просматриваются файлы из `/etc/nginx/sites-enabled`, содержащие признаки Remnawave или локальных upstream `127.0.0.1:3000/3010`.
 
-Unix-сокет регистрируется в `xhttp_sockets`, если в выбранном nginx-файле есть директива `listen` или `server` с путём под `/dev/shm` либо `/run`, оканчивающимся на `.sock` или `.socket`, либо прямой `proxy_pass http://unix:/...socket;` к такому пути. Флаг `xhttp_stream_separation` также может стать `true` только из-за текста `xhttp`; сам по себе этот флаг не означает, что конкретный сокет записан в список ожидания.
+Unix-сокет регистрируется в `xhttp_sockets`, если в выбранном nginx-файле есть директива `listen` или `server` с путём под `/dev/shm` либо `/run`, оканчивающимся на `.sock` или `.socket`, либо прямой `proxy_pass http://unix:/...socket;` к такому пути. В 0.1.22 флаг `xhttp_stream_separation` требует распознанного HTTP proxy-маршрута XHTTP: отдельного fallback listener или упоминания `xhttp` в комментарии недостаточно. Сам флаг не означает, что конкретный сокет записан в список ожидания.
 
 Яндекс CDN определяется по директиве `proxy_set_header X-Yandex-CDN ...`
 либо объявленному и используемому в `proxy_pass` upstream с `yandex` и
