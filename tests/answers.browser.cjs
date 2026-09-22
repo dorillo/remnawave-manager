@@ -29,7 +29,10 @@ let browser;
       }
       else if(p==='/_answers/mail/spaces') result=[{id:1008,title:'Программирование',path:'programming'}];
       else if(p==='/_answers/mail/search') result={feed:[rawQuestion],params:null};
-      else if(p==='/_answers/mail/question/240938818') result=rawQuestion;
+      else if(p==='/_answers/mail/question/240938818') result={...rawQuestion,replies_count:emptyAnswers?0:1};
+      else if(/^\/_answers\/mail\/profile\/[12]\/count$/.test(p)) result={topics_count:p.includes('/1/')?1:0,replies_count:p.includes('/2/')?1:0};
+      else if(/^\/_answers\/mail\/profile\/[12]\/topics$/.test(p)) result={feed:p.includes('/1/')?[rawQuestion]:[],params:{}};
+      else if(/^\/_answers\/mail\/profile\/[12]\/replies$/.test(p)) result={replies:p.includes('/2/')?[{...rawAnswer,topic_id:rawQuestion.id}]:[],params:{}};
       else if(p==='/_answers/mail/answers/240938818') {
         if(failAnswers) return route.fulfill({status:502,contentType:'application/json',body:'{"detail":"unavailable"}'});
         result={replies:emptyAnswers?[]:[rawAnswer],params:{last:2067147668,count:emptyAnswers?0:1}};
@@ -87,6 +90,7 @@ let browser;
   await page.goBack();
   await page.goBack();
   assert.match(await page.locator('main').innerText(),/Как получить данные/);
+  await page.waitForTimeout(200); // Let the refreshed discussion and its continuation probe settle.
   failAnswers=true;
   const partialPage=await context.newPage();
   await partialPage.goto(origin+'/#/question/mail/240938818');
@@ -152,6 +156,14 @@ let browser;
   await answerFiles.setInputFiles({name:'third.txt',mimeType:'text/plain',buffer:Buffer.from('third')});
   await page.locator('[data-form="answer"] .primary').click();
   await page.getByText('Мой локальный ответ').waitFor();
+  assert.equal(await page.locator('.answers-title').innerText(),'2 ответов');
+  failAnswers=true;
+  const mixedFailure=await context.newPage();
+  await mixedFailure.goto(origin+'/#/question/mail/240938818');
+  await mixedFailure.getByText('Мой локальный ответ',{exact:true}).waitFor();
+  await mixedFailure.locator('.notice-inline').filter({hasText:'Ответы пока недоступны.'}).waitFor();
+  assert.equal(await mixedFailure.locator('.answers-title').innerText(),'2 ответов','own answers do not hide a public API failure');
+  await mixedFailure.close();failAnswers=false;
   assert.equal(await page.locator('.answer-card').filter({hasText:'Мой локальный ответ'}).locator('.attachment-list a').count(),3);
   assert.equal(await page.locator('[data-form="answer"] textarea').inputValue(),'','successful submission clears the draft');
   await page.getByRole('link',{name:'answer.txt'}).waitFor();

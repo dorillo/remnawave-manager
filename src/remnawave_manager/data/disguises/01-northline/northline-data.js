@@ -1,3 +1,4 @@
+import { confirmedPages } from '../shared/pagination.js';
 // Network access is read-only and restricted to the configured instance.
 export const INSTANCE = 'mastodon.ml';
 export const API = `https://${INSTANCE}`;
@@ -282,12 +283,12 @@ export async function timeline(tag, { maxId = '', force = false } = {}) {
             authors || post.tags.some((item) => item.name.toLocaleLowerCase('ru') === needle),
         ),
     ),
-    next: partial ? maxId : scanned.at(-1)?.cursor || '',
+    next: partial ? maxId : candidates.length > scanned.length || successful.some(page => page.value.next) ? scanned.at(-1)?.cursor || '' : '',
     stale: partial || successful.some((page) => page.value.stale),
     partial,
   };
 }
-export async function accountPosts(
+async function rawAccountPosts(
   id,
   {
     maxId = '',
@@ -338,4 +339,13 @@ export function arrangePosts(posts) {
     result.push(pool.splice(index, 1)[0]);
   }
   return result;
+}
+
+// The combined timeline displays only part of each author page. Do not treat
+// the remaining author posts as already displayed on the next timeline page.
+const accountPages = confirmedPages(([id, filters], maxId, options) => rawAccountPosts(id, { ...filters, ...options, maxId: maxId || '' }), { items: 'posts', cursor: 'next', trackHistory: false });
+export function accountPosts(id, { maxId = '', force = false, ...filters } = {}) {
+  // Pinned posts are a single collection, not a paginated timeline.
+  if (filters.pinned) return rawAccountPosts(id, { ...filters, maxId, force }).then(page => ({ ...page, next: '' }));
+  return accountPages([id, filters], maxId, { force });
 }

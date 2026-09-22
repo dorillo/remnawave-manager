@@ -44,6 +44,8 @@ class SiteAssetsTests(unittest.TestCase):
                     for dependency in re.findall(pattern, source):
                         pending.append(urlsplit(urljoin('http://preview.test' + route, dependency)).path)
             self.assertIn('/shared/feedback.css', seen)
+            if name in ('northline', 'answers', 'loop', 'fokus'):
+                self.assertIn('/shared/pagination.js', seen)
 
     def test_deep_module_change_versions_entire_graph(self):
         with tempfile.TemporaryDirectory() as folder:

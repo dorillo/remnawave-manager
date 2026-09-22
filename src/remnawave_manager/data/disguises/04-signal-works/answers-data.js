@@ -1,3 +1,4 @@
+import { confirmedPages } from '../shared/pagination.js';
 import { imageURL } from '../shared/image-proxy.js';
 const API = '/_answers/mail/';
 const CACHE = 'answers:feed:v1';
@@ -67,7 +68,7 @@ export function question(raw) {
 }
 export function answer(raw) {
   if (!raw || !Number.isSafeInteger(raw.id) || raw.id < 1) return null;
-  return { id: `mail-answer:${raw.id}`, sourceId: raw.id, body: plainDoc(raw.content), images: images(raw.content), author: author(raw.author), created: date(raw.created_at), parentId: count(raw.reply_to) || null, replies: count(raw.replyToReplyCount), votes: Number(raw.reaction_counter?.rating || 0) };
+  return { id: `mail-answer:${raw.id}`, sourceId: raw.id, body: plainDoc(raw.content), images: images(raw.content), author: author(raw.author), created: date(raw.created_at), parentId: count(raw.reply_to) || null, replies: count(raw.replyToReplyCount), votes: Number(raw.reaction_counter?.rating || 0), questionId: count(raw.topic_id) ? `mail:${raw.topic_id}` : null, deleted: raw.visible_to < 0 && !raw.author };
 }
 async function get(path, params = {}) {
   if (Date.now() < cooldown) throw new Error('rate-limit');
@@ -89,10 +90,10 @@ async function get(path, params = {}) {
   finally { clearTimeout(timer); }
 }
 
-export async function feed(pos, space = '') {
+async function rawFeed(pos, space = '') {
   const result = await get('feed', { limit: 20, pos, space });
-  if (!Array.isArray(result.feed)) throw new Error('schema');
-  const items = result.feed.map(question).filter(Boolean);
+  if (result.feed !== null && !Array.isArray(result.feed)) throw new Error('schema');
+  const items = (result.feed || []).map(question).filter(Boolean);
   if (!pos && !space && items.length) { try { localStorage.setItem(CACHE, JSON.stringify({ at: Date.now(), items })); } catch {} }
   return { items, pos: count(result.params?.pos) || null };
 }
@@ -120,19 +121,44 @@ export async function spaces() {
   if (!Array.isArray(result)) throw new Error('schema');
   return result.slice(0, 20).map((x) => ({ id: count(x.id), name: String(x.title || '').slice(0, 70), path: String(x.path || '').slice(0, 70) })).filter((x) => x.id && x.name);
 }
+export function mergeItems(previous, incoming) {
+  return [...new Map([...previous, ...incoming].map((item) => [item.id, item])).values()];
+}
+export function nextCursor(value, current, visited = new Set()) {
+  const next = count(value) || null;
+  return next && next !== current && !visited.has(next) ? next : null;
+}
+async function rawReplyPage(id, pos = null, parent = null) {
+  if (!/^\d{1,12}$/.test(String(id))) throw new Error('missing');
+  const result = await get(`answers/${id}`, { limit: 50, ...(pos ? { pos } : {}), ...(parent ? { reply_id: parent } : {}) });
+  if (result.replies !== null && !Array.isArray(result.replies)) throw new Error('schema');
+  const raw = [...(result.best_replies ? [result.best_replies] : []), ...(result.replies || []), ...(Array.isArray(result.inner_replies) ? result.inner_replies : [])];
+  return { items: mergeItems([], raw.map(answer).filter(Boolean)), pos: nextCursor(result.params?.last, pos) };
+}
+async function rawProfilePage(id, tab, pos = null) {
+  if (!/^\d{1,12}$/.test(String(id)) || !['questions', 'answers'].includes(tab)) throw new Error('missing');
+  const result = await get(`profile/${id}/${tab === 'answers' ? 'replies' : 'topics'}`, { limit: 20, dir: pos ? 1 : 0, ...(pos ? { pos } : {}) });
+  const rows = tab === 'answers' ? result.replies : result.feed;
+  if (rows !== null && !Array.isArray(rows)) throw new Error('schema');
+  return { items: mergeItems([], (rows || []).map(tab === 'answers' ? answer : question).filter(Boolean)), pos: nextCursor(result.params?.pos, pos) };
+}
+export async function profileCounts(id) {
+  const result = await get(`profile/${id}/count`);
+  return { questions: count(result.topics_count), answers: count(result.replies_count) };
+}
 export async function detail(id) {
   if (!/^\d{1,12}$/.test(String(id))) throw new Error('missing');
-  // A question is useful on its own. Do not discard it merely because the
-  // independently fetched list of replies is temporarily unavailable.
-  const [postResult, repliesResult] = await Promise.allSettled([
-    get(`question/${id}`),
-    get(`answers/${id}`, { limit: 50 }),
-  ]);
+  const [postResult, repliesResult] = await Promise.allSettled([get(`question/${id}`), replyPage(id)]);
   if (postResult.status !== 'fulfilled') throw postResult.reason;
   const normalized = question(postResult.value);
   if (!normalized) throw new Error('schema');
-  if (repliesResult.status !== 'fulfilled' || !Array.isArray(repliesResult.value.replies)) {
-    return { question: normalized, answers: [], answersAvailable: false };
-  }
-  return { question: normalized, answers: repliesResult.value.replies.map(answer).filter(Boolean), answersAvailable: true };
+  if (repliesResult.status !== 'fulfilled') return { question: normalized, answers: [], answersAvailable: false, pos: null };
+  return { question: normalized, answers: repliesResult.value.items, answersAvailable: true, pos: repliesResult.value.pos };
 }
+
+const feedPages = confirmedPages((space, pos) => rawFeed(pos, space));
+const replyPages = confirmedPages(([id, parent], pos) => rawReplyPage(id, pos, parent));
+const profilePages = confirmedPages(([id, tab], pos) => rawProfilePage(id, tab, pos));
+export const feed = (pos = null, space = '') => feedPages(space, pos);
+export const replyPage = (id, pos = null, parent = null) => replyPages([id, parent], pos);
+export const profilePage = (id, tab, pos = null) => profilePages([id, tab], pos);

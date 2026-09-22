@@ -23,6 +23,7 @@ const raw = (n) => ({
 let browser,
   fail = false,
   empty = false,
+  failRelatedContinuation = true,
   requested = [];
 (async () => {
   browser = await (
@@ -63,6 +64,8 @@ let browser,
       const skip = Number(
         u.searchParams.get("skip") || req.postDataJSON()?.skip || 0,
       );
+      if (failRelatedContinuation && u.pathname.includes('/related-') && skip >= 48)
+        return route.fulfill({ status: 503, body: '{}' });
       let result;
       if (u.pathname.endsWith("/categories"))
         result = [
@@ -330,6 +333,7 @@ let browser,
     .waitFor();
   assert.equal(await page.locator(".related .card").count(), 47);
   fail = false;
+  failRelatedContinuation = false;
   await page
     .locator(".related")
     .getByRole("button", { name: "Повторить" })

@@ -13,7 +13,7 @@ function toggleTheme() {
   appearance = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
   applyAppearance();
 }
-import { feed, cachedFeed, search, spaces, detail, safeImage } from './answers-data.js';
+import { feed, cachedFeed, search, spaces, detail, safeImage, replyPage, profilePage, profileCounts, mergeItems, nextCursor } from './answers-data.js';
 import { read, change, newId, watch } from './answers-store.js';
 import { currentUser, register, login, logout } from './answers-auth.js';
 import { t, lang, setLang, dateText } from './answers-i18n.js';
@@ -29,6 +29,10 @@ let spaceList = [];
 let searchItems = [];
 let searchStatus = '';
 const spaceFeeds = new Map();
+const profileLists = new Map();
+const profileTotals = new Map();
+const replyBranches = new Map();
+const feedVisited = new Set();
 let details = new Map();
 let detailStatus = new Map();
 let modal = '';
@@ -180,28 +184,33 @@ function meta(item, local = false) {
   const identity = `${avatar(person,name)}<span class="author">${e(name)}</span>`;
   return `<div class="card-meta">${href ? `<a class="author-link" href="${href}">${identity}</a>` : identity}<span>·</span><time>${e(dateText(item.created))}</time></div>`;
 }
+function responseCount(item, local = false) {
+  const own = state.answers.filter((x) => x.questionId === item.id).length + state.comments.filter((x) => x.questionId === item.id).length;
+  return (local ? 0 : (details.get(item.id)?.question.replies ?? item.replies)) + own;
+}
 function questionCard(item, local = false) {
   const person = user();
   const saved = person && (state.saves[person.id] || []).includes(item.id);
   const currentVote = person ? state.votes[person.id]?.[item.id] || 0 : 0;
-  return `<article class="card question-card">${meta(item,local)}<h3><a href="${qurl(item.id)}">${e(item.title)}</a></h3><p class="excerpt">${e(item.body || '')}</p><div class="tag-list">${(local ? [item.space] : item.spaces.map((x) => x.name)).filter(Boolean).slice(0,3).map((x) => `<span class="tag">${e(x)}</span>`).join('')}</div><div class="card-footer"><span class="reply-count">${icon('comment')}${local ? state.answers.filter((a) => a.questionId === item.id).length : item.replies}</span><div class="icon-actions"><button class="icon-action ${currentVote===1?'selected':''}" data-action="vote" data-id="${e(item.id)}" data-value="1" aria-label="${e(t('voteUp'))}" title="${e(t('voteUp'))}">${icon('up')}</button><button class="icon-action ${currentVote===-1?'selected':''}" data-action="vote" data-id="${e(item.id)}" data-value="-1" aria-label="${e(t('voteDown'))}" title="${e(t('voteDown'))}">${icon('down')}</button><button class="icon-action ${saved?'selected':''}" data-action="save" data-id="${e(item.id)}" aria-label="${e(saved?t('unsave'):t('save'))}" title="${e(saved?t('unsave'):t('save'))}">${icon('bookmark')}</button></div></div></article>`;
+  return `<article class="card question-card">${meta(item,local)}<h3><a href="${qurl(item.id)}">${e(item.title)}</a></h3><p class="excerpt">${e(item.body || '')}</p><div class="tag-list">${(local ? [item.space] : item.spaces.map((x) => x.name)).filter(Boolean).slice(0,3).map((x) => `<span class="tag">${e(x)}</span>`).join('')}</div><div class="card-footer"><span class="reply-count">${icon('comment')}${responseCount(item,local)}</span><div class="icon-actions"><button class="icon-action ${currentVote===1?'selected':''}" data-action="vote" data-id="${e(item.id)}" data-value="1" aria-label="${e(t('voteUp'))}" title="${e(t('voteUp'))}">${icon('up')}</button><button class="icon-action ${currentVote===-1?'selected':''}" data-action="vote" data-id="${e(item.id)}" data-value="-1" aria-label="${e(t('voteDown'))}" title="${e(t('voteDown'))}">${icon('down')}</button><button class="icon-action ${saved?'selected':''}" data-action="save" data-id="${e(item.id)}" aria-label="${e(saved?t('unsave'):t('save'))}" title="${e(saved?t('unsave'):t('save'))}">${icon('bookmark')}</button></div></div></article>`;
 }
 function list(items, local = false) { return items.length ? items.map((x) => questionCard(x,local)).join('') : `<div class="empty">${e(t('noQuestions'))}</div>`; }
 function renderHome() {
   const status = feedStatus === 'loading' && !publicFeed.length ? `<div class="empty">${loadingMarkup(t('loading'))}</div>` : '';
+  const failedMore = feedStatus === 'error' && publicFeed.length && !staleAt ? `<div class="notice-inline" role="status">${e(t('network'))}</div>` : '';
   const note = staleAt ? `<div class="notice-inline">${e(t('cached'))} · ${e(dateText(staleAt))}</div>` : '';
   const cards = publicFeed.length ? publicFeed.map((x) => questionCard(x)).join('') : feedStatus === 'error' ? `<div class="empty"><h3>${e(t('network'))}</h3><button class="ghost" data-action="refresh">${e(t('retry'))}</button></div>` : feedStatus === 'ready' ? `<div class="empty">${e(t('noQuestions'))}</div>` : '';
-  const more = cursor ? `<div class="load-row">${feedStatus==='loading' ? loadingMore() : `<button class="ghost" data-action="more">${e(t('loadMore'))}</button>`}</div>` : '';
-  return `<section class="hero"><span class="eyebrow">${lang()==='ru'?'СООБЩЕСТВО ВОПРОСОВ':'QUESTION COMMUNITY'}</span><h1>${lang()==='ru'?'Любой вопрос — начало разговора.':'Every question starts a conversation.'}</h1><p>${lang()==='ru'?'Читайте ответы, находите нужное и обсуждайте на своём устройстве.':'Explore answers and start discussions on your device.'}</p></section><div class="section-title"><h2>${e(t('latest'))}</h2><small>${publicFeed.length || ''}</small></div><div class="tabs"><button class="tab active">${e(t('all'))}</button>${spaceList.slice(0,5).map((x) => `<a class="tab" href="#/space/${e(x.path)}">${e(x.name)}</a>`).join('')}</div>${note}${status}${cards}${more}`;
+  const more = cursor ? `<div class="load-row">${feedStatus==='loading' ? loadingMarkup(t('loadingMore')) : `<button class="ghost" data-action="more">${e(t('loadMore'))}</button>`}</div>` : '';
+  return `<section class="hero"><span class="eyebrow">${lang()==='ru'?'СООБЩЕСТВО ВОПРОСОВ':'QUESTION COMMUNITY'}</span><h1>${lang()==='ru'?'Любой вопрос — начало разговора.':'Every question starts a conversation.'}</h1><p>${lang()==='ru'?'Читайте ответы, находите нужное и обсуждайте на своём устройстве.':'Explore answers and start discussions on your device.'}</p></section><div class="section-title"><h2>${e(t('latest'))}</h2><small>${publicFeed.length || ''}</small></div><div class="tabs"><button class="tab active">${e(t('all'))}</button>${spaceList.slice(0,5).map((x) => `<a class="tab" href="#/space/${e(x.path)}">${e(x.name)}</a>`).join('')}</div>${note}${failedMore}${status}${cards}${more}`;
 }
 function renderSpace(slug) {
   const name = spaceList.find((x)=>x.path===slug)?.name || slug;
   const result = spaceFeeds.get(slug);
   const posts = result?.items || [];
-  const more = result?.pos ? `<div class="load-row">${result.status==='loading' ? loadingMore() : `<button class="ghost" data-action="more-space">${e(t('loadMore'))}</button>`}</div>` : '';
+  const more = result?.pos && result.status !== 'error' ? `<div class="load-row">${result.status==='loading' ? loadingMarkup(t('loadingMore')) : `<button class="ghost" data-action="more-space">${e(t('loadMore'))}</button>`}</div>` : '';
   return `${backLink()}<div class="section-title"><h2>${e(name)}</h2></div><div class="tabs"><a class="tab" href="#/home">${e(t('all'))}</a><span class="tab active">${e(name)}</span></div>${result?.status==='error' ? `<div class="notice-inline">${e(t('network'))}<button class="action" data-action="retry-space">${e(t('retry'))}</button></div>` : ''}${result?.status==='loading' && !posts.length ? `<div class="empty">${loadingMarkup(t('loading'))}</div>` : posts.length ? posts.map((x)=>questionCard(x)).join('') : result?.status==='ready' ? `<div class="empty">${e(t('noQuestions'))}</div>` : ''}${more}`;
 }
-function loadingMore() { return loadingMarkup(t('loadingMore')); }
+function loadingRow(key = 'loadingMore') { return `<div class="load-row">${loadingMarkup(t(key))}</div>`; }
 function renderLocal() {
   const person = user();
   if (!person) return locked('questions');
@@ -232,11 +241,25 @@ function inlineReplyForm(parentId, questionId) {
   if (!user() || replyTarget?.parentId !== parentId) return '';
   return `<form class="inline-reply" data-form="comment" data-question="${e(questionId)}" data-parent="${e(parentId)}"><button class="icon-btn reply-editor-close" type="button" data-action="cancel-reply" aria-label="${e(t('close'))}">×</button><label class="field">${e(t('writeComment'))}<textarea name="body" required minlength="2" maxlength="5000" rows="3" autofocus></textarea></label>${attachmentControl()}<div class="inline-reply-actions"><button class="primary">${e(t('publish'))}</button></div><p class="form-error" aria-live="polite"></p></form>`;
 }
-function answerCard(answer, question, local) {
+function answerCard(answer, question, local, depth = 0, ancestors = new Set()) {
   const person = user();
   const currentVote = person ? state.votes[person.id]?.[answer.id] || 0 : 0;
   const best = local && question.bestId === answer.id;
-  return `<article class="card answer-card ${best?'best':''}">${meta(answer,local)}${best ? `<span class="local-badge">${e(t('best'))}</span>`:''}<div class="body-text">${e(answer.body)}</div>${media(answer)}${attachments(answer)}<div class="detail-actions icon-actions"><button class="icon-action ${currentVote===1?'selected':''}" data-action="vote" data-id="${e(answer.id)}" data-value="1" aria-label="${e(t('voteUp'))}" title="${e(t('voteUp'))}">${icon('up')}</button><button class="icon-action ${currentVote===-1?'selected':''}" data-action="vote" data-id="${e(answer.id)}" data-value="-1" aria-label="${e(t('voteDown'))}" title="${e(t('voteDown'))}">${icon('down')}</button><button class="icon-action" data-action="comment" data-parent="${e(answer.id)}" aria-label="${e(t('comment'))}" title="${e(t('comment'))}">${icon('comment')}</button>${local && person?.id===answer.authorId ? `<button class="icon-action" data-action="edit" data-kind="answer" data-id="${e(answer.id)}" aria-label="${e(t('edit'))}" title="${e(t('edit'))}">${icon('edit')}</button><button class="icon-action danger" data-action="delete" data-kind="answer" data-id="${e(answer.id)}" aria-label="${e(t('remove'))}" title="${e(t('remove'))}">${icon('trash')}</button>`:''}${question.id.startsWith('local:') && person?.id===question.authorId && local ? `<button class="icon-action" data-action="best" data-id="${e(answer.id)}" aria-label="${e(t('markBest'))}" title="${e(t('markBest'))}">${icon('check')}</button>`:''}</div>${inlineReplyForm(answer.id, question.id)}${commentTree(answer.id)}</article>`;
+  return `<article class="card answer-card ${best?'best':''}">${meta(answer,local)}${best ? `<span class="local-badge">${e(t('best'))}</span>`:''}<div class="body-text">${e(answer.deleted ? t('removed') : answer.body)}</div>${media(answer)}${attachments(answer)}<div class="detail-actions icon-actions"><button class="icon-action ${currentVote===1?'selected':''}" data-action="vote" data-id="${e(answer.id)}" data-value="1" aria-label="${e(t('voteUp'))}" title="${e(t('voteUp'))}">${icon('up')}</button><button class="icon-action ${currentVote===-1?'selected':''}" data-action="vote" data-id="${e(answer.id)}" data-value="-1" aria-label="${e(t('voteDown'))}" title="${e(t('voteDown'))}">${icon('down')}</button><button class="icon-action" data-action="comment" data-parent="${e(answer.id)}" aria-label="${e(t('comment'))}" title="${e(t('comment'))}">${icon('comment')}</button>${local && person?.id===answer.authorId ? `<button class="icon-action" data-action="edit" data-kind="answer" data-id="${e(answer.id)}" aria-label="${e(t('edit'))}" title="${e(t('edit'))}">${icon('edit')}</button><button class="icon-action danger" data-action="delete" data-kind="answer" data-id="${e(answer.id)}" aria-label="${e(t('remove'))}" title="${e(t('remove'))}">${icon('trash')}</button>`:''}${question.id.startsWith('local:') && person?.id===question.authorId && local ? `<button class="icon-action" data-action="best" data-id="${e(answer.id)}" aria-label="${e(t('markBest'))}" title="${e(t('markBest'))}">${icon('check')}</button>`:''}</div>${inlineReplyForm(answer.id, question.id)}${commentTree(answer.id)}${!local ? remoteChildren(answer,question,depth,ancestors) : ''}</article>`;
+}
+function remoteChildren(answer, question, depth, ancestors) {
+  if (ancestors.has(answer.id)) return '';
+  const path = new Set(ancestors); path.add(answer.id);
+  const record = details.get(question.id);
+  const children = (record?.answers || []).filter((x) => x.parentId === answer.sourceId && !path.has(x.id));
+  const branch = replyBranches.get(`${question.id}:${answer.sourceId}`);
+  const pending = branch?.status === 'loading' || !branch && answer.replies > children.length;
+  return `${children.length ? `<div class="thread">${children.map((x)=>answerCard(x,question,false,depth+1,path)).join('')}</div>` : ''}${pending ? loadingRow(children.length ? 'loadingMore' : 'loadingComments') : branch?.status === 'error' ? `<div class="load-row"><button class="ghost" data-action="more-replies" data-question="${e(question.id)}" data-parent="${answer.sourceId}">${e(t('retry'))}</button></div>` : ''}${branch?.status === 'error' ? `<p role="status">${e(t('responseUnavailable'))}</p>` : ''}`;
+}
+function discussionFooter(record) {
+  const id = record.question.id;
+  const branch = replyBranches.get(`${id}:root`);
+  return `${record.answersAvailable === false || branch?.status === 'error' ? `<div class="notice-inline" role="status">${e(t('responseUnavailable'))}<button class="ghost" data-action="${record.answersAvailable === false ? 'retry-detail' : 'more-replies'}" data-question="${e(id)}">${e(t('retry'))}</button></div>` : ''}${branch?.status === 'loading' ? loadingRow(record.answers.length ? 'loadingMore' : 'loadingAnswers') : record.pos && branch?.status !== 'error' ? `<div class="load-row"><button class="ghost" data-action="more-replies" data-question="${e(id)}">${e(t('loadMore'))}</button></div>` : ''}`;
 }
 function media(item) {
   return Array.isArray(item.images) && item.images.length
@@ -246,13 +269,13 @@ function media(item) {
 function renderDetail(page) {
   const local = page.id.startsWith('local:');
   const record = local ? { question:state.questions.find((x) => x.id===page.id), answers:[] } : details.get(page.id);
-  if (!record?.question) return local ? `${backLink('#/local')}<div class="empty">${e(t('noQuestions'))}</div>` : detailStatus.get(page.id) === 'error' ? `${backLink()}<div class="empty"><h3>${e(t('network'))}</h3><button class="ghost" data-action="retry-detail">${e(t('retry'))}</button></div>` : `<div class="empty">${loadingMarkup(t('loading'))}</div>`;
+  if (!record?.question) return local ? `${backLink('#/local')}<div class="empty">${e(t('noQuestions'))}</div>` : detailStatus.get(page.id) === 'error' ? `${backLink()}<div class="empty"><h3>${e(t('network'))}</h3><button class="ghost" data-action="retry-detail">${e(t('retry'))}</button></div>` : `<div class="empty">${loadingMarkup(t('loadingDiscussion'))}</div>`;
   const question = record.question;
   const person = user();
   const answerList = [...record.answers.map((x) => ({ ...x, local:false })), ...state.answers.filter((x) => x.questionId === question.id).map((x) => ({ ...x, local:true }))];
   const currentVote = person ? state.votes[person.id]?.[question.id] || 0 : 0;
   const saved = person && (state.saves[person.id] || []).includes(question.id);
-  return `${backLink(local?'#/local':'#/home')}${!local && detailStatus.get(page.id)==='error' ? `<div class="notice-inline" role="status">${e(t('cachedDiscussion'))}<button class="action" data-action="retry-detail">${e(t('retry'))}</button></div>` : ''}<article class="card detail-card">${meta(question,local)}<h1>${e(question.title)}</h1><div class="tag-list">${(local?[question.space]:question.spaces.map((x)=>x.name)).filter(Boolean).slice(0,4).map((x)=>`<span class="tag">${e(x)}</span>`).join('')}</div><div class="body-text">${e(question.body)}</div>${media(question)}${attachments(question)}<div class="detail-actions icon-actions"><button class="icon-action ${currentVote===1?'selected':''}" data-action="vote" data-id="${e(question.id)}" data-value="1" aria-label="${e(t('voteUp'))}" title="${e(t('voteUp'))}">${icon('up')}</button><button class="icon-action ${currentVote===-1?'selected':''}" data-action="vote" data-id="${e(question.id)}" data-value="-1" aria-label="${e(t('voteDown'))}" title="${e(t('voteDown'))}">${icon('down')}</button><button class="icon-action ${saved?'selected':''}" data-action="save" data-id="${e(question.id)}" aria-label="${e(saved?t('unsave'):t('save'))}" title="${e(saved?t('unsave'):t('save'))}">${icon('bookmark')}</button>${local && person?.id === question.authorId ? `<button class="icon-action" data-action="edit" data-kind="question" data-id="${e(question.id)}" aria-label="${e(t('edit'))}" title="${e(t('edit'))}">${icon('edit')}</button><button class="icon-action danger" data-action="delete" data-kind="question" data-id="${e(question.id)}" aria-label="${e(t('remove'))}" title="${e(t('remove'))}">${icon('trash')}</button>` : ''}</div></article><form class="card composer" data-form="answer" data-question="${e(question.id)}"><h3>${e(t('answer'))}</h3><label class="field">${e(t('writeAnswer'))}<textarea name="body" required minlength="2" maxlength="5000" rows="5"></textarea></label>${attachmentControl()}<p class="form-error" role="alert"></p><button class="primary">${e(t('publish'))}</button></form><h2 class="answers-title">${answerList.length} ${e(t('replies'))}</h2>${answerList.length ? answerList.map((x) => answerCard(x,question,x.local)).join('') : `<div class="empty">${e(!local && record.answersAvailable === false ? t('responseUnavailable') : t('noAnswers'))}</div>`}`;
+  return `${backLink(local?'#/local':'#/home')}${!local && detailStatus.get(page.id)==='error' ? `<div class="notice-inline" role="status">${e(t('cachedDiscussion'))}<button class="action" data-action="retry-detail">${e(t('retry'))}</button></div>` : ''}<article class="card detail-card">${meta(question,local)}<h1>${e(question.title)}</h1><div class="tag-list">${(local?[question.space]:question.spaces.map((x)=>x.name)).filter(Boolean).slice(0,4).map((x)=>`<span class="tag">${e(x)}</span>`).join('')}</div><div class="body-text">${e(question.body)}</div>${media(question)}${attachments(question)}<div class="detail-actions icon-actions"><button class="icon-action ${currentVote===1?'selected':''}" data-action="vote" data-id="${e(question.id)}" data-value="1" aria-label="${e(t('voteUp'))}" title="${e(t('voteUp'))}">${icon('up')}</button><button class="icon-action ${currentVote===-1?'selected':''}" data-action="vote" data-id="${e(question.id)}" data-value="-1" aria-label="${e(t('voteDown'))}" title="${e(t('voteDown'))}">${icon('down')}</button><button class="icon-action ${saved?'selected':''}" data-action="save" data-id="${e(question.id)}" aria-label="${e(saved?t('unsave'):t('save'))}" title="${e(saved?t('unsave'):t('save'))}">${icon('bookmark')}</button>${local && person?.id === question.authorId ? `<button class="icon-action" data-action="edit" data-kind="question" data-id="${e(question.id)}" aria-label="${e(t('edit'))}" title="${e(t('edit'))}">${icon('edit')}</button><button class="icon-action danger" data-action="delete" data-kind="question" data-id="${e(question.id)}" aria-label="${e(t('remove'))}" title="${e(t('remove'))}">${icon('trash')}</button>` : ''}</div></article><form class="card composer" data-form="answer" data-question="${e(question.id)}"><h3>${e(t('answer'))}</h3><label class="field">${e(t('writeAnswer'))}<textarea name="body" required minlength="2" maxlength="5000" rows="5"></textarea></label>${attachmentControl()}<p class="form-error" role="alert"></p><button class="primary">${e(t('publish'))}</button></form><h2 class="answers-title">${responseCount(question,local)} ${e(t('replies'))}</h2>${answerList.length ? answerList.filter((x)=>!x.parentId).map((x) => answerCard(x,question,x.local)).join('') : local || record.answersAvailable !== false && question.replies === 0 ? `<div class="empty">${e(t('noAnswers'))}</div>` : ''}${!local ? discussionFooter(record) : ''}`;
 }
 function notifications(person) {
   const myQuestions = new Set(state.questions.filter((x) => x.authorId === person.id).map((x) => x.id));
@@ -263,7 +286,7 @@ function profileTabs(base, tab, notificationsTab = false) {
   return `<nav class="profile-tabs" aria-label="${e(t('profile'))}">${tabs.map(([key,label])=>`<a class="profile-tab ${tab===key?'active':''}" href="${base}/${key}" ${tab===key?'aria-current="page"':''}>${e(label)}</a>`).join('')}</nav>`;
 }
 function answerList(items) {
-  return items.length ? items.map((x) => `<article class="card question-card profile-answer"><a href="${qurl(x.questionId)}"><strong>${e(x.body.slice(0,180))}</strong></a><div class="muted">${e(dateText(x.created))}</div></article>`).join('') : `<div class="empty">${e(t('noAnswers'))}</div>`;
+  return items.length ? items.map((x) => `<article class="card question-card profile-answer">${x.questionId ? `<a href="${qurl(x.questionId)}"><strong>${e(x.deleted ? t('removed') : x.body.slice(0,180))}</strong></a>` : `<strong>${e(x.deleted ? t('removed') : x.body.slice(0,180))}</strong>`}<div class="muted">${e(dateText(x.created))}</div></article>`).join('') : `<div class="empty">${e(t('noAnswers'))}</div>`;
 }
 function renderProfile(page) {
   const person = user(); if (!person) return locked(({ questions: 'questions', answers: 'answers', notifications: 'notifications' })[page.tab] || 'profile');
@@ -288,12 +311,13 @@ function renderUser(page) {
     const answers=state.answers.filter((x)=>x.authorId===person.id);
     return `<div class="profile-page-head">${backLink()}</div><section class="card profile-card"><div class="profile-hero">${profileAvatar(person)}<div><h1>${e(person.name)}</h1>${person.bio?`<div class="profile-bio">${e(person.bio)}</div>`:''}</div></div></section>${profileTabs(`#/user/local/${e(person.id)}`,tab)}${tab==='answers'?answerList(answers):list(questions,true)}`;
   }
-  const known=knownRemoteProfiles();
-  const questions=known.questions.filter((x)=>x.author?.id===page.id);
-  const answers=known.answers.filter((x)=>x.author?.id===page.id);
-  const person=questions[0]?.author||answers[0]?.author||remoteProfiles.get(String(page.id));
-  if(!person) return `<div class="profile-page-head">${backLink()}</div><div class="empty">${e(feedStatus==='loading'?t('loading'):t('profileNotFound'))}</div>`;
-  return `<div class="profile-page-head">${backLink()}</div><section class="card profile-card"><div class="profile-hero">${profileAvatar(person)}<div><h1>${e(person.name)}</h1></div></div></section>${profileTabs(`#/user/mail/${e(page.id)}`,tab)}${tab==='answers'?answerList(answers):list(questions)}`;
+  const entry = profileLists.get(`${page.id}:${tab}`);
+  const items = entry?.items || [];
+  const known = knownRemoteProfiles();
+  const person = items.find((x)=>x.author?.id===page.id)?.author || remoteProfiles.get(String(page.id)) || known.questions.find((x)=>x.author?.id===page.id)?.author || known.answers.find((x)=>x.author?.id===page.id)?.author;
+  const total = profileTotals.get(page.id)?.[tab];
+  const content = items.length ? (tab==='answers' ? answerList(items) : list(items)) : entry?.status === 'ready' && !total ? `<div class="empty">${e(t(tab==='answers'?'noAnswers':'noQuestions'))}</div>` : '';
+  return `<div class="profile-page-head">${backLink()}</div><section class="card profile-card"><div class="profile-hero">${profileAvatar(person || {name:t('guest')})}<div><h1>${e(person?.name || `${t('profile')} ${page.id}`)}</h1></div></div></section>${profileTabs(`#/user/mail/${e(page.id)}`,tab)}${entry?.status==='error' ? `<div class="notice-inline" role="status">${e(t('network'))}<button class="ghost" data-action="more-profile">${e(t('retry'))}</button></div>` : ''}${content}${entry?.status==='ready' && !entry.pos && total > items.length ? `<p class="notice-inline">${e(t('partialResults'))}</p>` : ''}${!entry || entry.status==='loading' ? loadingRow(items.length ? 'loadingMore' : tab === 'answers' ? 'loadingAnswers' : 'loading') : entry.pos && entry.status !== 'error' ? `<div class="load-row"><button class="ghost" data-action="more-profile">${e(t('loadMore'))}</button></div>` : ''}`;
 }
 
 function modalHtml() {
@@ -393,8 +417,8 @@ async function reloadState() { state = await read(); render(); }
 async function mutate(mutator, preserveDrafts = true) { if (busy) return false; busy = true; try { await change(mutator); state = await read(); render(preserveDrafts); return true; } catch (error) { toast(error.message === 'duplicate-account' ? t('duplicate') : t('noStorage')); return false; } finally { busy = false; } }
 async function loadFeed(more = false) {
   if (feedStatus === 'loading' && more) return;
-  feedStatus = 'loading'; if (!more) { publicFeed = []; cursor = null; staleAt = null; } render();
-  try { const result = await feed(more ? cursor : null); const seen = new Set(publicFeed.map((x)=>x.id)); const extra = result.items.filter((x)=>!seen.has(x.id)); publicFeed = more ? [...publicFeed,...extra] : result.items; cursor = extra.length ? result.pos : null; feedStatus = 'ready'; staleAt = null; }
+  feedStatus = 'loading'; if (!more) { publicFeed = []; cursor = null; staleAt = null; feedVisited.clear(); } render();
+  try { const current = more ? cursor : null; const result = await feed(current); const seen = new Set(publicFeed.map((x)=>x.id)); const extra = result.items.filter((x)=>!seen.has(x.id)); publicFeed = more ? [...publicFeed,...extra] : result.items; cursor = nextCursor(result.pos,current,feedVisited); if(current) feedVisited.add(current); feedStatus = 'ready'; staleAt = null; }
   catch { feedStatus = 'error'; if (!more) { const cached = cachedFeed(); if (cached) { publicFeed = cached.items; staleAt = cached.at; } } }
   render();
 }
@@ -407,23 +431,86 @@ async function loadSearch(term) {
 async function loadDetail(id, refresh = false) {
   if (detailStatus.get(id)==='loading' || (!refresh && details.has(id))) return;
   detailStatus.set(id,'loading'); render();
-  try { details.set(id, await detail(id.slice(5))); detailStatus.set(id,'ready'); }
+  try {
+    const incoming = await detail(id.slice(5)), previous = details.get(id);
+    if (!incoming.answersAvailable && previous) incoming.answers = previous.answers;
+    details.set(id, incoming);
+    for (const key of replyBranches.keys()) if(key.startsWith(id+':')) replyBranches.delete(key);
+    replyBranches.set(`${id}:root`, {status:'ready',pos:incoming.pos,visited:new Set()});
+    for (const item of knownRemoteProfiles().questions) if(item.id===id) Object.assign(item,incoming.question);
+    detailStatus.set(id,'ready');
+  }
   catch { detailStatus.set(id,'error'); }
   if (route().id===id) render();
+  void hydrateThreads(id,details.get(id));
 }
 async function loadSpace(slug, more = false) {
   const old = spaceFeeds.get(slug);
-  if (!more && old?.status === 'loading') return;
-  const entry = more && old ? old : { items:[], pos:null };
+  if (old?.status === 'loading') return;
+  const entry = more && old ? old : { items:[], pos:null, visited:new Set() };
   entry.status = 'loading'; spaceFeeds.set(slug,entry); render();
-  try { const result = await feed(more ? entry.pos : null, slug); const known=new Set(entry.items.map((x)=>x.id)); const extra=result.items.filter((x)=>!known.has(x.id) && x.spaces.some((s)=>s.path===slug)); entry.items=more?[...entry.items,...extra]:extra; entry.pos=extra.length?result.pos:null; entry.status='ready'; }
+  try { const current=more?entry.pos:null; const result = await feed(current, slug); const known=new Set(entry.items.map((x)=>x.id)); const extra=result.items.filter((x)=>!known.has(x.id) && x.spaces.some((s)=>s.path===slug)); entry.items=more?[...entry.items,...extra]:extra; entry.pos=nextCursor(result.pos,current,entry.visited); if(current) entry.visited.add(current); entry.status='ready'; }
   catch { entry.status='error'; }
   if(route().slug===slug) render();
+}
+async function loadProfile(page, more = false) {
+  const tab=page.tab||'questions', key=`${page.id}:${tab}`;
+  let entry=profileLists.get(key);
+  if(entry?.status==='loading' || !more && entry?.status==='ready') return;
+  if(!entry) { entry={items:[],pos:null,status:'',visited:new Set()}; profileLists.set(key,entry); }
+  const current=entry.pos;
+  entry.status='loading'; render();
+  const totals = profileTotals.has(page.id) ? Promise.resolve() : profileCounts(page.id).then((x)=>profileTotals.set(page.id,x)).catch(()=>{});
+  try {
+    const result=await profilePage(page.id,tab,current);
+    entry.items=mergeItems(entry.items,result.items);
+    for(const item of result.items) rememberRemoteProfile(item.author);
+    entry.pos=nextCursor(result.pos,current,entry.visited); if(current) entry.visited.add(current);
+    entry.status='ready';
+  } catch { entry.status='error'; }
+  await totals;
+  if(route().page==='user' && route().id===page.id) render();
+}
+async function loadReplies(id, parent = null) {
+  const record=details.get(id); if(!record) return;
+  const key=`${id}:${parent||'root'}`;
+  let entry=replyBranches.get(key);
+  if(entry?.status==='loading') return;
+  if(!entry) { entry={status:'',pos:null,visited:new Set()}; replyBranches.set(key,entry); }
+  const current=entry.pos;
+  entry.status='loading'; render();
+  try {
+    const result=await replyPage(record.question.sourceId,current,parent);
+    // A refresh may have replaced the discussion while this request was pending.
+    if(details.get(id)!==record || replyBranches.get(key)!==entry) return;
+    record.answers=mergeItems(record.answers,result.items);
+    entry.pos=nextCursor(result.pos,current,entry.visited); if(current) entry.visited.add(current);
+    if(!parent) record.pos=entry.pos;
+    entry.status='ready';
+  } catch { entry.status='error'; }
+  if(route().id===id) render();
+  if(entry.status==='ready' && !record.threadLoading) void hydrateThreads(id,record);
+  return entry.status==='ready';
+}
+async function hydrateThreads(id, record) {
+  if(!record || record.threadLoading || !record.answersAvailable) return;
+  record.threadLoading=true;
+  try {
+    while(details.get(id)===record && route().id===id) {
+      const next=record.answers.find(answer=>{
+        const branch=replyBranches.get(`${id}:${answer.sourceId}`);
+        return branch ? branch.status==='ready' && branch.pos : answer.replies > record.answers.filter(x=>x.parentId===answer.sourceId).length;
+      });
+      if(!next) break;
+      await loadReplies(id,next.sourceId);
+    }
+  } finally { record.threadLoading=false; }
 }
 function onRoute() {
   const page = route();
   modal = ''; render();
-  if ((page.page==='home' || page.page==='user'&&page.source==='mail') && feedStatus==='loading' && !publicFeed.length) loadFeed();
+  if (page.page==='home' && feedStatus==='loading' && !publicFeed.length) loadFeed();
+  if (page.page==='user' && page.source==='mail') loadProfile(page);
   if (page.page==='search' && page.term) loadSearch(page.term);
   if (page.page==='space' && !spaceFeeds.has(page.slug)) loadSpace(page.slug);
   if (page.page==='question' && page.id.startsWith('mail:')) loadDetail(page.id, true);
@@ -482,8 +569,10 @@ root.addEventListener('click', async (event) => {
   if (action==='confirm-delete') { const payload=modalPayload; closeModal(); if(payload) await deleteRecord(payload.kind,payload.id); return; }
   if (action==='refresh') return loadFeed();
   if (action==='more') return loadFeed(true);
+  if (action==='more-profile') return loadProfile(route(),true);
+  if (action==='more-replies') return loadReplies(button.dataset.question, Number(button.dataset.parent)||null);
   if (action==='retry-detail') return loadDetail(route().id,true);
-  if (action==='retry-space') return loadSpace(route().slug);
+  if (action==='retry-space') return loadSpace(route().slug, Boolean(spaceFeeds.get(route().slug)?.items.length));
   if (action==='more-space') return loadSpace(route().slug,true);
   if (action==='vote') { if (!requireUser()) return; const id=button.dataset.id; const value=Number(button.dataset.value); return mutate((data)=>{ data.votes[user().id] ||= {}; const old=data.votes[user().id][id]||0; data.votes[user().id][id]=old===value?0:value; }); }
   if (action==='save') { if (!requireUser()) return; const id=button.dataset.id; const snapshot=publicFeed.find((x)=>x.id===id)||details.get(id)?.question||spaceFeeds.get(route().slug)?.items.find((x)=>x.id===id); return mutate((data)=>{ const saves=data.saves[user().id] ||= []; const index=saves.indexOf(id); if (index>=0) saves.splice(index,1); else { saves.unshift(id); if(snapshot) { data.snapshots ||= {}; data.snapshots[id]=snapshot; } } }); }

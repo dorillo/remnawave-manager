@@ -1,3 +1,4 @@
+import { confirmedPages } from '../shared/pagination.js';
 export const pageSize = 48;
 const sourcePageSize = 24;
 const kinds = { gif: 1, sticker: 2, clip: 3 };
@@ -162,7 +163,7 @@ export async function trending(signal) {
 }
 
 // Keep the existing proxy contract (24 per request), combine two pages atomically.
-export async function feed(options, signal) {
+async function rawFeed(options, signal) {
   const skip = options.skip || 0;
   const first = await feedPage(options, signal);
   if (!first.more) return { ...first, nextSkip: skip + sourcePageSize };
@@ -175,4 +176,13 @@ export async function feed(options, signal) {
     more: second.more,
     nextSkip: skip + pageSize,
   };
+}
+
+const feedPages = confirmedPages(async (options, skip, { signal }) => {
+  const page = await rawFeed({ ...options, skip }, signal);
+  return { ...page, continuation: page.more ? page.nextSkip : null };
+}, { cursor: 'continuation' });
+export async function feed({ skip = 0, ...options }, signal) {
+  const page = await feedPages(options, skip, { signal });
+  return { ...page, more: page.continuation !== null, nextSkip: page.continuation ?? page.nextSkip };
 }

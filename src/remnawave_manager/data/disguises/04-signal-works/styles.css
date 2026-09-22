@@ -81,3 +81,7 @@ body:has(.modal-backdrop) { overflow: hidden; }
   .composer > .primary, .inline-reply-actions > .primary, .attachment-picker, .modal-footer > button { width: 100%; justify-content: center; }
   .modal-footer { flex-wrap: wrap; }
 }
+
+/* Keep long public discussion threads readable on narrow screens. */
+.thread .answer-card { min-width: 0; padding: 10px 0; border: 0; background: transparent; }
+.thread .thread .thread .thread { margin-left: 0; padding-left: 0; border-left: 0; }

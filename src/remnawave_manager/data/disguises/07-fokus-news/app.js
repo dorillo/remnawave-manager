@@ -321,7 +321,7 @@ function commentsPanel(context = view) {
     inlineTarget = all.some(
       (c) => c.ref === (reply?.ref || (editing ? `local:${editing}` : "")),
     );
-  return `<div class="section-title"><h2>${e(t("discussion"))}</h2></div><p class="fine-print">${e(t("loaded"))}: ${list.length + locals.length}</p>${stale(context.comments)}${!inlineTarget ? composer(context) : ""}${context.commentsError ? state(err(context.commentsError), "comments-refresh") : !context.comments ? state(t("loading")) : !list.length && !locals.length ? state(t("commentsEmpty")) : ""}${threads(all, context)}${context.comments?.cursor ? `<div class="load-more">${button("comments-more", t(context.commentsMore ? "loading" : "more"), "arrow", "secondary", context.commentsMore ? "disabled" : "")}</div>` : ""}`;
+  return `<div class="section-title"><h2>${e(t("discussion"))}</h2></div><p class="fine-print">${e(t("loaded"))}: ${list.length + locals.length}</p>${stale(context.comments)}${!inlineTarget ? composer(context) : ""}${context.commentsError ? state(err(context.commentsError), "comments-refresh") : !context.comments ? state(t("loadingComments")) : !list.length && !locals.length ? state(t("commentsEmpty")) : ""}${threads(all, context)}${context.comments?.cursor ? `<div class="load-more">${button("comments-more", t(context.commentsMore ? "loadingMoreComments" : "more"), "arrow", "secondary", context.commentsMore ? "disabled" : "")}</div>` : ""}`;
 }
 function storyContent(a, continued = false) {
   const saved = db.bookmarks.some(
@@ -340,7 +340,7 @@ function nextCandidate() {
 }
 function continuationView(articles = view.continued || []) {
   return `${articles.map((a) => `<article class="reader continued-story" data-article-id="${e(a.id)}"><div class="next-story-heading"><span class="eyebrow">${e(t("nextArticle"))}</span><a class="text-link" href="${e(route(a))}">${e(t("openArticle"))}${icon("arrow")}</a></div>${storyContent(a, true)}${socialPanels(articleState(a.id))}</article>`).join("")}
-    <div id="next-article" class="next-article" aria-busy="${!!view.nextBusy}">${view.nextError ? `<p role="status" class="error-text">${e(err(view.nextError))}</p>` : ""}${!view.nextDone ? button("next-article", t(view.nextBusy ? "loading" : view.nextError ? "retry" : "nextArticle"), "arrow", "secondary", view.nextBusy ? "disabled" : "") : `<a class="text-link" href="#/latest">${e(t("allNews"))}${icon("arrow")}</a>`}</div>`;
+    <div id="next-article" class="next-article" aria-busy="${!!view.nextBusy}">${view.nextError ? `<p role="status" class="error-text">${e(err(view.nextError))}</p>` : ""}${!view.nextDone ? button("next-article", t(view.nextBusy ? "loadingArticle" : view.nextError ? "retry" : "nextArticle"), "arrow", "secondary", view.nextBusy ? "disabled" : "") : `<a class="text-link" href="#/latest">${e(t("allNews"))}${icon("arrow")}</a>`}</div>`;
 }
 let nextObserver,
   nextVisible = false;
@@ -459,7 +459,7 @@ async function nextArticle(manual = false) {
 function articleView() {
   const a = view.article;
   if (!a)
-    return `${pageHead(t("read"), " ", false)}${view.error ? state(err(view.error), "refresh") : state(t("loading"))}`;
+    return `${pageHead(t("read"), " ", false)}${view.error ? state(err(view.error), "refresh") : state(t("loadingArticle"))}`;
   return `<div class="article-layout"><div class="article-stream"><article class="reader" data-article-id="${e(a.id)}"><a class="back-link" href="#/home">${icon("back")}${e(t("back"))}</a>${storyContent(a)}${socialPanels(view)}</article><section id="article-continuation" aria-label="${e(t("nextArticle"))}">${continuationView()}</section></div><aside class="article-aside"><div class="article-aside-sticky">${latestList(feed.filter((x) => x.id !== a.id).slice(0, 5))}</div></aside></div>`;
 }
 

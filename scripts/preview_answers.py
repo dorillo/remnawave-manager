@@ -117,13 +117,26 @@ class AnswersPreviewHandler(FreshAssetsHandler):
             if 1 <= len(term) <= 120 and not any(ord(char) < 32 for char in term):
                 return f"{UPSTREAM}/api/topic/search?{urlencode({'text': term})}"
             return None
+        profile = re.fullmatch(r"profile/([0-9]{1,12})/(topics|replies|count)", relative)
+        if profile:
+            identifier, kind = profile.groups()
+            if kind == "count":
+                return f"{UPSTREAM}/api/topic/profile/{identifier}/content/count" if not params else None
+            if params == {"limit": ["20"], "dir": ["0"]}:
+                return f"{UPSTREAM}/api/topic/profile/{identifier}/{kind}?limit=20&dir=0"
+            if set(params) == {"limit", "dir", "pos"} and params["limit"] == ["20"] and params["dir"] == ["1"] and len(params["pos"]) == 1 and ID.fullmatch(params["pos"][0]):
+                return f"{UPSTREAM}/api/topic/profile/{identifier}/{kind}?{urlencode({'limit': '20', 'dir': '1', 'pos': params['pos'][0]})}"
+            return None
         route, slash, identifier = relative.partition("/")
         if slash != "/" or not ID.fullmatch(identifier):
             return None
         if route == "question" and not params:
             return f"{UPSTREAM}/api/topic/question/{identifier}"
-        if route == "answers" and params == {"limit": ["50"]}:
-            return f"{UPSTREAM}/api/topic/answers/{identifier}?limit=50"
+        if route == "answers" and {"limit"} <= set(params) <= {"limit", "pos", "reply_id"} and params["limit"] == ["50"]:
+            if any(len(params[key]) != 1 or not ID.fullmatch(params[key][0]) for key in params if key != "limit"):
+                return None
+            query = urlencode({"limit": "50", **{key: params[key][0] for key in ("pos", "reply_id") if key in params}})
+            return f"{UPSTREAM}/api/topic/answers/{identifier}?{query}"
         return None
 
     def _json_error(self, status: int, message: str, *, retry_after: str | None = None) -> None:

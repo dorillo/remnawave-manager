@@ -485,7 +485,14 @@ _PROXY_REVISIONS = [
 ]
 _raw_proxies = (ASTER_SEARCH_PROXY, ANSWERS_MAIL_PROXY, MORROW_YAPPY_PROXY, SVOD_WIKIPEDIA_PROXY)
 ASTER_SEARCH_PROXY = render_search_proxy()
+# Keep both published revisions recognizable, including IPv4-bound installs.
+_previous_answers = ANSWERS_MAIL_PROXY
+_answers_base = ANSWERS_MAIL_PROXY[ANSWERS_MAIL_PROXY.index('    location ~ "^/_answers/mail/question/'):ANSWERS_MAIL_PROXY.index('    location ~ "^/_answers/mail/answers/')].rstrip()
+_answers_profiles = _answers_base.replace('question/(?<answers_id>', 'profile/(?<answers_id>').replace('[0-9]{1,12})$"', '[0-9]{1,12})/count$"').replace('/api/topic/question/$answers_id', '/api/topic/profile/$answers_id/content/count')
+_answers_lists = _answers_base.replace('question/(?<answers_id>', 'profile/(?<answers_id>').replace('[0-9]{1,12})$"', '[0-9]{1,12})/(?<answers_list>topics|replies)$"').replace('if ($args != "")', 'if ($args !~ "^limit=20&dir=(0|1&pos=[0-9]{1,12})$")').replace('/api/topic/question/$answers_id', '/api/topic/profile/$answers_id/$answers_list')
+ANSWERS_MAIL_PROXY = ANSWERS_MAIL_PROXY.replace('if ($args != "limit=50")', 'if ($args !~ "^limit=50(&pos=[0-9]{1,12})?(&reply_id=[0-9]{1,12})?$")') + '\n\n' + _answers_profiles + '\n\n' + _answers_lists
 ANSWERS_MAIL_PROXY = harden_proxy(ANSWERS_MAIL_PROXY, 'answers')
+_PROXY_REVISIONS.append((harden_proxy(_previous_answers, 'answers'), ANSWERS_MAIL_PROXY))
 MORROW_YAPPY_PROXY = harden_proxy(MORROW_YAPPY_PROXY, 'morrow')
 SVOD_WIKIPEDIA_PROXY = harden_proxy(SVOD_WIKIPEDIA_PROXY, 'svod')
 _PROXY_REVISIONS.extend(zip(_raw_proxies, (

@@ -1,3 +1,4 @@
+import { confirmedPages } from '../shared/pagination.js';
 import { cached, cache } from "./fokus-store.js?v=20260919-release";
 export const sections = [
   "politics",
@@ -566,7 +567,7 @@ async function request(path, signal) {
     signal?.removeEventListener("abort", abort);
   }
 }
-export async function load(
+async function rawLoad(
   kind,
   { ref, section = "", cursor = "", query = "", signal, force = false } = {},
 ) {
@@ -641,4 +642,9 @@ export async function load(
     if (old) return { ...old.value, stale: true, fetchedAt: old.at };
     throw e;
   }
+}
+
+const commentPages = confirmedPages((ref, cursor, options) => rawLoad('comments', { ...options, ref, cursor: cursor || '' }), { cursor: 'cursor' });
+export function load(kind, options = {}) {
+  return kind === 'comments' ? commentPages(options.ref, options.cursor || '', options) : rawLoad(kind, options);
 }

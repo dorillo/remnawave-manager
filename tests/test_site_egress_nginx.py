@@ -228,6 +228,15 @@ class EgressNginxTests(unittest.TestCase):
                             for _, route in probes:
                                 for _ in range(3):
                                     self.assertEqual(request_source(route), source)
+                            if template == '04-signal-works':
+                                for route, upstream_path in (
+                                    ('answers/123?limit=50&pos=456&reply_id=789', '/api/topic/answers/123?limit=50&pos=456&reply_id=789'),
+                                    ('profile/9/topics?limit=20&dir=0', '/api/topic/profile/9/topics?limit=20&dir=0'),
+                                    ('profile/9/replies?limit=20&dir=1&pos=456', '/api/topic/profile/9/replies?limit=20&dir=1&pos=456'),
+                                    ('profile/9/count', '/api/topic/profile/9/content/count'),
+                                ):
+                                    self.assertEqual(request_source('/_answers/mail/' + route), source)
+                                    self.assertEqual(observed[-1], (source, upstream_path))
                     self.assertNotIn(28, dns_queries)
                     # Re-read persisted configuration after a complete nginx restart.
                     process.terminate()

@@ -374,9 +374,6 @@ const comment = {
     );
     await page
       .locator(".article-stream > .reader [data-action=comments-more]")
-      .click();
-    await page
-      .locator(".article-stream > .reader [data-action=comments-more]")
       .waitFor({ state: "hidden" });
     assert.equal(
       await page
@@ -896,7 +893,6 @@ const comment = {
       assert.equal(await reader.locator('a[href*="ria.ru"]').count(), 0);
     }
     const firstComments = await firstStory.locator(".comment").count();
-    await nextStory.locator('[data-action="comments-more"]').click();
     await nextStory
       .locator('[data-action="comments-more"]')
       .waitFor({ state: "hidden" });

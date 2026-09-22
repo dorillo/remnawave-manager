@@ -367,11 +367,11 @@ function likeButton(item, card = false) {
     "aria-pressed": String(active),
   });
 }
-function loading() {
+function loading(key = "loading") {
   return el(
     "div",
     { class: "loading", role: "status" },
-    loadingNode(t("loading")),
+    loadingNode(t(key)),
   );
 }
 function errorState(error, retry) {
@@ -825,7 +825,7 @@ async function galleryPage(r, signal, token) {
     if (busy || signal.aborted) return;
     busy = true;
     const restoreFocus = bottom.contains(document.activeElement);
-    bottom.replaceChildren(loading());
+    bottom.replaceChildren(loading("loadingMedia"));
     try {
       const result = await uploads.mixedFeed(
         { type: r.type, query: r.query, category: r.category },
@@ -1082,7 +1082,7 @@ async function detailPage(id, signal, token) {
       if (busy || signal.aborted) return;
       busy = true;
       const restoreFocus = status.contains(document.activeElement);
-      status.replaceChildren(loading());
+      status.replaceChildren(loading("loadingMedia"));
       try {
         const result = await uploads.mixedFeed(
           item.local

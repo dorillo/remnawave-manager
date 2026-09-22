@@ -62,10 +62,11 @@ export function cleanSourceMarkup(html) {
   template.content.append(fragment);
   return template.innerHTML;
 }
+const isLoadingLabel = label => ['loading', 'loadingComments', 'loadingMoreComments', 'loadingArticle'].some(key => label === t(key));
 export const button = (action, label, ico = "", cls = "", extra = "") =>
-  `<button type="button" class="${cls}" data-action="${action}" ${extra}>${ico ? icon(ico) : ""}<span>${label === t("loading") ? loadingMarkup(label) : e(label)}</span></button>`;
+  `<button type="button" class="${cls}" data-action="${action}" ${extra}>${ico ? icon(ico) : ""}<span>${isLoadingLabel(label) ? loadingMarkup(label) : e(label)}</span></button>`;
 export const state = (message, action = "") =>
-  message === t("loading") ? `<div class="empty-state loading-state">${loadingMarkup(message)}</div>` :
+  isLoadingLabel(message) ? `<div class="empty-state loading-state">${loadingMarkup(message)}</div>` :
   `<div class="empty-state"><span class="state-symbol">${icon("chat")}</span><p>${e(message)}</p>${action ? button(action, t("retry"), "refresh", "secondary") : ""}</div>`;
 export function card(a, index = 0, kind = "card") {
   return `<article class="${kind}"><a class="story-link" href="${e(route(a))}">${a.image ? `<div class="story-image"><img src="${e(a.image)}" alt="" loading="${index === 0 ? "eager" : "lazy"}" referrerpolicy="no-referrer"></div>` : ""}<div class="story-copy"><div class="eyebrow">${e(t(a.category) || t("source"))}</div><h2>${e(cleanSourceText(a.title))}</h2><div class="meta">${e(date(a.published)) || e(t("source"))}<span>${a.count !== undefined && a.count !== null ? icon("chat") + " " + e(a.count) : icon("arrow")}</span></div></div></a></article>`;

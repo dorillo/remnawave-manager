@@ -10,7 +10,7 @@ from pathlib import Path
 
 MODULE = re.compile(r'''((?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s*)["'])(\.{1,2}/[^"'?]+\.js)(?:\?[^"']*)?(["'])''')
 HTML_ASSET = re.compile(r'''((?:src|href)=["'])(?!https?:|//)([^"'?]+\.(?:js|css))(?:\?[^"']*)?(["'])''')
-PREVIEW_SHARED = frozenset({'date-utils.js', 'storage.js', 'image-proxy.js', 'feedback.js', 'feedback.css', 'guest-state.js', 'session.js'})
+PREVIEW_SHARED = frozenset({'date-utils.js', 'storage.js', 'image-proxy.js', 'feedback.js', 'feedback.css', 'guest-state.js', 'session.js', 'pagination.js'})
 
 
 def revision(site: Path, shared: Path) -> str:
