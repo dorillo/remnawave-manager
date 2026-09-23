@@ -757,6 +757,65 @@ async function localVideoPage(id, signal) {
   const video = localVideo(record);
   mountFeed(async () => ({ items: [video], next: null }));
 }
+// Keep source pages buffered so each click reveals complete grid rows.
+// A final row may be shorter only when the source is exhausted.
+function pagedVideos(fetchPage, initialCursor, signal, fallback = () => []) {
+  const tiles = grid([]);
+  const status = el("p", { class: "pagination-status", role: "status" });
+  const more = button(t("more"), load, "load-button");
+  const element = el("div", {}, tiles, status, more);
+  const seen = new Set(), visited = new Set(), pending = [];
+  let cursor = initialCursor, exhausted = false, busy = false;
+  async function load() {
+    if (busy || signal.aborted || exhausted && !pending.length) return;
+    busy = true;
+    more.disabled = true;
+    more.replaceChildren(...loadingLabel());
+    status.textContent = "";
+    const columns = Math.max(1, getComputedStyle(tiles).gridTemplateColumns.split(" ").length);
+    const target = Math.ceil((tiles.children.length + 24) / columns) * columns - tiles.children.length;
+    try {
+      // Bound requests if the source sends empty or duplicate-only pages.
+      for (let step = 0; pending.length < target && !exhausted && step < 20; step++) {
+        const result = await fetchPage(cursor);
+        if (signal.aborted) return;
+        for (const video of result.items) {
+          if (seen.has(video.id)) continue;
+          seen.add(video.id);
+          pending.push(video);
+        }
+        visited.add(cursor);
+        exhausted = !result.next || visited.has(result.next);
+        cursor = result.next;
+      }
+      // Keep an incomplete row buffered until retry unless this is the end.
+      const count = exhausted ? Math.min(target, pending.length)
+        : Math.floor(Math.min(target, pending.length) / columns) * columns;
+      appendTiles(tiles, pending.splice(0, count));
+      more.hidden = exhausted && !pending.length;
+      if (exhausted && !seen.size) tiles.replaceChildren(empty());
+    } catch (error) {
+      if (signal.aborted) return;
+      const cached = !seen.size ? fallback() : [];
+      if (cached.length) {
+        for (const video of cached) {
+          if (seen.has(video.id)) continue;
+          seen.add(video.id);
+          pending.push(video);
+        }
+        exhausted = true;
+        appendTiles(tiles, pending.splice(0, target));
+        more.hidden = !pending.length;
+      }
+      status.textContent = t(cached.length ? "localSearch" : error.message);
+    } finally {
+      busy = false;
+      more.disabled = false;
+      more.textContent = t(status.textContent ? "retry" : "more");
+    }
+  }
+  return { element, load };
+}
 async function authorPage(id, signal) {
   const author = await data.getAuthor(id, signal);
   if (signal.aborted) return;
@@ -782,41 +841,11 @@ async function authorPage(id, signal) {
       followButton,
     ),
   );
-  const results = el("div"),
-    more = button(t("more"), load, "load-button");
-  let cursor = null,
-    busy = false,
-    done = false;
-  const seen = new Set();
-  main.replaceChildren(
-    el("div", { class: "page-container" }, head, results, more),
-  );
-  async function load() {
-    if (busy || done || signal.aborted) return;
-    busy = true;
-    more.disabled = true;
-    more.replaceChildren(...loadingLabel());
-    try {
-      const result = await data.getAuthorVideos(id, cursor, signal);
-      if (signal.aborted) return;
-      const fresh = result.items.filter(
-        (v) => !seen.has(v.id) && (seen.add(v.id), true),
-      );
-      results.append(grid(fresh));
-      done = !result.next || result.next === cursor || !fresh.length;
-      cursor = result.next;
-      more.hidden = done;
-      if (!seen.size) results.replaceChildren(empty());
-    } catch (e) {
-      if (!signal.aborted) notice(t(e.message));
-    } finally {
-      busy = false;
-      more.disabled = false;
-      if (!done) more.textContent = t("more");
-    }
-  }
-  await load();
+  const results = pagedVideos((cursor) => data.getAuthorVideos(id, cursor, signal), null, signal);
+  main.replaceChildren(el("div", { class: "page-container" }, head, results.element));
+  await results.load();
 }
+
 async function searchPage(query, signal) {
   const heading = el(
     "h1",
@@ -831,78 +860,13 @@ async function searchPage(query, signal) {
     el("p", {}, t("discoverText")),
     button(t("start"), () => go("#/feed"), "primary"),
   );
-  const results = el("div"),
-    resultsGrid = grid([]),
-    status = el("p", { role: "status" }),
-    more = button(t("more"), load, "load-button");
-  let page = 1,
-    busy = false,
-    done = false;
-  const known = new Set();
-  main.replaceChildren(
-    el(
-      "div",
-      { class: "page-container" },
-      query ? heading : intro,
-      status,
-      results,
-      more,
-    ),
-  );
-  results.append(resultsGrid);
-  async function load() {
-    if (busy || done || signal.aborted) return;
-    busy = true;
-    more.disabled = true;
-    more.replaceChildren(...loadingLabel());
-    try {
-      let loaded = 0;
-      while (!done && loaded < 3) {
-        const result = query
-          ? await data.search(query, page, signal)
-          : await data.getFeed(page, signal);
-        if (signal.aborted) return;
-        const fresh = result.items.filter(
-          (v) => !known.has(v.id) && (known.add(v.id), true),
-        );
-        appendTiles(resultsGrid, fresh);
-        page++;
-        loaded++;
-        done = !result.next || !fresh.length;
-      }
-      more.hidden = done;
-      if (!known.size) results.replaceChildren(empty());
-    } catch (e) {
-      if (signal.aborted) return;
-      const local = data
-        .cachedVideos()
-        .filter(
-          (v) =>
-            !query ||
-            (v.description + " " + v.author.nickname)
-              .toLowerCase()
-              .includes(query.toLowerCase()),
-        );
-      status.textContent = t(local.length ? "localSearch" : e.message);
-      if (local.length) {
-        results.replaceChildren(grid(local));
-        more.hidden = true;
-      } else more.textContent = t("retry");
-    } finally {
-      busy = false;
-      more.disabled = false;
-      if (!done && !status.textContent) more.textContent = t("more");
-    }
-  }
-  main.addEventListener(
-    "scroll",
-    () => {
-      if (main.scrollTop + main.clientHeight >= main.scrollHeight - 480)
-        load();
-    },
-    { signal },
-  );
-  await load();
+  const results = pagedVideos(async (page) => {
+    const result = query ? await data.search(query, page, signal) : await data.getFeed(page, signal);
+    return { ...result, next: result.next ? page + 1 : null };
+  }, 1, signal, () => data.cachedVideos().filter((video) => !query ||
+    (video.description + " " + video.author.nickname).toLowerCase().includes(query.toLowerCase())));
+  main.replaceChildren(el("div", { class: "page-container" }, query ? heading : intro, results.element));
+  await results.load();
 }
 function profilePage() {
   if (!store) {

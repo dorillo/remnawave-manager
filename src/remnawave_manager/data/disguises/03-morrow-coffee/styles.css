@@ -924,6 +924,15 @@ hr {
   background: var(--accent-text);
   color: var(--accent);
 }
+.pagination-status {
+  max-width: 560px;
+  margin: 24px auto 0;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.pagination-status:empty {
+  display: none;
+}
 .load-button {
   display: flex;
   align-items: center;

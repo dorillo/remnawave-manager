@@ -85,9 +85,10 @@ function storedAttachments(value) {
 }
 function attachments(item) {
   const files = storedAttachments(item);
-  return files.length ? `<div class="attachment-list">${files.map((file) => /^data:image\/(?:png|jpeg|gif|webp|avif);base64,/i.test(file.data)
-    ? `<a class="attachment-image" href="${e(file.data)}" download="${e(file.name)}"><img src="${e(file.data)}" alt="${e(file.name)}" loading="lazy"><span>${e(file.name)}</span></a>`
-    : `<a class="attachment" href="${e(file.data)}" download="${e(file.name)}"><span aria-hidden="true">⌁</span>${e(file.name)}</a>`).join('')}</div>` : '';
+  const isImage = (file) => /^data:image\/(?:png|jpeg|gif|webp|avif);base64,/i.test(file.data);
+  const images = files.filter(isImage).map((file) => ({src:file.data,alt:file.name,download:file.name}));
+  const documents = files.filter((file) => !isImage(file));
+  return imageGallery(item, images) + (documents.length ? `<div class="attachment-list">${documents.map((file) => `<a class="attachment" href="${e(file.data)}" download="${e(file.name)}"><span aria-hidden="true">⌁</span>${e(file.name)}</a>`).join('')}</div>` : '');
 }
 function drawAttachments(form) {
   const selection = form.querySelector('[data-attachment-selection]');
@@ -261,10 +262,15 @@ function discussionFooter(record) {
   const branch = replyBranches.get(`${id}:root`);
   return `${record.answersAvailable === false || branch?.status === 'error' ? `<div class="notice-inline" role="status">${e(t('responseUnavailable'))}<button class="ghost" data-action="${record.answersAvailable === false ? 'retry-detail' : 'more-replies'}" data-question="${e(id)}">${e(t('retry'))}</button></div>` : ''}${branch?.status === 'loading' ? loadingRow(record.answers.length ? 'loadingMore' : 'loadingAnswers') : record.pos && branch?.status !== 'error' ? `<div class="load-row"><button class="ghost" data-action="more-replies" data-question="${e(id)}">${e(t('loadMore'))}</button></div>` : ''}`;
 }
+function imageGallery(item, images) {
+  return images.length ? `<div class="media-grid" data-gallery>${images.map((image,index) => {
+    const tag = image.download ? 'a' : 'button';
+    const attributes = image.download ? `href="${e(image.src)}" download="${e(image.download)}"` : 'type="button"';
+    return `<${tag} ${attributes} class="media-image" data-action="gallery" data-id="${e(item.id)}" data-index="${index}" aria-label="${e(t('openImage'))} ${index+1}"><img src="${e(image.src)}" alt="${e(image.alt)}" loading="lazy"></${tag}>`;
+  }).join('')}</div>` : '';
+}
 function media(item) {
-  return Array.isArray(item.images) && item.images.length
-    ? `<div class="media-grid">${item.images.slice(0,4).map((src)=>`<img src="${e(safeImage(src))}" alt="" loading="lazy">`).join('')}</div>`
-    : '';
+  return imageGallery(item, Array.isArray(item.images) ? item.images.slice(0,4).map((src) => ({src:safeImage(src),alt:''})).filter((image) => image.src) : []);
 }
 function renderDetail(page) {
   const local = page.id.startsWith('local:');
@@ -323,13 +329,14 @@ function renderUser(page) {
 function modalHtml() {
   if (!modal) return '';
   let content = '';
+  if (modal === 'gallery') content = `<div class="modal-head"><h2>${e(t('photo'))}</h2><button class="icon-btn" data-action="close" aria-label="${e(t('close'))}">×</button></div><img class="gallery-image" src="${e(modalPayload.images[modalPayload.index].src)}" alt="${e(modalPayload.images[modalPayload.index].alt)}"><div class="gallery-controls"><button class="ghost" data-action="gallery-prev" ${modalPayload.images.length<2?'disabled':''}>${e(t('previousImage'))}</button><span data-gallery-count aria-live="polite">${modalPayload.index+1} / ${modalPayload.images.length}</span><button class="ghost" data-action="gallery-next" ${modalPayload.images.length<2?'disabled':''}>${e(t('nextImage'))}</button></div>`;
   if (modal === 'login' || modal === 'register') content = `<div class="modal-head"><h2>${e(t(modal))}</h2><button class="icon-btn" data-action="close" aria-label="${e(t('close'))}">×</button></div><form data-form="auth">${modal==='register'?`<label class="field">${e(t('name'))}<input name="name" autocomplete="name" required minlength="2" maxlength="60" autofocus></label>`:''}<label class="field">${e(t('email'))}<input name="email" type="email" autocomplete="email" required autofocus></label><label class="field">${e(t('password'))}<input name="password" type="password" autocomplete="${modal==='register'?'new-password':'current-password'}" required minlength="8" maxlength="128"></label><p class="form-error" aria-live="polite"></p><div class="modal-footer"><button class="primary">${e(t(modal==='register'?'register':'login'))}</button><button class="ghost" type="button" data-action="switch-auth">${e(t(modal==='register'?'login':'register'))}</button></div></form>`;
   if (modal === 'logout-confirm') content = `<div class="confirm-dialog"><div class="modal-head"><span></span><button class="icon-btn" data-action="close" aria-label="${e(t('close'))}">×</button></div><div class="confirm-icon">${icon('user')}</div><h2>${e(t('logoutConfirmTitle'))}</h2><p>${e(t('logoutConfirmText'))}</p><div class="modal-footer"><button class="primary" data-action="confirm-logout">${e(t('logout'))}</button><button class="ghost" type="button" data-action="close">${e(t('cancel'))}</button></div></div>`;
   if (modal === 'delete-confirm') content = `<div class="confirm-dialog danger-confirm"><div class="modal-head"><span></span><button class="icon-btn" data-action="close" aria-label="${e(t('close'))}">×</button></div><div class="confirm-icon">${icon('trash')}</div><h2>${e(t('deleteConfirmTitle'))}</h2><p>${e(t('deleteConfirmText'))}</p><div class="modal-footer"><button class="danger-button" data-action="confirm-delete">${e(t('remove'))}</button><button class="ghost" type="button" data-action="close">${e(t('cancel'))}</button></div></div>`;
   if (modal === 'ask' || modal === 'edit-question') { const item = modalPayload?.item; content = `<div class="modal-head"><h2>${e(modal==='ask'?t('ask'):t('edit'))}</h2><button class="icon-btn" data-action="close" aria-label="${e(t('close'))}">×</button></div><form data-form="question"><label class="field">${e(t('title'))}<input name="title" required minlength="5" maxlength="240" value="${e(item?.title||'')}" autofocus></label><label class="field">${e(t('details'))}<textarea name="body" maxlength="5000" rows="7">${e(item?.body||'')}</textarea></label><label class="field">${e(t('explore'))}<input name="space" maxlength="60" value="${e(item?.space||'')}"></label>${attachmentControl()}<p class="form-error" aria-live="polite"></p><div class="modal-footer"><button class="primary">${e(t('publish'))}</button><button type="button" class="ghost" data-action="close">${e(t('cancel'))}</button></div></form>`; }
   if (modal === 'edit-answer' || modal === 'edit-comment') { const item = modalPayload?.item; content = `<div class="modal-head"><h2>${e(t('edit'))}</h2><button class="icon-btn" data-action="close" aria-label="${e(t('close'))}">×</button></div><form data-form="text"><label class="field">${e(t('details'))}<textarea name="body" required minlength="2" maxlength="5000" rows="5" autofocus>${e(item?.body||'')}</textarea></label>${attachmentControl()}<p class="form-error" aria-live="polite"></p><div class="modal-footer"><button class="primary">${e(t('publish'))}</button><button type="button" class="ghost" data-action="close">${e(t('cancel'))}</button></div></form>`; }
   if (modal === 'profile-edit') { const person=user(); content = `<div class="modal-head"><h2>${e(t('editProfile'))}</h2><button class="icon-btn" data-action="close" aria-label="${e(t('close'))}">×</button></div><form data-form="profile"><div class="profile-photo-editor"><div data-profile-preview>${profileAvatar({name:person.name,avatar:modalPayload?.avatar},'profile-edit-preview')}</div><div><label class="attachment-picker">${icon('attach')}${e(t('chooseAvatar'))}<input name="avatar" type="file" accept="image/png,image/jpeg,image/webp" data-profile-avatar></label><button class="text-action" type="button" data-action="remove-avatar">${e(t('removeAvatar'))}</button></div></div><label class="field">${e(t('name'))}<input name="name" value="${e(person.name)}" required minlength="2" maxlength="60" autofocus></label><label class="field">${e(t('bio'))}<textarea name="bio" maxlength="300" rows="4">${e(person.bio||'')}</textarea></label><p class="form-error" aria-live="polite"></p><div class="modal-footer"><button class="primary">${e(t('saveChanges'))}</button><button class="ghost" type="button" data-action="close">${e(t('cancel'))}</button></div></form>`; }
-  return `<div class="modal-backdrop" data-backdrop><div class="modal" role="dialog" aria-modal="true" aria-label="${e(t(modal==='login'||modal==='register'?modal:'details'))}">${content}</div></div>`;
+  return `<div class="modal-backdrop" data-backdrop><div class="modal ${modal==='gallery'?'gallery-modal':''}" role="dialog" aria-modal="true" aria-label="${e(t(modal==='gallery'?'photo':modal==='login'||modal==='register'?modal:'details'))}">${content}</div></div>`;
 }
 
 function draftKey(form) {
@@ -404,12 +411,22 @@ function openModal(type, payload = null) {
   const action = returnFocus?.dataset.action;
   returnFocusSelector = action ? `[data-action="${CSS.escape(action)}"]${returnFocus.dataset.id ? `[data-id="${CSS.escape(returnFocus.dataset.id)}"]` : ''}`
     : returnFocus?.closest('[data-form="answer"]') ? '[data-form="answer"] textarea' : '';
+  if (action === 'gallery') returnFocusSelector += `[data-index="${CSS.escape(returnFocus.dataset.index)}"]`;
   modal = type; modalPayload = payload; render();
 }
 function closeModal() {
   modal = ''; modalPayload = null; render();
   const target = returnFocus?.isConnected ? returnFocus : returnFocusSelector ? root.querySelector(returnFocusSelector) : null;
   target?.focus();
+}
+function moveGallery(step) {
+  if (modal !== 'gallery') return;
+  const { images } = modalPayload;
+  modalPayload.index = (modalPayload.index + step + images.length) % images.length;
+  const image = root.querySelector('.gallery-image');
+  image.src = images[modalPayload.index].src;
+  image.alt = images[modalPayload.index].alt;
+  root.querySelector('[data-gallery-count]').textContent = `${modalPayload.index+1} / ${images.length}`;
 }
 function requireUser() { if (user()) return true; toast(t('authNeeded')); openModal('login'); return false; }
 
@@ -557,6 +574,13 @@ root.addEventListener('click', async (event) => {
   if (action==='language') { setLang(lang()==='ru'?'en':'ru'); render(); return; }
   if (action==='theme') { toggleTheme(); return; }
   if (action==='close') return closeModal();
+  if (action==='gallery') {
+    event.preventDefault();
+    const buttons = [...button.closest('[data-gallery]').querySelectorAll('[data-action="gallery"]')];
+    const images = buttons.map((item) => { const image=item.querySelector('img'); return {src:image.getAttribute('src'),alt:image.alt}; });
+    return openModal('gallery', {images,index:buttons.indexOf(button)});
+  }
+  if (action==='gallery-prev' || action==='gallery-next') return moveGallery(action==='gallery-next'?1:-1);
   if (action==='switch-auth') return openModal(modal==='login'?'register':'login');
   if (action==='login') return openModal('login');
   if (action==='back') { if (routeIndex > 0) { history.back(); } else { location.hash=button.dataset.fallback || '#/home'; } return; }
@@ -623,6 +647,7 @@ root.addEventListener('change', async (event) => {
 document.addEventListener('keydown', (event) => {
   if (!modal) return;
   if (event.key === 'Escape') { event.preventDefault(); closeModal(); }
+  if (modal === 'gallery' && ['ArrowLeft','ArrowRight'].includes(event.key)) { event.preventDefault(); moveGallery(event.key==='ArrowRight'?1:-1); }
   if (event.key !== 'Tab') return;
   const controls = [...root.querySelectorAll('.modal button:not(:disabled),.modal input:not(:disabled),.modal textarea:not(:disabled),.modal select:not(:disabled),.modal a[href]')]
     .filter((node) => node.tabIndex >= 0 && node.getClientRects().length);

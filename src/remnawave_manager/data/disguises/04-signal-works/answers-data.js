@@ -140,7 +140,12 @@ async function rawProfilePage(id, tab, pos = null) {
   const result = await get(`profile/${id}/${tab === 'answers' ? 'replies' : 'topics'}`, { limit: 20, dir: pos ? 1 : 0, ...(pos ? { pos } : {}) });
   const rows = tab === 'answers' ? result.replies : result.feed;
   if (rows !== null && !Array.isArray(rows)) throw new Error('schema');
-  return { items: mergeItems([], (rows || []).map(tab === 'answers' ? answer : question).filter(Boolean)), pos: nextCursor(result.params?.pos, pos) };
+  // Profile replies may omit params.pos and return fewer than the requested
+  // limit before exhaustion. Probe from the last raw ID on every nonempty page;
+  // confirmedPages verifies new items and stops on empty or repeated pages.
+  const last = tab === 'answers' && rows?.length ? count(rows.at(-1)?.id) : null;
+  const fallback = last && (!pos || last < pos) ? last : null;
+  return { items: mergeItems([], (rows || []).map(tab === 'answers' ? answer : question).filter(Boolean)), pos: nextCursor(result.params?.pos ?? fallback, pos) };
 }
 export async function profileCounts(id) {
   const result = await get(`profile/${id}/count`);

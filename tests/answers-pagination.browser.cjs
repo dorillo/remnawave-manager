@@ -28,13 +28,19 @@ const answer=(id,parent=0)=>({id,topic_id:1,author:{id:9,nick:'Автор дев
      if(fail || rootProbeFail && !q.has('reply_id') && q.has('pos') || branchFail && q.has('reply_id'))return route.fulfill({status:502,contentType:'application/json',body:'{}'});
      if(q.has('reply_id'))result=q.has('pos')?{replies:[answer(12,10)],params:{}}:{replies:[answer(11,10)],params:{last:11}};
      else result=q.get('pos')==='20'?{replies:null,params:{}}:q.has('pos')?{replies:[answer(20)],params:{last:20}}:{best_replies:answer(10),replies:[answer(10)],params:{last:10}};
-    } else if(p.endsWith('/profile/9/count'))result={topics_count:3,replies_count:2};
+    } else if(p.endsWith('/profile/9/count'))result={topics_count:3,replies_count:81};
     else if(p.endsWith('/profile/9/topics')) {
      await profileGate;
      if(profileFail && q.has('pos'))return route.fulfill({status:502,contentType:'application/json',body:'{}'});
      if(q.has('pos'))assert.equal(q.get('dir'),'1');else assert.equal(q.get('dir'),'0');
      result=q.get('pos')==='3'?{feed:[question(3)],params:{}}:q.get('pos')==='2'?{feed:[question(2)],params:{pos:3}}:{feed:[question(1)],params:{pos:q.has('pos')?2:1}};
-    } else if(p.endsWith('/profile/9/replies'))result=q.get('pos')==='102'?{replies:null,params:{}}:q.has('pos')?{replies:[answer(102)],params:{pos:102}}:{replies:[answer(101)],params:{pos:101}};
+    } else if(p.endsWith('/profile/9/replies')) {
+     // Mail also returns short pages before exhaustion, without params.pos.
+     const start=q.has('pos')?Number(q.get('pos'))-1:200;
+     const limit=start===160?19:start===141?1:20;
+     const ids=Array.from({length:Math.max(0,Math.min(limit,start-119))},(_,i)=>start-i);
+     result={replies:ids.map(id=>answer(id)),params:q.has('pos')?{}:{pos:181}};
+    }
     else return route.fulfill({status:404,body:'{}'});
     return route.fulfill({contentType:'application/json',body:JSON.stringify({result})});
    }
@@ -62,8 +68,13 @@ const answer=(id,parent=0)=>({id,topic_id:1,author:{id:9,nick:'Автор дев
   for(let i=0;i<2;i++){await page.locator('[data-action="more-profile"]').click();await page.locator('.loading').count();await page.waitForFunction(()=>!document.querySelector('main [aria-busy="true"]'));await page.waitForTimeout(60);}
   await page.getByRole('link',{name:'Вопрос 3',exact:true}).waitFor();
   assert.equal(await page.locator('.question-card').count(),3,'duplicates do not terminate a progressing cursor');
-  await page.locator('.profile-tab[href$="/answers"]').click();await page.getByText('Ответ 101',{exact:true}).waitFor();
-  await page.locator('[data-action="more-profile"]').click();await page.getByText('Ответ 102',{exact:true}).waitFor();
+  await page.locator('.profile-tab[href$="/answers"]').click();await page.getByText('Ответ 200',{exact:true}).waitFor();
+  for (const last of [161,142,141,121,120]) {
+   await page.locator('[data-action="more-profile"]').click();
+   await page.getByText(`Ответ ${last}`,{exact:true}).waitFor();
+  }
+  assert.equal(await page.locator('.profile-answer').count(),81,'short and single-item pages do not terminate pagination');
+  assert.equal(await page.getByText('Источник не вернул остальные записи.',{exact:true}).count(),0);
   await page.waitForTimeout(80);
   assert.equal(await page.locator('[data-action="more-profile"]').count(),0,'null profile page is end of results');
   await page.goto(origin+'/');await page.getByRole('link',{name:'Вопрос 1',exact:true}).waitFor();

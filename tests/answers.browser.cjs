@@ -7,6 +7,8 @@ const root = path.resolve(__dirname,'../src/remnawave_manager/data/disguises/04-
 const origin = 'https://answers.test';
 const rawQuestion = { id:240938818,title:'Как получить данные?',content:{type:'doc',content:[{type:'paragraph',content:[{type:'text',text:'Текст открытого вопроса'}]}]},author:{id:1,nick:'Автор Mail',avatar:''},spaces:[{title:'Программирование',path:'programming'}],created_at:'2026-09-16T10:00:00+03:00',replies_count:1 };
 const rawAnswer = { id:2067147668,content:{type:'doc',content:[{type:'paragraph',content:[{type:'text',text:'Открытый ответ Mail'}]}]},author:{id:2,nick:'Ответивший'},created_at:'2026-09-16T10:10:00+03:00',reply_to:0 };
+const gallerySources=['a','b'].map(char=>`https://otvet.cdn-vk.net/api/pictures/images/${char.repeat(64)}.jpg`);
+rawQuestion.content.content.push({type:'imageGallery',attrs:{gallery:gallerySources.map(src=>({src}))}});
 let browser;
 (async()=>{
   browser=await chromium.launch({executablePath:process.env.ANSWERS_BROWSER || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true});
@@ -81,6 +83,31 @@ let browser;
   await page.evaluate(() => { location.hash = '#/question/mail/240938818'; });
   await repliesResponse;
   await page.getByText('Открытый ответ Mail').waitFor();
+  for (const width of [240,280,319,360,1440]) {
+    await page.setViewportSize({width,height:900});
+    const preview=page.locator('.detail-card .media-image').nth(1);
+    await page.locator('[data-form="answer"] textarea').fill('Черновик при просмотре фото');
+    assert.equal(await preview.locator('img').evaluate(img=>getComputedStyle(img).objectFit),'contain');
+    await preview.click();
+    const gallery=page.getByRole('dialog',{name:'Фотография',exact:true});
+    await gallery.waitFor();
+    assert.equal(await gallery.locator('[data-gallery-count]').innerText(),'2 / 2');
+    assert.match(await gallery.locator('img').getAttribute('src'),/b{64}/);
+    await gallery.getByRole('button',{name:'Вперёд',exact:true}).click();
+    assert.equal(await gallery.locator('[data-gallery-count]').innerText(),'1 / 2');
+    await page.keyboard.press('ArrowLeft');
+    assert.equal(await gallery.locator('[data-gallery-count]').innerText(),'2 / 2');
+    await page.keyboard.press('ArrowRight');
+    await gallery.getByRole('button',{name:'Назад',exact:true}).click();
+    assert.equal(await gallery.locator('[data-gallery-count]').innerText(),'2 / 2');
+    assert.equal(await gallery.locator('img').evaluate(img=>getComputedStyle(img).objectFit),'contain');
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`gallery fits ${width}px`);
+    await page.keyboard.press('Escape');
+    assert.equal(await gallery.count(),0);
+    assert.equal(await preview.evaluate(node=>node===document.activeElement),true,'focus returns to clicked photo');
+    assert.equal(await page.locator('[data-form="answer"] textarea').inputValue(),'Черновик при просмотре фото');
+  }
+  await page.locator('[data-form="answer"] textarea').fill('');
   assert.ok(mailRequests.filter(path => path.includes('/answers/')).length > repliesBefore);
 
   await page.locator('.answer-card .author-link').first().click();
@@ -164,10 +191,24 @@ let browser;
   await mixedFailure.locator('.notice-inline').filter({hasText:'Ответы пока недоступны.'}).waitFor();
   assert.equal(await mixedFailure.locator('.answers-title').innerText(),'2 ответов','own answers do not hide a public API failure');
   await mixedFailure.close();failAnswers=false;
-  assert.equal(await page.locator('.answer-card').filter({hasText:'Мой локальный ответ'}).locator('.attachment-list a').count(),3);
+  assert.equal(await page.locator('.answer-card').filter({hasText:'Мой локальный ответ'}).locator('.attachment-list a').count(),2);
   assert.equal(await page.locator('[data-form="answer"] textarea').inputValue(),'','successful submission clears the draft');
   await page.getByRole('link',{name:'answer.txt'}).waitFor();
   await page.getByRole('img',{name:'preview.png'}).waitFor();
+  for (const width of [240,280,319,360,1440]) {
+    await page.setViewportSize({width,height:900});
+    const localImage=page.getByRole('img',{name:'preview.png'});
+    const publicImage=page.locator('.detail-card .media-grid img').first();
+    const style=img=>{const css=getComputedStyle(img);return [css.objectFit,css.maxHeight,css.borderRadius,css.backgroundColor];};
+    assert.deepEqual(await localImage.evaluate(style),await publicImage.evaluate(style),'local and public images share presentation');
+    assert.ok(await localImage.evaluate(img=>Math.abs(img.getBoundingClientRect().width-img.closest('.media-grid').getBoundingClientRect().width)<1),'single local image uses the full gallery width');
+    assert.equal(await localImage.evaluate(img=>img.parentElement.textContent),'','no filename overlay');
+    assert.equal(await localImage.evaluate(img=>img.parentElement.getAttribute('download')),'preview.png','download remains available');
+  }
+  await page.getByRole('img',{name:'preview.png'}).click();
+  assert.equal(await page.locator('[data-gallery-count]').innerText(),'1 / 1','non-image attachments are excluded');
+  assert.equal(await page.locator('[data-action="gallery-next"]').isDisabled(),true);
+  await page.getByRole('dialog').getByRole('button',{name:'Закрыть',exact:true}).click();
   await page.locator('.answer-card').filter({hasText:'Мой локальный ответ'}).getByRole('button',{name:'Комментарий'}).click();
   const firstReply=page.locator('.answer-card').filter({hasText:'Мой локальный ответ'}).locator('[data-form="comment"]');
   await firstReply.locator('textarea').fill('Первый комментарий');
@@ -315,6 +356,18 @@ let browser;
   assert.deepEqual(writes,[]);
   assert.deepEqual(csp,[]);
   assert.deepEqual(errors,[]);
+  for (const width of [240,280,319]) {
+    await page.setViewportSize({width,height:780});
+    for (const route of ['home','user/mail/1','question/mail/240938818','profile','local']) {
+      await page.goto(origin+'/#/'+route);
+      await page.waitForFunction(()=>document.querySelector('main') && !document.querySelector('main [aria-busy="true"]'));
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`narrow layout: ${width} ${route}`);
+    }
+    await page.locator('.head-actions [data-action="login"]').click();
+    await page.getByRole('dialog').waitFor();
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`narrow login: ${width}`);
+    await page.keyboard.press('Escape');
+  }
   await page.evaluate(()=>localStorage.removeItem('answers:feed:v1'));
   failFeed=true;
   const failedPage=await context.newPage();
