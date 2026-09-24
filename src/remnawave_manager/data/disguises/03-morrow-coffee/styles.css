@@ -1155,6 +1155,12 @@ details p {
   width: 16px;
   height: 16px;
 }
+.comments-pagination {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 0;
+}
 .more-comments {
   font-size: 12px;
   padding: 6px;
@@ -1163,11 +1169,6 @@ details p {
   border: 0;
 }
 .comments-loading {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  background: color-mix(in srgb, var(--panel) 82%, transparent);
-  pointer-events: none;
   display: flex;
   align-items: center;
   justify-content: center;

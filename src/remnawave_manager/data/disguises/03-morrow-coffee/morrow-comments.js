@@ -22,13 +22,6 @@ export function openComments(video, { getStore, mutate, gate, openAuthor }) {
     context = el("div", { class: "reply-context" }),
     loading = loadingIndicator("comments-loading");
   loading.hidden = true;
-  list.addEventListener(
-    "scroll",
-    () => {
-      if (list.scrollTop + list.clientHeight >= list.scrollHeight - 240) load();
-    },
-    { signal: controller.signal },
-  );
   const input = el("textarea", {
     rows: 2,
     maxlength: 5000,
@@ -51,9 +44,11 @@ export function openComments(video, { getStore, mutate, gate, openAuthor }) {
     send,
   );
   const loadMore = button(t("moreComments"), load, "more-comments");
+  const pagination = el("div", { class: "comments-pagination" }, loading, loadMore);
+  list.append(pagination);
   const dialog = modal(
     t("comments"),
-    el("div", { class: "discussion" }, list, loading, loadMore, form),
+    el("div", { class: "discussion" }, list, form),
   );
   dialog.classList.add("comments-panel");
   dialog.addEventListener("close", () => controller.abort());
@@ -128,6 +123,7 @@ export function openComments(video, { getStore, mutate, gate, openAuthor }) {
     return ids;
   }
   function render() {
+    const scrollTop = list.scrollTop;
     const d = getStore()?.data,
       locals = (d?.comments || [])
         .filter((c) => c.videoId === video.id)
@@ -240,37 +236,37 @@ export function openComments(video, { getStore, mutate, gate, openAuthor }) {
         row(child, Math.min(depth + 1, 2));
     }
     for (const c of children.get(null) || []) row(c, 0);
+    list.append(pagination);
+    list.scrollTop = scrollTop;
   }
   async function load() {
-    if (busy || !next) return;
+    if (busy || !next || controller.signal.aborted) return;
     busy = true;
     loadMore.disabled = true;
+    loadMore.hidden = true;
     loading.hidden = false;
     error.textContent = "";
-    render();
+    list.querySelector(".empty-note")?.remove();
     try {
-      let loaded = 0;
-      while (next && loaded < 5) {
+      // The source can return just three comments per page. Collect a useful
+      // batch per click, with a request bound for unusually short pages.
+      const targetCount = Math.min(publicItems.length + 12, 1000);
+      for (let step = 0; next && publicItems.length < targetCount && step < 20; step++) {
         const result = await getComments(video.id, page, controller.signal);
+        if (controller.signal.aborted) return;
         if (result.stale) error.textContent = t("staleComments");
         const known = new Set(publicItems.map((c) => c.id));
-        const fresh = result.items.filter((c) => !known.has(c.id));
+        const fresh = result.items.filter((c) => !known.has(c.id) && (known.add(c.id), true));
         publicItems.push(...fresh);
-        render();
-        loaded++;
         page++;
-        next =
-          !!result.next &&
-          !!fresh.length &&
-          !!result.items.length &&
-          publicItems.length < 1000;
+        next = !!result.next && !!fresh.length && publicItems.length < 1000;
       }
-      loadMore.hidden = !next;
     } catch (e) {
       if (e.name !== "AbortError") error.textContent = t(e.message);
     } finally {
       busy = false;
       loadMore.disabled = false;
+      loadMore.hidden = !next;
       loading.hidden = true;
       if (!controller.signal.aborted) render();
     }

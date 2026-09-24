@@ -735,16 +735,14 @@ async function renderUploads(target, owner) {
   try {
     const records = await videosFor(owner.account.id);
     if (!target.isConnected || store !== owner) return;
-    target.replaceChildren(
-      records.length
-        ? grid(records.map(localVideo))
-        : empty(
-            t("noUploadedVideos"),
-            t("noUploadedVideosHint"),
-            null,
-            "play",
-          ),
-    );
+    if (records.length) target.replaceChildren(grid(records.map(localVideo)));
+    else {
+      const placeholder = emptyPrompt("uploads");
+      placeholder.querySelector("h2").textContent = t("noUploadedVideos");
+      placeholder.querySelector("p").textContent = t("noUploadedVideosHint");
+      placeholder.querySelector(".guest-symbol").replaceChildren(icon("play"));
+      target.replaceChildren(placeholder);
+    }
   } catch (e) {
     if (target.isConnected) target.replaceChildren(el("p", { class: "error" }, t(e.message)));
   }

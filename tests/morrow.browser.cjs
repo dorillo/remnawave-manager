@@ -402,7 +402,8 @@ let browser;
     .click();
   await page.waitForURL(origin + "/#/profile?tab=myVideos");
   await page.waitForSelector(".profile-uploads");
-  assert.equal(await page.locator(".profile-uploads .empty-state svg").count(), 1);
+  await page.locator('.profile-uploads .guest-prompt[data-empty-section="uploads"]').waitFor();
+  assert.equal(await page.locator(".profile-uploads .guest-symbol svg").count(), 1);
   assert.equal(await page.locator(".profile-uploads .primary").count(), 0);
   await open("#/profile?tab=saved");
   await page
