@@ -103,9 +103,32 @@ const answer=(id,parent=0)=>({id,topic_id:1,author:{id:9,nick:'Автор дев
   branchFail=true;await page.goto(origin+'/#/question/mail/1');
   await page.locator('[data-action="more-replies"][data-parent="10"]').waitFor();
   assert.equal(await page.locator('.answer-card .ui-loading').count(),0,'failed branch stops its spinner');
+  for (const width of [240,360,1280]) {
+   await page.setViewportSize({width,height:900});
+   for (const theme of ['light','dark']) {
+    await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+    const panel=page.locator('.load-error').filter({has:page.locator('[data-parent="10"]')});
+    assert.equal(await panel.getByRole('heading',{name:'Ответы пока недоступны.'}).count(),1);
+    assert.equal(await panel.evaluate(node=>{
+     const heading=node.querySelector('h3').getBoundingClientRect(),button=node.querySelector('button').getBoundingClientRect();
+     return heading.bottom<button.top && Math.abs(heading.x+heading.width/2-button.x-button.width/2)<2;
+    }),true,'nested error text and retry form one centered panel');
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+    const search=page.locator('.head-search input');
+    await search.fill('Проверка видимости текста');
+    const color=await search.evaluate(node=>getComputedStyle(node).color);
+    assert.equal(color,theme==='dark'?'rgb(224, 232, 245)':'rgb(38, 52, 75)');
+    assert.equal(await search.inputValue(),'Проверка видимости текста');
+   }
+  }
+  await page.locator('[data-form="answer"] textarea').fill('Мой ответ сохранится при загрузке комментариев');
+
   branchFail=false;await page.locator('[data-action="more-replies"][data-parent="10"]').click();
   await page.getByText('Ответ 12',{exact:true}).waitFor();
   assert.equal(await page.locator('[data-action="more-replies"][data-parent]').count(),0,'retry resumes automatic branch pagination');
+  assert.equal(await page.locator('[data-form="answer"] textarea').inputValue(),'Мой ответ сохранится при загрузке комментариев');
+  assert.equal(await page.locator('.head-search input').inputValue(),'Проверка видимости текста');
+
   fail=true;await page.reload();await page.locator('.notice-inline').filter({hasText:'Ответы пока недоступны.'}).waitFor();
   assert.equal(await page.locator('.answers-title').innerText(),'4 ответов','failed fetch is not zero responses');
   assert.deepEqual(errors,[]);console.log('Spros pagination/profile/nested replies/count/error regressions passed');

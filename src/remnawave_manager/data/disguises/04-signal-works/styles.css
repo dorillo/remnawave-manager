@@ -12,6 +12,10 @@
 .card h3,.detail-card h1,.profile-hero h1,.profile-answer strong,.author,.space-link,.tag{overflow-wrap:anywhere}.author-link,.profile-hero>div{min-width:0}.author-link{max-width:100%}.tag{max-width:100%}
 
 :root[data-theme="dark"] { color-scheme: dark; color: #e0e8f5; background: #141b28; }
+[data-theme="dark"] .head-search input { color: #e0e8f5; caret-color: currentColor; }
+[data-theme="dark"] .head-search input::placeholder { color: #a9b9d2; opacity: 1; }
+[data-theme="dark"] .form-error { color: #f3a2ad; }
+.form-error { overflow-wrap: anywhere; }
 [data-theme="dark"] .media-grid img { background: #141b28; }
 [data-theme="dark"] :is(.site-head,.nav-box,.card,.right-card,.action,.empty,.modal,.mobile-nav,.icon-action,.profile-tab,.field input,.field textarea) { background: #1e293b; color: #dce6f7; border-color: #394a65; }
 [data-theme="dark"] :is(.head-search,.icon-btn,.hero,.tag,.source-badge,.attachment-picker,.attachment,.inline-reply,.confirm-icon) { background: #253550; color: #aec9ff; border-color: #435b80; }
@@ -109,3 +113,16 @@ body:has(.modal-backdrop) { overflow: hidden; }
   .gallery-controls { flex-wrap: wrap; }
   .thread { margin-left: 8px; padding-left: 8px; }
 }
+
+.notice-inline { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 12px; text-align: center; overflow-wrap: anywhere; }
+[data-theme="dark"] .notice-inline { background: #302d26; color: #e3c68e; }
+.load-error { display: grid; justify-items: center; gap: 12px; padding: 28px 18px; background: #fff; color: #41516a; border: 1px solid #dce3ed; border-radius: 15px; }
+.answer-card > .load-error { margin-top: 16px; margin-bottom: 0; }
+.load-error-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: #edf3fd; color: #5375b4; }
+.load-error-icon .ui-icon { width: 23px; height: 23px; }
+.load-error h3 { margin: 0; font-size: 17px; }
+.load-error p { max-width: 440px; margin: 0; color: #71809a; }
+.load-error .ghost { max-width: 100%; margin-top: 4px; }
+[data-theme="dark"] .load-error { background: #1e293b; color: #e0e8f5; border-color: #394a65; }
+[data-theme="dark"] .load-error p { color: #a9b9d2; }
+[data-theme="dark"] .load-error-icon { background: #253550; color: #aec9ff; }

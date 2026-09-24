@@ -24,6 +24,9 @@ let state = { accounts: [], questions: [], answers: [], comments: [], votes: {},
 let publicFeed = [];
 let cursor = null;
 let feedStatus = 'loading';
+let feedRequest = false;
+let feedError = '';
+let searchError = '';
 let staleAt = null;
 let spaceList = [];
 let searchItems = [];
@@ -196,12 +199,19 @@ function questionCard(item, local = false) {
   return `<article class="card question-card">${meta(item,local)}<h3><a href="${qurl(item.id)}">${e(item.title)}</a></h3><p class="excerpt">${e(item.body || '')}</p><div class="tag-list">${(local ? [item.space] : item.spaces.map((x) => x.name)).filter(Boolean).slice(0,3).map((x) => `<span class="tag">${e(x)}</span>`).join('')}</div><div class="card-footer"><span class="reply-count">${icon('comment')}${responseCount(item,local)}</span><div class="icon-actions"><button class="icon-action ${currentVote===1?'selected':''}" data-action="vote" data-id="${e(item.id)}" data-value="1" aria-label="${e(t('voteUp'))}" title="${e(t('voteUp'))}">${icon('up')}</button><button class="icon-action ${currentVote===-1?'selected':''}" data-action="vote" data-id="${e(item.id)}" data-value="-1" aria-label="${e(t('voteDown'))}" title="${e(t('voteDown'))}">${icon('down')}</button><button class="icon-action ${saved?'selected':''}" data-action="save" data-id="${e(item.id)}" aria-label="${e(saved?t('unsave'):t('save'))}" title="${e(saved?t('unsave'):t('save'))}">${icon('bookmark')}</button></div></div></article>`;
 }
 function list(items, local = false) { return items.length ? items.map((x) => questionCard(x,local)).join('') : `<div class="empty">${e(t('noQuestions'))}</div>`; }
+function errorHint(error) {
+  return error === 'schema' ? 'sourceFormat' : error === 'rate-limit' ? 'sourceLimit' : 'sourceUnavailable';
+}
+function loadError(action, title = 'network', error = '', target = {}) {
+  const attributes = `${target.question ? ` data-question="${e(target.question)}"` : ''}${target.parent ? ` data-parent="${e(target.parent)}"` : ''}`;
+  return `<div class="notice-inline load-error" role="status"><span class="load-error-icon">${icon('globe')}</span><h3>${e(t(title))}</h3><p>${e(t(errorHint(error)))}</p><button class="ghost" data-action="${e(action)}"${attributes}>${e(t('retry'))}</button></div>`;
+}
 function renderHome() {
   const status = feedStatus === 'loading' && !publicFeed.length ? `<div class="empty">${loadingMarkup(t('loading'))}</div>` : '';
-  const failedMore = feedStatus === 'error' && publicFeed.length && !staleAt ? `<div class="notice-inline" role="status">${e(t('network'))}</div>` : '';
+  const failedMore = feedStatus === 'error' && publicFeed.length && !staleAt ? loadError('more', 'network', feedError) : '';
   const note = staleAt ? `<div class="notice-inline">${e(t('cached'))} · ${e(dateText(staleAt))}</div>` : '';
-  const cards = publicFeed.length ? publicFeed.map((x) => questionCard(x)).join('') : feedStatus === 'error' ? `<div class="empty"><h3>${e(t('network'))}</h3><button class="ghost" data-action="refresh">${e(t('retry'))}</button></div>` : feedStatus === 'ready' ? `<div class="empty">${e(t('noQuestions'))}</div>` : '';
-  const more = cursor ? `<div class="load-row">${feedStatus==='loading' ? loadingMarkup(t('loadingMore')) : `<button class="ghost" data-action="more">${e(t('loadMore'))}</button>`}</div>` : '';
+  const cards = publicFeed.length ? publicFeed.map((x) => questionCard(x)).join('') : feedStatus === 'error' ? loadError('refresh', 'network', feedError) : feedStatus === 'ready' ? `<div class="empty">${e(t('noQuestions'))}</div>` : '';
+  const more = cursor && feedStatus !== 'error' ? `<div class="load-row">${feedStatus==='loading' ? loadingMarkup(t('loadingMore')) : `<button class="ghost" data-action="more">${e(t('loadMore'))}</button>`}</div>` : '';
   return `<section class="hero"><span class="eyebrow">${lang()==='ru'?'СООБЩЕСТВО ВОПРОСОВ':'QUESTION COMMUNITY'}</span><h1>${lang()==='ru'?'Любой вопрос — начало разговора.':'Every question starts a conversation.'}</h1><p>${lang()==='ru'?'Читайте ответы, находите нужное и обсуждайте на своём устройстве.':'Explore answers and start discussions on your device.'}</p></section><div class="section-title"><h2>${e(t('latest'))}</h2><small>${publicFeed.length || ''}</small></div><div class="tabs"><button class="tab active">${e(t('all'))}</button>${spaceList.slice(0,5).map((x) => `<a class="tab" href="#/space/${e(x.path)}">${e(x.name)}</a>`).join('')}</div>${note}${failedMore}${status}${cards}${more}`;
 }
 function renderSpace(slug) {
@@ -209,7 +219,7 @@ function renderSpace(slug) {
   const result = spaceFeeds.get(slug);
   const posts = result?.items || [];
   const more = result?.pos && result.status !== 'error' ? `<div class="load-row">${result.status==='loading' ? loadingMarkup(t('loadingMore')) : `<button class="ghost" data-action="more-space">${e(t('loadMore'))}</button>`}</div>` : '';
-  return `${backLink()}<div class="section-title"><h2>${e(name)}</h2></div><div class="tabs"><a class="tab" href="#/home">${e(t('all'))}</a><span class="tab active">${e(name)}</span></div>${result?.status==='error' ? `<div class="notice-inline">${e(t('network'))}<button class="action" data-action="retry-space">${e(t('retry'))}</button></div>` : ''}${result?.status==='loading' && !posts.length ? `<div class="empty">${loadingMarkup(t('loading'))}</div>` : posts.length ? posts.map((x)=>questionCard(x)).join('') : result?.status==='ready' ? `<div class="empty">${e(t('noQuestions'))}</div>` : ''}${more}`;
+  return `${backLink()}<div class="section-title"><h2>${e(name)}</h2></div><div class="tabs"><a class="tab" href="#/home">${e(t('all'))}</a><span class="tab active">${e(name)}</span></div>${result?.status==='error' ? loadError('retry-space', 'network', result.error) : ''}${result?.status==='loading' && !posts.length ? `<div class="empty">${loadingMarkup(t('loading'))}</div>` : posts.length ? posts.map((x)=>questionCard(x)).join('') : result?.status==='ready' ? `<div class="empty">${e(t('noQuestions'))}</div>` : ''}${more}`;
 }
 function loadingRow(key = 'loadingMore') { return `<div class="load-row">${loadingMarkup(t(key))}</div>`; }
 function renderLocal() {
@@ -229,8 +239,8 @@ function locked(kind = 'profile') { return guestMarkup(kind, 'login'); }
 function renderSearch(term) {
   let items = searchItems;
   const local = state.questions.filter((x) => `${x.title} ${x.body}`.toLowerCase().includes(term.toLowerCase()));
-  const note = searchStatus === 'error' ? `<div class="notice-inline">${e(t('network'))}</div>` : '';
-  return `<div class="section-title"><h2>${e(t('searchButton'))}: ${e(term)}</h2></div>${note}${searchStatus === 'loading' ? `<div class="empty">${loadingMarkup(t('loading'))}</div>` : items.length || local.length ? `${items.map((x) => questionCard(x)).join('')}${local.map((x) => questionCard(x,true)).join('')}` : `<div class="empty">${e(t('noResults'))}</div>`}`;
+  const note = searchStatus === 'error' ? loadError('retry-search', 'network', searchError) : '';
+  return `<div class="section-title"><h2>${e(t('searchButton'))}: ${e(term)}</h2></div>${note}${searchStatus === 'loading' ? `<div class="empty">${loadingMarkup(t('loading'))}</div>` : items.length || local.length ? `${items.map((x) => questionCard(x)).join('')}${local.map((x) => questionCard(x,true)).join('')}` : searchStatus === 'error' ? '' : `<div class="empty">${e(t('noResults'))}</div>`}`;
 }
 function commentTree(parentId, depth = 0) {
   if (depth > 8) return '';
@@ -255,12 +265,12 @@ function remoteChildren(answer, question, depth, ancestors) {
   const children = (record?.answers || []).filter((x) => x.parentId === answer.sourceId && !path.has(x.id));
   const branch = replyBranches.get(`${question.id}:${answer.sourceId}`);
   const pending = branch?.status === 'loading' || !branch && answer.replies > children.length;
-  return `${children.length ? `<div class="thread">${children.map((x)=>answerCard(x,question,false,depth+1,path)).join('')}</div>` : ''}${pending ? loadingRow(children.length ? 'loadingMore' : 'loadingComments') : branch?.status === 'error' ? `<div class="load-row"><button class="ghost" data-action="more-replies" data-question="${e(question.id)}" data-parent="${answer.sourceId}">${e(t('retry'))}</button></div>` : ''}${branch?.status === 'error' ? `<p role="status">${e(t('responseUnavailable'))}</p>` : ''}`;
+  return `${children.length ? `<div class="thread">${children.map((x)=>answerCard(x,question,false,depth+1,path)).join('')}</div>` : ''}${pending ? loadingRow(children.length ? 'loadingMore' : 'loadingComments') : branch?.status === 'error' ? loadError('more-replies', 'responseUnavailable', branch.error, {question:question.id, parent:answer.sourceId}) : ''}`;
 }
 function discussionFooter(record) {
   const id = record.question.id;
   const branch = replyBranches.get(`${id}:root`);
-  return `${record.answersAvailable === false || branch?.status === 'error' ? `<div class="notice-inline" role="status">${e(t('responseUnavailable'))}<button class="ghost" data-action="${record.answersAvailable === false ? 'retry-detail' : 'more-replies'}" data-question="${e(id)}">${e(t('retry'))}</button></div>` : ''}${branch?.status === 'loading' ? loadingRow(record.answers.length ? 'loadingMore' : 'loadingAnswers') : record.pos && branch?.status !== 'error' ? `<div class="load-row"><button class="ghost" data-action="more-replies" data-question="${e(id)}">${e(t('loadMore'))}</button></div>` : ''}`;
+  return `${record.answersAvailable === false || branch?.status === 'error' ? loadError(record.answersAvailable === false ? 'retry-detail' : 'more-replies', 'responseUnavailable', branch?.error, {question:id}) : ''}${branch?.status === 'loading' ? loadingRow(record.answers.length ? 'loadingMore' : 'loadingAnswers') : record.pos && branch?.status !== 'error' ? `<div class="load-row"><button class="ghost" data-action="more-replies" data-question="${e(id)}">${e(t('loadMore'))}</button></div>` : ''}`;
 }
 function imageGallery(item, images) {
   return images.length ? `<div class="media-grid" data-gallery>${images.map((image,index) => {
@@ -275,13 +285,13 @@ function media(item) {
 function renderDetail(page) {
   const local = page.id.startsWith('local:');
   const record = local ? { question:state.questions.find((x) => x.id===page.id), answers:[] } : details.get(page.id);
-  if (!record?.question) return local ? `${backLink('#/local')}<div class="empty">${e(t('noQuestions'))}</div>` : detailStatus.get(page.id) === 'error' ? `${backLink()}<div class="empty"><h3>${e(t('network'))}</h3><button class="ghost" data-action="retry-detail">${e(t('retry'))}</button></div>` : `<div class="empty">${loadingMarkup(t('loadingDiscussion'))}</div>`;
+  if (!record?.question) return local ? `${backLink('#/local')}<div class="empty">${e(t('noQuestions'))}</div>` : detailStatus.get(page.id) === 'error' ? `${backLink()}${loadError('retry-detail')}` : `<div class="empty">${loadingMarkup(t('loadingDiscussion'))}</div>`;
   const question = record.question;
   const person = user();
   const answerList = [...record.answers.map((x) => ({ ...x, local:false })), ...state.answers.filter((x) => x.questionId === question.id).map((x) => ({ ...x, local:true }))];
   const currentVote = person ? state.votes[person.id]?.[question.id] || 0 : 0;
   const saved = person && (state.saves[person.id] || []).includes(question.id);
-  return `${backLink(local?'#/local':'#/home')}${!local && detailStatus.get(page.id)==='error' ? `<div class="notice-inline" role="status">${e(t('cachedDiscussion'))}<button class="action" data-action="retry-detail">${e(t('retry'))}</button></div>` : ''}<article class="card detail-card">${meta(question,local)}<h1>${e(question.title)}</h1><div class="tag-list">${(local?[question.space]:question.spaces.map((x)=>x.name)).filter(Boolean).slice(0,4).map((x)=>`<span class="tag">${e(x)}</span>`).join('')}</div><div class="body-text">${e(question.body)}</div>${media(question)}${attachments(question)}<div class="detail-actions icon-actions"><button class="icon-action ${currentVote===1?'selected':''}" data-action="vote" data-id="${e(question.id)}" data-value="1" aria-label="${e(t('voteUp'))}" title="${e(t('voteUp'))}">${icon('up')}</button><button class="icon-action ${currentVote===-1?'selected':''}" data-action="vote" data-id="${e(question.id)}" data-value="-1" aria-label="${e(t('voteDown'))}" title="${e(t('voteDown'))}">${icon('down')}</button><button class="icon-action ${saved?'selected':''}" data-action="save" data-id="${e(question.id)}" aria-label="${e(saved?t('unsave'):t('save'))}" title="${e(saved?t('unsave'):t('save'))}">${icon('bookmark')}</button>${local && person?.id === question.authorId ? `<button class="icon-action" data-action="edit" data-kind="question" data-id="${e(question.id)}" aria-label="${e(t('edit'))}" title="${e(t('edit'))}">${icon('edit')}</button><button class="icon-action danger" data-action="delete" data-kind="question" data-id="${e(question.id)}" aria-label="${e(t('remove'))}" title="${e(t('remove'))}">${icon('trash')}</button>` : ''}</div></article><form class="card composer" data-form="answer" data-question="${e(question.id)}"><h3>${e(t('answer'))}</h3><label class="field">${e(t('writeAnswer'))}<textarea name="body" required minlength="2" maxlength="5000" rows="5"></textarea></label>${attachmentControl()}<p class="form-error" role="alert"></p><button class="primary">${e(t('publish'))}</button></form><h2 class="answers-title">${responseCount(question,local)} ${e(t('replies'))}</h2>${answerList.length ? answerList.filter((x)=>!x.parentId).map((x) => answerCard(x,question,x.local)).join('') : local || record.answersAvailable !== false && question.replies === 0 ? `<div class="empty">${e(t('noAnswers'))}</div>` : ''}${!local ? discussionFooter(record) : ''}`;
+  return `${backLink(local?'#/local':'#/home')}${!local && detailStatus.get(page.id)==='error' ? loadError('retry-detail', 'cachedDiscussion') : ''}<article class="card detail-card">${meta(question,local)}<h1>${e(question.title)}</h1><div class="tag-list">${(local?[question.space]:question.spaces.map((x)=>x.name)).filter(Boolean).slice(0,4).map((x)=>`<span class="tag">${e(x)}</span>`).join('')}</div><div class="body-text">${e(question.body)}</div>${media(question)}${attachments(question)}<div class="detail-actions icon-actions"><button class="icon-action ${currentVote===1?'selected':''}" data-action="vote" data-id="${e(question.id)}" data-value="1" aria-label="${e(t('voteUp'))}" title="${e(t('voteUp'))}">${icon('up')}</button><button class="icon-action ${currentVote===-1?'selected':''}" data-action="vote" data-id="${e(question.id)}" data-value="-1" aria-label="${e(t('voteDown'))}" title="${e(t('voteDown'))}">${icon('down')}</button><button class="icon-action ${saved?'selected':''}" data-action="save" data-id="${e(question.id)}" aria-label="${e(saved?t('unsave'):t('save'))}" title="${e(saved?t('unsave'):t('save'))}">${icon('bookmark')}</button>${local && person?.id === question.authorId ? `<button class="icon-action" data-action="edit" data-kind="question" data-id="${e(question.id)}" aria-label="${e(t('edit'))}" title="${e(t('edit'))}">${icon('edit')}</button><button class="icon-action danger" data-action="delete" data-kind="question" data-id="${e(question.id)}" aria-label="${e(t('remove'))}" title="${e(t('remove'))}">${icon('trash')}</button>` : ''}</div></article><form class="card composer" data-form="answer" data-question="${e(question.id)}"><h3>${e(t('answer'))}</h3><label class="field">${e(t('writeAnswer'))}<textarea name="body" required minlength="2" maxlength="5000" rows="5"></textarea></label>${attachmentControl()}<p class="form-error" role="alert"></p><button class="primary">${e(t('publish'))}</button></form><h2 class="answers-title">${responseCount(question,local)} ${e(t('replies'))}</h2>${answerList.length ? answerList.filter((x)=>!x.parentId).map((x) => answerCard(x,question,x.local)).join('') : local || record.answersAvailable !== false && question.replies === 0 ? `<div class="empty">${e(t('noAnswers'))}</div>` : ''}${!local ? discussionFooter(record) : ''}`;
 }
 function notifications(person) {
   const myQuestions = new Set(state.questions.filter((x) => x.authorId === person.id).map((x) => x.id));
@@ -323,7 +333,7 @@ function renderUser(page) {
   const person = items.find((x)=>x.author?.id===page.id)?.author || remoteProfiles.get(String(page.id)) || known.questions.find((x)=>x.author?.id===page.id)?.author || known.answers.find((x)=>x.author?.id===page.id)?.author;
   const total = profileTotals.get(page.id)?.[tab];
   const content = items.length ? (tab==='answers' ? answerList(items) : list(items)) : entry?.status === 'ready' && !total ? `<div class="empty">${e(t(tab==='answers'?'noAnswers':'noQuestions'))}</div>` : '';
-  return `<div class="profile-page-head">${backLink()}</div><section class="card profile-card"><div class="profile-hero">${profileAvatar(person || {name:t('guest')})}<div><h1>${e(person?.name || `${t('profile')} ${page.id}`)}</h1></div></div></section>${profileTabs(`#/user/mail/${e(page.id)}`,tab)}${entry?.status==='error' ? `<div class="notice-inline" role="status">${e(t('network'))}<button class="ghost" data-action="more-profile">${e(t('retry'))}</button></div>` : ''}${content}${entry?.status==='ready' && !entry.pos && total > items.length ? `<p class="notice-inline">${e(t('partialResults'))}</p>` : ''}${!entry || entry.status==='loading' ? loadingRow(items.length ? 'loadingMore' : tab === 'answers' ? 'loadingAnswers' : 'loading') : entry.pos && entry.status !== 'error' ? `<div class="load-row"><button class="ghost" data-action="more-profile">${e(t('loadMore'))}</button></div>` : ''}`;
+  return `<div class="profile-page-head">${backLink()}</div><section class="card profile-card"><div class="profile-hero">${profileAvatar(person || {name:t('guest')})}<div><h1>${e(person?.name || `${t('profile')} ${page.id}`)}</h1></div></div></section>${profileTabs(`#/user/mail/${e(page.id)}`,tab)}${entry?.status==='error' ? loadError('more-profile', 'network', entry.error) : ''}${content}${entry?.status==='ready' && !entry.pos && total > items.length ? `<p class="notice-inline">${e(t('partialResults'))}</p>` : ''}${!entry || entry.status==='loading' ? loadingRow(items.length ? 'loadingMore' : tab === 'answers' ? 'loadingAnswers' : 'loading') : entry.pos && entry.status !== 'error' ? `<div class="load-row"><button class="ghost" data-action="more-profile">${e(t('loadMore'))}</button></div>` : ''}`;
 }
 
 function modalHtml() {
@@ -433,16 +443,32 @@ function requireUser() { if (user()) return true; toast(t('authNeeded')); openMo
 async function reloadState() { state = await read(); render(); }
 async function mutate(mutator, preserveDrafts = true) { if (busy) return false; busy = true; try { await change(mutator); state = await read(); render(preserveDrafts); return true; } catch (error) { toast(error.message === 'duplicate-account' ? t('duplicate') : t('noStorage')); return false; } finally { busy = false; } }
 async function loadFeed(more = false) {
-  if (feedStatus === 'loading' && more) return;
-  feedStatus = 'loading'; if (!more) { publicFeed = []; cursor = null; staleAt = null; feedVisited.clear(); } render();
-  try { const current = more ? cursor : null; const result = await feed(current); const seen = new Set(publicFeed.map((x)=>x.id)); const extra = result.items.filter((x)=>!seen.has(x.id)); publicFeed = more ? [...publicFeed,...extra] : result.items; cursor = nextCursor(result.pos,current,feedVisited); if(current) feedVisited.add(current); feedStatus = 'ready'; staleAt = null; }
-  catch { feedStatus = 'error'; if (!more) { const cached = cachedFeed(); if (cached) { publicFeed = cached.items; staleAt = cached.at; } } }
+  if (feedRequest) return;
+  feedRequest = true;
+  feedStatus = 'loading'; feedError = '';
+  if (!more) { publicFeed = []; cursor = null; staleAt = null; feedVisited.clear(); }
+  render();
+  try {
+    const current = more ? cursor : null;
+    const result = await feed(current);
+    publicFeed = more ? mergeItems(publicFeed, result.items) : result.items;
+    cursor = nextCursor(result.pos, current, feedVisited);
+    if (current) feedVisited.add(current);
+    feedStatus = 'ready'; staleAt = null;
+  } catch (error) {
+    feedStatus = 'error'; feedError = error.message;
+    if (!more) {
+      const saved = cachedFeed();
+      if (saved) { publicFeed = saved.items; staleAt = saved.at; }
+    }
+  }
+  finally { feedRequest = false; }
   render();
 }
 async function loadSearch(term) {
-  const token = ++requestToken; searchStatus = 'loading'; searchItems=[]; render();
+  const token = ++requestToken; searchStatus = 'loading'; searchError = ''; searchItems=[]; render();
   try { const items = await search(term); if (token !== requestToken) return; searchItems = items; searchStatus = 'ready'; }
-  catch { if (token !== requestToken) return; searchStatus = 'error'; }
+  catch (error) { if (token !== requestToken) return; searchStatus = 'error'; searchError = error.message; }
   render();
 }
 async function loadDetail(id, refresh = false) {
@@ -467,7 +493,7 @@ async function loadSpace(slug, more = false) {
   const entry = more && old ? old : { items:[], pos:null, visited:new Set() };
   entry.status = 'loading'; spaceFeeds.set(slug,entry); render();
   try { const current=more?entry.pos:null; const result = await feed(current, slug); const known=new Set(entry.items.map((x)=>x.id)); const extra=result.items.filter((x)=>!known.has(x.id) && x.spaces.some((s)=>s.path===slug)); entry.items=more?[...entry.items,...extra]:extra; entry.pos=nextCursor(result.pos,current,entry.visited); if(current) entry.visited.add(current); entry.status='ready'; }
-  catch { entry.status='error'; }
+  catch (error) { entry.status='error'; entry.error=error.message; }
   if(route().slug===slug) render();
 }
 async function loadProfile(page, more = false) {
@@ -484,7 +510,7 @@ async function loadProfile(page, more = false) {
     for(const item of result.items) rememberRemoteProfile(item.author);
     entry.pos=nextCursor(result.pos,current,entry.visited); if(current) entry.visited.add(current);
     entry.status='ready';
-  } catch { entry.status='error'; }
+  } catch (error) { entry.status='error'; entry.error=error.message; }
   await totals;
   if(route().page==='user' && route().id===page.id) render();
 }
@@ -504,7 +530,7 @@ async function loadReplies(id, parent = null) {
     entry.pos=nextCursor(result.pos,current,entry.visited); if(current) entry.visited.add(current);
     if(!parent) record.pos=entry.pos;
     entry.status='ready';
-  } catch { entry.status='error'; }
+  } catch (error) { entry.status='error'; entry.error=error.message; }
   if(route().id===id) render();
   if(entry.status==='ready' && !record.threadLoading) void hydrateThreads(id,record);
   return entry.status==='ready';
@@ -592,6 +618,7 @@ root.addEventListener('click', async (event) => {
   if (action==='confirm-logout') { logout(); closeModal(); return; }
   if (action==='confirm-delete') { const payload=modalPayload; closeModal(); if(payload) await deleteRecord(payload.kind,payload.id); return; }
   if (action==='refresh') return loadFeed();
+  if (action==='retry-search') return loadSearch(route().term);
   if (action==='more') return loadFeed(true);
   if (action==='more-profile') return loadProfile(route(),true);
   if (action==='more-replies') return loadReplies(button.dataset.question, Number(button.dataset.parent)||null);

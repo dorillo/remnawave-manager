@@ -71,23 +71,43 @@ export function answer(raw) {
   return { id: `mail-answer:${raw.id}`, sourceId: raw.id, body: plainDoc(raw.content), images: images(raw.content), author: author(raw.author), created: date(raw.created_at), parentId: count(raw.reply_to) || null, replies: count(raw.replyToReplyCount), votes: Number(raw.reaction_counter?.rating || 0), questionId: count(raw.topic_id) ? `mail:${raw.topic_id}` : null, deleted: raw.visible_to < 0 && !raw.author };
 }
 async function get(path, params = {}) {
-  if (Date.now() < cooldown) throw new Error('rate-limit');
   const url = new URL(API + path, location.origin);
   for (const [key, value] of Object.entries(params)) if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, String(value));
+  // Retry a transient read failure once. Invalid data and access/rate limits
+  // need explicit handling, not a loop that keeps hitting the source.
+  for (let attempt = 0; ; attempt++) {
+    try { return await getResult(url); }
+    catch (error) {
+      if (attempt || !error.retryable) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+  }
+}
+async function getResult(url) {
+  if (Date.now() < cooldown) throw new Error('rate-limit');
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12000);
   try {
     const response = await fetch(url, { cache: 'no-store', credentials: 'omit', headers: { Accept: 'application/json' }, signal: controller.signal, redirect: 'error' });
-    if (response.status === 429) { cooldown = Date.now() + Math.min(300000, Math.max(30000, Number(response.headers.get('Retry-After')) * 1000 || 30000)); throw new Error('rate-limit'); }
-    if (!response.ok) throw new Error(response.status === 404 ? 'missing' : 'network');
-    if (!(response.headers.get('content-type') || '').includes('application/json')) throw new Error('schema');
+    if (response.status === 429) {
+      const retryAfter = response.headers.get('Retry-After');
+      const wait = /^\d+$/.test(retryAfter || '') ? Number(retryAfter) * 1000 : Date.parse(retryAfter) - Date.now();
+      cooldown = Date.now() + Math.min(300000, Math.max(30000, wait || 30000));
+      throw new Error('rate-limit');
+    }
+    if (!response.ok) throw Object.assign(new Error(response.status === 404 ? 'missing' : 'network'), { retryable: [502,503,504].includes(response.status) });
+    if (!(response.headers.get('content-type') || '').toLowerCase().includes('application/json')) throw new Error('schema');
     const raw = await response.text();
     if (raw.length > 4000000) throw new Error('schema');
     const result = JSON.parse(raw)?.result;
-    if (!result) throw new Error('schema');
+    if (!result || typeof result !== 'object') throw new Error('schema');
     return result;
-  } catch (error) { if (error.name === 'AbortError') throw new Error('timeout'); throw error; }
-  finally { clearTimeout(timer); }
+  } catch (error) {
+    if (error.name === 'AbortError') throw Object.assign(new Error('timeout'), { retryable: true });
+    if (error instanceof TypeError) throw Object.assign(new Error('network'), { retryable: true });
+    if (error instanceof SyntaxError) throw new Error('schema');
+    throw error;
+  } finally { clearTimeout(timer); }
 }
 
 async function rawFeed(pos, space = '') {
