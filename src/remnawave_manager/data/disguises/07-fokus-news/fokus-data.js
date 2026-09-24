@@ -115,12 +115,15 @@ export function articleRef(value) {
   }
 }
 export const route = (a) => "#/article" + a.path;
+// Both RIA CDN names serve the same image paths. Keep the local proxy URL
+// stable so cached articles and existing nginx installations remain compatible.
+const mediaHosts = new Set(["cdnn21.img.ria.ru", "cdnn21.imgria.ru"]);
 export function media(value) {
   try {
     const u = new URL(value, "https://ria.ru");
     if (
       u.protocol !== "https:" ||
-      u.hostname !== "cdnn21.img.ria.ru" ||
+      !mediaHosts.has(u.hostname) ||
       u.username ||
       u.password ||
       u.port ||
@@ -138,19 +141,19 @@ export function media(value) {
 }
 const text = (root, s) => root.querySelector(s)?.textContent.trim() || "";
 const image = (root) => {
-  const img = root.querySelector("img"),
-    source = root.querySelector("source");
-  // RIA lazy images often carry a data: placeholder in src.
-  return (
-    [
-      img?.getAttribute("data-src"),
-      img?.getAttribute("src"),
-      source?.getAttribute("data-srcset")?.split(/[\s,]/)[0],
-      source?.getAttribute("srcset")?.split(/[\s,]/)[0],
-    ]
-      .map(media)
-      .find(Boolean) || ""
-  );
+  if (!root) return "";
+  // Skip placeholders and unsupported candidates instead of trusting the first
+  // img/source. Responsive and lazy markup can put the usable URL in srcset.
+  for (const node of root.querySelectorAll("img,source")) {
+    const candidates = [node.getAttribute("data-src"), node.getAttribute("src")];
+    for (const attr of ["data-srcset", "srcset"]) {
+      for (const entry of (node.getAttribute(attr) || "").split(","))
+        candidates.push(entry.trim().split(/\s+/)[0]);
+    }
+    const src = candidates.map(media).find(Boolean);
+    if (src) return src;
+  }
+  return "";
 };
 export function summary(ref, title, img = "", date = "", category = "") {
   return {

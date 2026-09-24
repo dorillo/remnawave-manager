@@ -42,6 +42,9 @@ const port = Number(process.env.FOKUS_PORT || 15507),
     });
     await page.goto(origin);
     await page.locator(".lead-story h2").waitFor({ timeout: 60000 });
+    // Content-only assertions missed the CDN rename: require a decoded photo.
+    await page.waitForFunction(() => [...document.querySelectorAll('.story-image img')]
+      .some(img => img.complete && img.naturalWidth > 0), null, { timeout: 30000 });
     await fs.mkdir("/tmp/fokus-check", { recursive: true });
     await page.screenshot({
       path: "/tmp/fokus-check/home-1440.png",

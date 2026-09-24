@@ -94,6 +94,30 @@ const root = path.resolve(
       console.log('Online report blocks:', live.blocks.length);
     }
 
+    const hosts = ["cdnn21.img.ria.ru", "cdnn21.imgria.ru"];
+    for (const host of hosts) {
+      const url = `https://${host}/images/07ea/09/18/123_80.jpg`;
+      const expected = "/_fokus/media/images/07ea/09/18/123_80.jpg";
+      const feed = await loadPage("feed", `<rss><channel><item><link>https://ria.ru/20260919/test-123.html</link><title>Фото</title><enclosure url="${url}"/></item></channel></rss>`);
+      assert.equal(feed.items[0].image, expected, 'RSS CDN alias');
+      for (const markup of [
+        `<img src="${url}">`,
+        `<img src="data:image/gif;base64,AA" data-src="${url}">`,
+        `<img src="/placeholder.svg" srcset="https://evil.test/a.jpg 1x, ${url} 2x">`,
+        `<picture><source data-srcset="  ${url} 640w"><img src="/placeholder.svg"></picture>`,
+        `<img src="/placeholder.svg"><img data-src="${url}">`,
+      ]) {
+        const result = await article(`<h1 class="article__title">Фото</h1><div class="article__body"><div class="article__block" data-type="image">${markup}</div></div>`);
+        assert.ok(result.blocks.some(block => block.type === 'image' && block.src === expected), 'image candidates: '+markup);
+      }
+    }
+    const rejected = await page.evaluate(async () => {
+      const { media } = await import('./fokus-data.js');
+      return ['https://cdnn21.imgria.ru.evil.test/images/a.jpg', 'https://evil.test/images/a.jpg',
+        'https://user@cdnn21.imgria.ru/images/a.jpg', 'https://cdnn21.imgria.ru:8443/images/a.jpg',
+        'javascript:alert(1)', 'https://cdnn21.imgria.ru/images/a.svg'].map(media);
+    });
+    assert.deepEqual(rejected, Array(6).fill(''));
     const img = "https://cdnn21.img.ria.ru/images/123_80.jpg";
     let parsed = await article(
       `<meta property="og:title" content="Тестовый лонгрид"><div class="article__body m-longread"><div class="white-longread__block white-longread__header" data-type="header"><div class="white-longread__header-author">Автор</div><div class="white-longread__header-media"><img src="data:image/svg+xml,placeholder" data-src="${img}"></div></div><div class="white-longread__block" data-type="text"><div class="white-longread__text-body" style="color:red">Первый абзац <strong>лонгрида</strong></div></div><div class="white-longread__block" data-type="h3"><div class="white-longread__width">Подзаголовок</div></div><div class="white-longread__block" data-type="media-image"><img src="data:image/svg+xml,placeholder" data-src="${img}"><div class="white-longread__media-description">Подпись</div></div><div class="white-longread__block" data-type="text"><div class="white-longread__text-body">Конец статьи</div></div></div>`,

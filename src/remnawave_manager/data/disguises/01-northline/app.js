@@ -647,7 +647,10 @@ async function loadFeed(key, { more = false, stage = false } = {}) {
         : reader.topics;
   feed.loading = true;
   feed.error = '';
-  if (!stage && ['feed', 'tag'].includes(route().page) && feedKey() === key) renderFeed(key);
+  if (['feed', 'tag'].includes(route().page) && feedKey() === key) {
+    if (stage) updateNewPosts(feed);
+    else renderFeed(key);
+  }
   const active = sources.filter((source) => !more || !feed.done.has(source));
   const results = await pooled(active, (source) =>
     key === 'following'
@@ -700,6 +703,18 @@ async function loadFeed(key, { more = false, stage = false } = {}) {
   renderRail();
 }
 function updateNewPosts(feed) {
+  const notice = main.querySelector('#feed-notice');
+  if (notice) replace(notice, feed.error || feed.stale
+    ? el('div', { class: 'notice', role: 'status' }, [
+        feed.loading ? el('span', { class: 'ui-spinner', 'aria-hidden': 'true' }) : icon('globe'),
+        el('span', {
+          text: feed.loading
+            ? 'Показана сохранённая лента. Загружаем свежие записи…'
+            : feed.error || 'Показана сохранённая лента. Свежие записи пока недоступны.',
+        }),
+        !feed.loading && button('Повторить', () => loadFeed(feedKey()), { className: 'text-button' }),
+      ])
+    : null);
   const region = main.querySelector('#feed-updates');
   if (!region) return;
   replace(
@@ -785,15 +800,7 @@ function renderFeed(key) {
       ),
     ]),
     el('div', { id: 'feed-updates', 'aria-live': 'polite' }),
-    feed.error || feed.stale
-      ? el('div', { class: 'notice', role: 'status' }, [
-          icon('globe'),
-          el('span', {
-            text: feed.error || 'Показана сохранённая лента. Обновляем, когда сеть доступна.',
-          }),
-          !feed.loading && button('Повторить', () => loadFeed(key), { className: 'text-button' }),
-        ])
-      : null,
+    el('div', { id: 'feed-notice' }),
     items.length
       ? el(
           'section',

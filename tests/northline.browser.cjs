@@ -834,6 +834,23 @@ let browser;
     .first()
     .waitFor();
   assert((await page.locator('.post').count()) > 0, 'Offline cache must retain content');
+  await page.locator('#feed-notice').getByRole('button', { name: 'Повторить' }).waitFor();
+  for (const trigger of ['retry', 'online']) {
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    const delayed = async route => { await gate; await route.fallback(); };
+    await page.route('**/_northline/**', delayed);
+    if (trigger === 'retry') await page.locator('#feed-notice').getByRole('button', { name: 'Повторить' }).click();
+    else await page.evaluate(() => window.dispatchEvent(new Event('online')));
+    await page.locator('#feed-notice .ui-spinner').waitFor();
+    assert.match(await page.locator('#feed-notice').innerText(), /Загружаем свежие записи/);
+    assert.equal(await page.locator('#feed-notice .ui-spinner').evaluate(node => getComputedStyle(node).flexGrow), '0');
+    release();
+    await page.locator('#feed-notice').getByRole('button', { name: 'Повторить' }).waitFor();
+    assert.equal(await page.locator('#feed-notice .ui-spinner').count(), 0, 'Spinner stops after a failed refresh');
+    await page.unroute('**/_northline/**', delayed);
+  }
+
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: path.join(__dirname, '.tmp/northline-mobile.png') });
   assert(
