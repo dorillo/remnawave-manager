@@ -73,6 +73,31 @@ nginx не считаются доказательством VPN через CDN 
 
 ## Что происходит до переключения образа
 
+### GET с uplink в заголовках
+
+Совместимость проверена с Manager `0.1.24`, Node `3.4.1` и Xray `26.7.28`.
+Параметры Xray `uplinkDataPlacement`, `uplinkDataKey` и `uplinkChunkSize`
+не меняют способ распознавания CDN: оставьте в обоих Nginx locations маркер
+`# remnawave-manager: transport=xhttp provider=yandex`.
+
+Для миграции с GET body серверный inbound может принимать оба варианта:
+`uplinkDataPlacement: "auto"`, `uplinkDataKey: "X-Upload"`. В Host Extra
+клиенту задают `uplinkDataPlacement: "header"`, тот же ключ и небольшой размер
+пакета. Старый клиентский лимит `524288` переносить в заголовки нельзя.
+`uplinkChunkSize` ограничивает размер одного заголовка, а не всей их совокупности.
+
+Эти параметры задаются в Config Profile и Host панели. Inventory не проверяет
+их совпадение и не доказывает работоспособность туннеля: нужны отдельные тесты
+upload/download с мобильной сети и Wi-Fi. Перед изменением сохраните Config
+Profile и Host Extra; архив локальных файлов Node не заменяет копию настроек
+панели. Изменение только профиля Xray и Host не требует повторного `adopt`, если
+зарегистрированные файлы Nginx, Compose, env и сайта остались прежними.
+
+Временные диагностические locations и процессы удаляйте до финального
+`inventory --refresh`. Не принимайте их в постоянную inventory через `adopt`.
+
+### Проверки обновления
+
 Команда обновления:
 
 ```console
