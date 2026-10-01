@@ -3,11 +3,17 @@ export const pageSize = 48;
 const sourcePageSize = 24;
 const kinds = { gif: 1, sticker: 2, clip: 3 };
 const memory = new Map();
+// GIFS may return its OBS storage URL instead of the public CDN URL.
+// Both use the same media keys; serve them through our fixed CDN proxy.
+const mediaOrigins = new Set([
+  "https://media.gifs.ru",
+  "https://gifs.obs.ru-moscow-1.hc.sbercloud.ru",
+]);
 export function mediaURL(value) {
   try {
     const u = new URL(value);
     if (
-      u.origin !== "https://media.gifs.ru" ||
+      !mediaOrigins.has(u.origin) ||
       u.search ||
       u.hash ||
       u.username ||

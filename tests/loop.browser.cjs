@@ -6,6 +6,7 @@ const root = path.resolve(
   __dirname,
   "../src/remnawave_manager/data/disguises/06-loop-archive",
 );
+const mediaHost = n => n % 2 ? "gifs.obs.ru-moscow-1.hc.sbercloud.ru" : "media.gifs.ru";
 const raw = (n) => ({
   id: n === 1 ? "8kyX1o" : n,
   fileType: 1,
@@ -13,11 +14,11 @@ const raw = (n) => ({
   tags: ["кот", "радость", "ОченьДлинныйТегБезПробелов".repeat(4)],
   width: 480,
   height: n % 3 === 0 ? 600 : n % 3 === 1 ? 480 : 380,
-  cloudSource: `https://media.gifs.ru/${String(n).padStart(40, "a")}.gif`,
+  cloudSource: `https://${mediaHost(n)}/${String(n).padStart(40, "a")}.gif`,
   cloudSource300:
     n === 24
       ? null
-      : `https://media.gifs.ru/${String(n).padStart(40, "a")}_300.webp`,
+      : `https://${mediaHost(n)}/${String(n).padStart(40, "a")}_300.webp`,
   username: "author",
 });
 let browser,
@@ -119,6 +120,25 @@ let browser,
   await context.route("**/*", serve);
   await page.goto("http://localhost:55306");
   await page.locator(".card").first().waitFor();
+  assert.deepEqual(await page.evaluate(async () => {
+    const { mediaURL } = await import("./loop-data.js");
+    const file = "a".repeat(40);
+    const origins = ["https://media.gifs.ru", "https://gifs.obs.ru-moscow-1.hc.sbercloud.ru"];
+    const suffixes = [".gif", "_300.webp", "_preview.mp4", ".png", ".jpg"];
+    return origins.flatMap(origin => suffixes.map(suffix => mediaURL(`${origin}/${file}${suffix}`)));
+  }), Array.from({length:2}, () => [".gif", "_300.webp", "_preview.mp4", ".png", ".jpg"]
+    .map(suffix => "/_loop/media/" + "a".repeat(40) + suffix)).flat());
+  assert.deepEqual(await page.evaluate(async () => {
+    const { mediaURL } = await import("./loop-data.js");
+    const host = "gifs.obs.ru-moscow-1.hc.sbercloud.ru", file = "a".repeat(40) + ".gif";
+    return [
+      `http://${host}/${file}`, `https://${host}.evil.example/${file}`,
+      `https://other.obs.ru-moscow-1.hc.sbercloud.ru/${file}`,
+      `https://user:secret@${host}/${file}`, `https://${host}:8443/${file}`,
+      `https://${host}/${file}?redirect=evil`, `https://${host}/${file}#fragment`,
+      `https://${host}/folder/${file}`, `https://${host}/index.html`,
+    ].map(mediaURL);
+  }), Array(9).fill(""));
   assert.deepEqual(
     await page.evaluate(async () => {
       const { mediaURL, normalize } = await import("./loop-data.js");
