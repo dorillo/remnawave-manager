@@ -13,7 +13,7 @@ const video = n => ({ uuid:id(n), creator:author, description:`Видео ${n}`,
  try {
   const context = await browser.newContext({locale:'ru-RU'});
   const requests = [], errors = [];
-  let failThird = false;
+  let failThird = false, pageSize = 17, failPage = 0;
   await context.route('**/*', async route => {
    const url = new URL(route.request().url()), p = url.pathname;
    if (p.startsWith('/_morrow/yappy/')) {
@@ -22,9 +22,11 @@ const video = n => ({ uuid:id(n), creator:author, description:`Видео ${n}`,
     if (p.includes('/author/')) result = author;
     else {
      const cursor = url.searchParams.get('created');
-     const start = cursor ? (Date.UTC(2026,8,20)-Date.parse(cursor))/1000+1 : (Number(url.searchParams.get('page') || 1)-1)*17+1;
+     const pageNumber = Number(url.searchParams.get('page') || 1);
+     const start = cursor ? (Date.UTC(2026,8,20)-Date.parse(cursor))/1000+1 : (pageNumber-1)*pageSize+1;
+     if (pageNumber === failPage) return route.fulfill({status:403,contentType:'application/json',body:'{}'});
      if (failThird && start === 35) return route.fulfill({status:502,contentType:'application/json',body:'{}'});
-     const end = Math.min(65,start+16);
+     const end = Math.min(65,start+pageSize-1);
      result = { results:Array.from({length:Math.max(0,end-start+1)},(_,i)=>video(start+i)), next:end<65?'true':null };
      if (start>1) result.results.unshift(video(start-1));
     }
@@ -70,10 +72,43 @@ const video = n => ({ uuid:id(n), creator:author, description:`Видео ${n}`,
   const before=await page.locator('.video-tile').count();
   await page.locator('.load-button').click();
   await page.waitForFunction(()=>!document.querySelector('.load-button').disabled);
-  assert.equal(await page.locator('.video-tile').count(),before,'failed continuation preserves visible videos');
+  assert.equal(await page.locator('.video-tile').count(),34,'failed continuation reveals the buffered videos too');
+  assert.ok(await page.locator('.video-tile').count()>=before,'failed continuation preserves visible videos');
   failThird=false;
   await page.locator('.load-button').click();
-  await page.waitForFunction(before=>document.querySelectorAll('.video-tile').length>before,before);
+  await page.waitForFunction(()=>document.querySelectorAll('.video-tile').length>34&&!document.querySelector('.load-button').disabled);
+  await page.evaluate(async()=>{(await import('/morrow-data.js')).clearCache();});
+  pageSize=4;
+  failPage=2;
+  await page.goto('https://morrow.test/#/explore');
+  await page.waitForFunction(()=>document.querySelector('.load-button')&&!document.querySelector('.load-button').disabled);
+  assert.equal(await page.locator('.video-tile').count(),4,'a failure on page two must not hide page one');
+  assert.match(await page.locator('.pagination-status').innerText(),/Не удалось/);
+  failPage=0;
+  const beforeRetry=requests.length;
+  await page.locator('.load-button').click();
+  await page.waitForFunction(()=>!document.querySelector('.load-button').disabled);
+  assert.ok(requests[beforeRetry].endsWith('page=2'),'retry resumes at the failed page');
+  assert.ok(requests.length-beforeRetry<=2,'one click requests at most two source pages');
+  assert.ok(await page.locator('.video-tile').count()>4);
+  await page.evaluate(async()=>{(await import('/morrow-data.js')).clearCache();});
+  const beforeExplore=requests.length;
+  await page.reload();
+  await page.waitForFunction(()=>document.querySelector('.video-tile')&&!document.querySelector('.load-button').disabled);
+  assert.equal(requests.length-beforeExplore,2,'small pages do not trigger a burst to fill 24 tiles');
+  assert.ok(await page.locator('.video-tile').count()>0);
+  // Expired cached pages still appear, with an explicit stale-data notice.
+  await page.evaluate(()=>{
+   const key='morrow:video-cache:v1';
+   const entries=JSON.parse(localStorage.getItem(key));
+   for(const [,entry] of entries) entry.at=Date.now()-3600000;
+   localStorage.setItem(key,JSON.stringify(entries));
+  });
+  failPage=1;
+  await page.reload();
+  await page.waitForFunction(()=>document.querySelector('.video-tile')&&!document.querySelector('.load-button').disabled);
+  assert.match(await page.locator('.pagination-status').innerText(),/сохранённая лента/);
+  assert.equal(await page.locator('.load-button').innerText(),'Загрузить ещё');
   assert.deepEqual(errors,[]);
   console.log('Morrow grid pagination passed: complete rows, manual loading, overlap, exhaustion and retry.');
  } finally { await browser.close(); }

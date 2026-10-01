@@ -755,28 +755,29 @@ async function localVideoPage(id, signal) {
   const video = localVideo(record);
   mountFeed(async () => ({ items: [video], next: null }));
 }
-// Keep source pages buffered so each click reveals complete grid rows.
-// A final row may be shorter only when the source is exhausted.
+// Prefer complete rows, but never hide fetched videos behind a failed request.
 function pagedVideos(fetchPage, initialCursor, signal, fallback = () => []) {
   const tiles = grid([]);
   const status = el("p", { class: "pagination-status", role: "status" });
   const more = button(t("more"), load, "load-button");
   const element = el("div", {}, tiles, status, more);
   const seen = new Set(), visited = new Set(), pending = [];
-  let cursor = initialCursor, exhausted = false, busy = false;
+  let cursor = initialCursor, exhausted = false, busy = false, stale = false;
   async function load() {
     if (busy || signal.aborted || exhausted && !pending.length) return;
     busy = true;
     more.disabled = true;
     more.replaceChildren(...loadingLabel());
     status.textContent = "";
+    let failed = false;
     const columns = Math.max(1, getComputedStyle(tiles).gridTemplateColumns.split(" ").length);
     const target = Math.ceil((tiles.children.length + 24) / columns) * columns - tiles.children.length;
     try {
-      // Bound requests if the source sends empty or duplicate-only pages.
-      for (let step = 0; pending.length < target && !exhausted && step < 20; step++) {
+      // Small provider pages must not turn one click into a burst of requests.
+      for (let step = 0; pending.length < target && !exhausted && step < 2; step++) {
         const result = await fetchPage(cursor);
         if (signal.aborted) return;
+        stale ||= !!result.stale;
         for (const video of result.items) {
           if (seen.has(video.id)) continue;
           seen.add(video.id);
@@ -786,14 +787,19 @@ function pagedVideos(fetchPage, initialCursor, signal, fallback = () => []) {
         exhausted = !result.next || visited.has(result.next);
         cursor = result.next;
       }
-      // Keep an incomplete row buffered until retry unless this is the end.
-      const count = exhausted ? Math.min(target, pending.length)
-        : Math.floor(Math.min(target, pending.length) / columns) * columns;
+      // Show a short first batch too; further pages are explicitly requested.
+      const available = Math.min(target, pending.length);
+      const completeRows = Math.max(0,
+        Math.floor((tiles.children.length + available) / columns) * columns - tiles.children.length);
+      const count = exhausted ? available
+        : completeRows || (!tiles.children.length ? available : 0);
       appendTiles(tiles, pending.splice(0, count));
       more.hidden = exhausted && !pending.length;
       if (exhausted && !seen.size) tiles.replaceChildren(empty());
+      if (stale) status.textContent = t("stale");
     } catch (error) {
       if (signal.aborted) return;
+      failed = true;
       const cached = !seen.size ? fallback() : [];
       if (cached.length) {
         for (const video of cached) {
@@ -805,11 +811,14 @@ function pagedVideos(fetchPage, initialCursor, signal, fallback = () => []) {
         appendTiles(tiles, pending.splice(0, target));
         more.hidden = !pending.length;
       }
+      // A later page may fail after earlier pages have already succeeded.
+      // Keep the failed cursor for retry and reveal everything received so far.
+      if (!cached.length) appendTiles(tiles, pending.splice(0, target));
       status.textContent = t(cached.length ? "localSearch" : error.message);
     } finally {
       busy = false;
       more.disabled = false;
-      more.textContent = t(status.textContent ? "retry" : "more");
+      more.textContent = t(failed ? "retry" : "more");
     }
   }
   return { element, load };
