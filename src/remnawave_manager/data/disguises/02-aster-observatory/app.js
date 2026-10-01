@@ -27,6 +27,11 @@ import {
   loadCatalog,
   loadVideo,
   loadProfile,
+  loadFeed,
+  loadChannel,
+  loadTopic,
+  loadSubscriptions,
+  validId,
   searchRutube,
   normalize,
   normalizeList,
@@ -94,7 +99,6 @@ function navigationIcon(name) {
 }
 let catalog,
   loading = true,
-  failed = false,
   request;
 let searchRequest;
 let searchState = {
@@ -108,6 +112,19 @@ let searchState = {
 let disposePlayer = () => {};
 let pageController = new AbortController();
 const recentDiscussions = new Map();
+const liveVideos = new Map();
+function rememberLive(videos) {
+  for (const video of videos) {
+    const previous = liveVideos.get(video.id) || catalog?.videos.find(item => item.id === video.id);
+    liveVideos.delete(video.id);
+    liveVideos.set(video.id, { ...previous, ...video,
+      publicLikes: video.publicLikes ?? previous?.publicLikes ?? null,
+      publicComments: video.publicComments.length ? video.publicComments : previous?.publicComments || [] });
+  }
+  while (liveVideos.size > 5000) liveVideos.delete(liveVideos.keys().next().value);
+}
+const newest = videos => [...videos].sort((a, b) =>
+  (Date.parse(b.published) || 0) - (Date.parse(a.published) || 0));
 function rememberDiscussion(video) {
   recentDiscussions.delete(video.id);
   recentDiscussions.set(video.id, video);
@@ -157,6 +174,7 @@ function discoveredVideos() {
 const allVideos = () =>
   normalizeList(
     [
+      ...liveVideos.values(),
       ...(catalog?.videos || []),
       ...discoveredVideos(),
       ...library().added,
@@ -164,20 +182,12 @@ const allVideos = () =>
     5000,
   );
 const findVideo = (id) =>
+  liveVideos.get(id) ||
   searchState.videos.find((video) => video.id === id) ||
   allVideos().find((video) => video.id === id) ||
   catalog?.channels
     ?.flatMap((channel) => channel.videos)
     .find((video) => video.id === id);
-
-function randomized(items) {
-  const result = [...items];
-  for (let index = result.length - 1; index > 0; index -= 1) {
-    const selected = Math.floor(Math.random() * (index + 1));
-    [result[index], result[selected]] = [result[selected], result[index]];
-  }
-  return result;
-}
 
 function channelAvatar(video, large = false) {
   const fallback = el(
@@ -546,6 +556,61 @@ function grid(
     main.append(more);
   }
 }
+function liveGrid(main, fetchPage, initialCursor, fallback, {
+  select = videos => videos, className = '', pageSize = 24, moreLabel = 'moreVideos',
+} = {}) {
+  const signal = pageController.signal;
+  const content = el('div', { class: `video-grid ${className}`.trim() });
+  const reserve = el('div');
+  const status = el('p', { role: 'status' });
+  const more = button(t(moreLabel), load, { class: 'more' });
+  const wrapper = el('section', { class: 'live-results' }, content, reserve, status, more);
+  main.append(wrapper);
+  let cursor = initialCursor, items = [], visible = 0, ended = false, busy = false, repeats = 0;
+  async function load() {
+    if (busy || signal.aborted) return;
+    busy = true;
+    more.disabled = true;
+    more.replaceChildren(loadingNode(t('loading')));
+    status.textContent = '';
+    const target = visible + pageSize;
+    let failed = false, partial = false;
+    try {
+      // Filtered or small pages must not cause an unbounded request burst.
+      for (let step = 0; step < 2 && !ended && select(items).length < target; step++) {
+        const result = await fetchPage(cursor, signal);
+        if (signal.aborted) return;
+        rememberLive(result.videos);
+        const combined = normalizeList([...items, ...result.videos], 5000);
+        repeats = combined.length === items.length ? repeats + 1 : 0;
+        items = combined;
+        partial ||= !!result.partial;
+        ended = result.next === null || (!result.partial && repeats >= 3) || items.length >= 5000;
+        cursor = result.next;
+        if (partial) break;
+      }
+    } catch {
+      if (signal.aborted) return;
+      failed = true;
+    } finally {
+      busy = false;
+      more.disabled = false;
+    }
+    if (signal.aborted) return;
+    const selected = select(items);
+    visible = Math.min(target, selected.length);
+    content.replaceChildren(...selected.slice(0, visible).map(card));
+    reserve.replaceChildren();
+    if (failed && !items.length) {
+      const saved = fallback();
+      if (saved.length) grid(reserve, saved, true, className, pageSize, moreLabel);
+    } else if (!selected.length && !partial) empty(reserve);
+    status.textContent = failed || partial ? t('liveUnavailable') : '';
+    more.textContent = t(failed || partial ? 'retry' : moreLabel);
+    more.hidden = !failed && !partial && ended && visible >= selected.length;
+  }
+  load();
+}
 function heading(main, title, actions = []) {
   main.append(
     el(
@@ -621,7 +686,7 @@ function filtered(videos, matchQuery = true) {
           `${v.title} ${v.channel} ${v.description}`
             .toLocaleLowerCase()
             .includes(q)) &&
-        (!params.get('topic') || v.topic === params.get('topic')) &&
+        (!params.get('topic') || params.get('topic') === 'general' || v.topic === params.get('topic')) &&
         (!params.get('language') || v.language === params.get('language')) &&
         (!params.get('duration') ||
           (params.get('duration') === 'short'
@@ -631,8 +696,8 @@ function filtered(videos, matchQuery = true) {
   if (params.get('sort') === 'title')
     return selected.sort((a, b) => a.title.localeCompare(b.title, locale()));
   if (params.get('sort') === 'newest')
-    return selected.sort((a, b) => b.published.localeCompare(a.published));
-  return randomized(selected);
+    return newest(selected);
+  return selected;
 }
 async function loadSearchPage(query, page = 1) {
   if (searchState.loading && searchState.query === query && searchState.page)
@@ -662,6 +727,7 @@ async function loadSearchPage(query, page = 1) {
       loading: false,
       failed: false,
     };
+    rememberLive(result.videos);
   } catch {
     if (active.signal.aborted) return;
     searchState = { ...searchState, loading: false, failed: true };
@@ -681,7 +747,10 @@ function searchResults(main, query) {
     queueMicrotask(() => loadSearchPage(query));
   }
   if (searchState.failed) {
-    grid(main, filtered(allVideos()), true, '', 24, 'moreVideos');
+    const retained = searchState.videos.length ? filtered(searchState.videos, false) : filtered(allVideos());
+    grid(main, retained, true, '', 24, 'moreVideos');
+    main.append(el('p', { role: 'status' }, t('liveUnavailable')),
+      button(t('retry'), () => loadSearchPage(query, searchState.page + 1)));
     return;
   }
   const videos = filtered(searchState.videos, false);
@@ -699,9 +768,8 @@ function searchResults(main, query) {
     );
 }
 function home(main) {
-  const videos = randomized(allVideos());
   heading(main, t('forYou'));
-  grid(main, videos);
+  liveGrid(main, loadFeed, 0, allVideos, { moreLabel: 'more' });
 }
 function followButton(id) {
   const control = button(
@@ -939,46 +1007,40 @@ function watch(main, id, uploaded = null) {
   const stopPlayer = disposePlayer;
   disposePlayer = () => { commentsController.abort(); stopPlayer(); };
   rail.append(el('h2', {}, t('related')));
-  grid(
-    rail,
-    randomized(
-      normalizeList([
-        ...channelVideos(video.channelId),
-        ...allVideos(),
-      ]).filter((v) => v.id !== id),
-    ),
-    true,
-    'related-grid',
-    18,
-  );
+  const related = videos => videos.filter(v => v.id !== id);
+  liveGrid(rail, video.channelId ? (page, signal) => loadChannel(video.channelId, page, signal) : loadFeed,
+    video.channelId ? 1 : 0, () => related(normalizeList([...channelVideos(video.channelId), ...allVideos()])),
+    { select: related, className: 'related-grid', pageSize: 18, moreLabel: 'more' });
 }
 
 async function watchUploaded(main, id) {
+  const signal = pageController.signal;
   const account = user();
   main.append(el('div', { class: 'loading', role: 'status' }, loadingNode(t('loading'))));
-  if (!account) {
-    main.replaceChildren();
-    empty(main, 'notFound');
-    return;
-  }
   try {
-    const uploaded = await openVideo(account.id, id);
-    if (
-      !main.isConnected ||
-      user()?.id !== account.id ||
-      route().parts.join('/') !== `watch/${id}`
-    )
-      return;
-    main.replaceChildren();
-    if (uploaded) watch(main, id, uploaded);
-    else empty(main, 'notFound');
-  } catch {
-    if (main.isConnected) {
+    // Local uploads use the same ID shape as Rutube. Resolve ownership first.
+    const uploaded = account ? await openVideo(account.id, id) : null;
+    if (signal.aborted) return;
+    if (uploaded) {
       main.replaceChildren();
-      empty(main, 'notFound');
+      watch(main, id, uploaded);
+      return;
     }
+    if (!validId(id)) { main.replaceChildren(); empty(main, 'notFound'); return; }
+    const video = await loadVideo(id, signal);
+    if (signal.aborted) return;
+    rememberLive([video]);
+    main.replaceChildren();
+    watch(main, id);
+  } catch (error) {
+    if (signal.aborted) return;
+    main.replaceChildren();
+    if (error.status === 404) empty(main, 'notFound');
+    else main.append(el('p', { role: 'alert' }, t('unavailable')),
+      button(t('retry'), () => { main.replaceChildren(); watchUploaded(main, id); }));
   }
 }
+
 function channel(main, id) {
   const signal = pageController.signal;
   const videos = normalizeList([
@@ -1006,7 +1068,8 @@ function channel(main, id) {
   }).catch(error => {
     if (!signal.aborted && !author) header.replaceChildren(el('p', {}, t(error.status === 404 ? 'userNotFound' : 'profileUnavailable')));
   });
-  grid(main, videos.sort((a, b) => b.published.localeCompare(a.published)));
+  liveGrid(main, (page, signal) => loadChannel(id, page, signal), 1,
+    () => newest(videos), { select: newest, moreLabel: 'more' });
 }
 function publicUser(main, id) {
   const signal = pageController.signal;
@@ -1346,13 +1409,8 @@ function collection(main, kind) {
     const follows = library().follows;
     const requested = route().params.get('channel') || '';
     const selected = follows.includes(requested) ? requested : '';
-    const channels = [
-      ...new Map(
-        videos
-          .filter((v) => follows.includes(v.channelId))
-          .map((v) => [v.channelId, v]),
-      ).values(),
-    ];
+    const knownChannels = new Map(videos.map(video => [video.channelId, video]));
+    const channels = follows.map(id => knownChannels.get(id) || { channelId: id, channel: `${t('channel')} ${id}` });
     main.append(
       el(
         'div',
@@ -1372,6 +1430,12 @@ function collection(main, kind) {
     videos = videos.filter((v) => follows.includes(v.channelId));
     if (selected && follows.includes(selected))
       videos = videos.filter((v) => v.channelId === selected);
+    if (follows.length) {
+      const ids = selected ? [selected] : follows;
+      liveGrid(main, loadSubscriptions, Object.fromEntries(ids.map(id => [id, 1])),
+        () => newest(videos), { select: newest });
+      return;
+    }
   } else if (kind === 'history')
     videos = videos
       .filter((v) => library().history[v.id])
@@ -1418,13 +1482,6 @@ function render() {
     );
     return;
   }
-  if (failed) {
-    main.append(
-      el('p', { role: 'alert' }, t('unavailable')),
-      button(t('retry'), initialize),
-    );
-    return;
-  }
   if (page === 'watch') {
     const known = findVideo(id);
     if (known) watch(main, id);
@@ -1441,7 +1498,11 @@ function render() {
     );
     filters(main);
     if (params.get('q')) searchResults(main, params.get('q'));
-    else grid(main, filtered(allVideos()), true, '', 24, 'moreVideos');
+    else {
+      const topic = params.get('topic');
+      liveGrid(main, TOPICS.includes(topic) ? (page, signal) => loadTopic(topic, page, signal) : loadFeed,
+        TOPICS.includes(topic) ? 1 : 0, () => filtered(allVideos()), { select: videos => filtered(videos) });
+    }
   } else home(main);
 }
 async function initialize() {
@@ -1449,12 +1510,11 @@ async function initialize() {
   request = new AbortController();
   const active = request;
   loading = true;
-  failed = false;
   render();
   try {
     catalog = await loadCatalog(active.signal);
   } catch {
-    if (!active.signal.aborted) failed = true;
+    if (!active.signal.aborted) catalog = { videos: [], channels: [] };
   } finally {
     if (!active.signal.aborted) {
       loading = false;
@@ -1463,6 +1523,11 @@ async function initialize() {
   }
 }
 window.addEventListener('hashchange', () => {
+  const current = route();
+  if (current.parts[0] !== 'catalog' || current.params.get('q') !== searchState.query) {
+    searchRequest?.abort();
+    if (searchState.loading) searchState = { query: '', videos: [], page: 0, hasNext: false, loading: false, failed: false };
+  }
   render();
   window.scrollTo(0, 0);
   document.querySelector('main')?.focus({ preventScroll: true });

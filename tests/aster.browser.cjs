@@ -319,14 +319,14 @@ let browser;
   await page.locator('.public-comment').first().waitFor();
   await page.getByText('Полное описание из API', { exact: true }).waitFor();
   await page.locator('.watch-channel .subscriber-count').filter({ hasText: '12' }).waitFor();
-  assert.equal(await page.getByRole('button', { name: 'Повторить' }).count(), 0);
+  assert.equal(await page.locator('.watch-primary').getByRole('button', { name: 'Повторить' }).count(), 0);
   await page.frameLocator('iframe').locator('#play').evaluate(() => {
     parent.postMessage(
       JSON.stringify({ type: 'player:error', data: {} }),
       'https://aster.test',
     );
   });
-  const retryPlayer = page.getByRole('button', { name: 'Повторить' });
+  const retryPlayer = page.locator('.watch-primary').getByRole('button', { name: 'Повторить' });
   await retryPlayer.waitFor();
   await retryPlayer.click();
   assert.equal(await retryPlayer.count(), 0);

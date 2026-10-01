@@ -10,7 +10,7 @@ from .site_egress_config import bind_body, strip_bindings
 from .site_policy import (
     KNOWN_NODE_CSPS, NODE_CSP,
     TEMPLATE_POLICIES, _PROXY_REVISIONS,
-    ASTER_METADATA_PROXY, ASTER_COMMENTS_PROXY, ASTER_SEARCH_PROXY,
+    ASTER_METADATA_PROXY, ASTER_COMMENTS_PROXY, ASTER_SEARCH_PROXY, ASTER_LIST_PROXY,
     IMAGE_PROXY, NORTHLINE_PROXY, MORROW_YAPPY_PROXY, ANSWERS_MAIL_PROXY,
     SVOD_WIKIPEDIA_PROXY, LOOP_GIFS_PROXY, FOKUS_RIA_PROXY,
 )
@@ -59,7 +59,7 @@ def upgrade_site_config(text: str, template_id: str, roots: set[str]) -> tuple[s
         stripped = body
         for old, new in _PROXY_REVISIONS:
             stripped = stripped.replace(old, '').replace(new, '')
-        for proxy in (ASTER_METADATA_PROXY, ASTER_COMMENTS_PROXY, ASTER_SEARCH_PROXY,
+        for proxy in (ASTER_METADATA_PROXY, ASTER_COMMENTS_PROXY, ASTER_SEARCH_PROXY, ASTER_LIST_PROXY,
                       IMAGE_PROXY, NORTHLINE_PROXY, MORROW_YAPPY_PROXY, ANSWERS_MAIL_PROXY,
                       SVOD_WIKIPEDIA_PROXY, LOOP_GIFS_PROXY, FOKUS_RIA_PROXY):
             stripped = stripped.replace(proxy, '')

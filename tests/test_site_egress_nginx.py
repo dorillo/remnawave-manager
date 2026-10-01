@@ -220,6 +220,9 @@ class EgressNginxTests(unittest.TestCase):
                     inventory.managed_files[0].sha256 = sha256_file(production)
                     activate()
                     self.assertEqual(request_source("/_aster/rutube-search?query=test&page=1"), source)
+                    self.assertEqual(request_source("/_aster/rutube-feed?offset=0"), source)
+                    self.assertEqual(request_source("/_aster/rutube-channel/61282236?page=1"), source)
+                    self.assertEqual(request_source("/_aster/rutube-category/8?page=1"), source)
                     for template, probes in PROBES.items():
                         with self.subTest(template=template, unix=unix_listener):
                             production.write_text(upgrade_site_config(production.read_text(), template, roots)[0])

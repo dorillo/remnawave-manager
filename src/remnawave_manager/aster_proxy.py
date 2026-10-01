@@ -1,4 +1,4 @@
-"""Fixed anonymous Rutube comment reads for nginx and local preview."""
+"""Fixed anonymous Rutube read routes for nginx and local preview."""
 
 from .proxy_policy import harden_proxy
 import re
@@ -113,4 +113,47 @@ def render_metadata_proxy() -> str:
         proxy_read_timeout 15s;
     }}
     location /_aster/rutube-{kind}/ {{ return 404; }}''', f'aster_{kind}'))
+    return '\n'.join(blocks)
+
+
+# Public lists use numeric cursors only; upstream-provided next URLs are never proxied.
+LIST_ROUTES = (
+    ('feed', '', r'offset=[0-9]{1,6}', '/api/v2/video/recommendation/main'),
+    ('channel', r'[0-9]{1,20}', r'page=[1-9][0-9]{0,3}', '/api/video/person'),
+    ('category', r'[0-9]{1,4}', r'page=[1-9][0-9]{0,3}', '/api/video/category'),
+)
+
+
+def list_upstream(path: str, query: str) -> str | None:
+    for kind, identifier, params, endpoint in LIST_ROUTES:
+        pattern = r'/_aster/rutube-' + kind + (f'/({identifier})' if identifier else '')
+        match = re.fullmatch(pattern, path)
+        if match and re.fullmatch(params, query):
+            suffix = f'/{match[1]}/' if identifier else '?limit=24&'
+            return 'https://rutube.ru' + endpoint + suffix + ('?' if identifier else '') + query
+    return None
+
+
+def render_list_proxy() -> str:
+    blocks = []
+    for kind, identifier, params, endpoint in LIST_ROUTES:
+        location = (f'~ "^/_aster/rutube-{kind}/(?<aster_list_id>{identifier})$"'
+                    if identifier else '= /_aster/rutube-feed')
+        rewrite = endpoint + ('/$aster_list_id/' if identifier else '?limit=24')
+        blocks.append(harden_proxy(f'''    location {location} {{
+        if ($request_method != GET) {{ return 405; }}
+        if ($args !~ "^{params}$") {{ return 400; }}
+        rewrite ^ {rewrite} break;
+        proxy_pass https://rutube.ru;
+        proxy_ssl_server_name on;
+        proxy_ssl_name rutube.ru;
+        proxy_pass_request_headers off;
+        proxy_set_header Host rutube.ru;
+        proxy_set_header Accept application/json;
+        proxy_set_header User-Agent "Mozilla/5.0";
+        proxy_set_header Referer "https://rutube.ru/";
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 15s;
+    }}
+    location /_aster/rutube-{kind} {{ return 404; }}''', f'aster_{kind}_list'))
     return '\n'.join(blocks)

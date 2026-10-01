@@ -19,6 +19,29 @@ from remnawave_manager.site_policy import (
 
 
 class AsterIntegrationTests(unittest.TestCase):
+    def test_live_lists_have_fixed_routes_and_upgrade_existing_sites(self):
+        from remnawave_manager.aster_proxy import list_upstream
+        from remnawave_manager.site_policy import ASTER_LIST_PROXY, ASTER_METADATA_PROXY
+        routes = [
+            ('/_aster/rutube-feed', 'offset=24', 'https://rutube.ru/api/v2/video/recommendation/main?limit=24&offset=24'),
+            ('/_aster/rutube-channel/61282236', 'page=2', 'https://rutube.ru/api/video/person/61282236/?page=2'),
+            ('/_aster/rutube-category/8', 'page=1', 'https://rutube.ru/api/video/category/8/?page=1'),
+        ]
+        for path, query, expected in routes:
+            self.assertEqual(list_upstream(path, query), expected)
+            self.assertIsNone(list_upstream(path, query + '&url=https://evil.test'))
+        for path, query in [('/_aster/rutube-feed', 'offset=-1'),
+                            ('/_aster/rutube-feed', 'offset=1000000'),
+                            ('/_aster/rutube-channel/1', 'page=0'),
+                            ('/_aster/rutube-channel/1', 'page=1&page=2'),
+                            ('/_aster/rutube-channel/../me', 'page=1'),
+                            ('/_aster/rutube-category/8', 'page=10000')]:
+            self.assertIsNone(list_upstream(path, query))
+        existing = f'add_header Content-Security-Policy "{NODE_CSP}" always;\n{ASTER_SEARCH_PROXY}\n{ASTER_METADATA_PROXY}'
+        upgraded = upgrade_aster_policy(existing)
+        self.assertIn(ASTER_LIST_PROXY, upgraded)
+        self.assertEqual(upgrade_aster_policy(upgraded), upgraded)
+
     def setUp(self):
         patcher = mock.patch("remnawave_manager.disguise._site_roots", return_value={"/var/www/html"})
         patcher.start()

@@ -8,7 +8,7 @@ from .errors import ValidationError
 from .site_ipv4 import bind_origins, unbind_origins, synchronize_upstreams
 from .nginx import _brace_depths, _server_blocks, _structural_text
 from .site_policy import (
-    ASTER_COMMENTS_PROXY, ASTER_METADATA_PROXY, ASTER_SEARCH_PROXY,
+    ASTER_COMMENTS_PROXY, ASTER_METADATA_PROXY, ASTER_SEARCH_PROXY, ASTER_LIST_PROXY,
     ANSWERS_MAIL_PROXY, FOKUS_RIA_PROXY, IMAGE_PROXY, LOOP_GIFS_PROXY,
     MORROW_YAPPY_PROXY, NORTHLINE_PROXY, SVOD_WIKIPEDIA_PROXY, _PROXY_REVISIONS,
 )
@@ -73,7 +73,7 @@ def bind_body(body: str, source: str | None, *, legacy: bool = False) -> tuple[s
     if re.search(r"\bproxy_bind\s", _structural_text(body)):
         raise ValidationError("Найдена пользовательская директива proxy_bind; сначала согласуйте конфигурацию сайта.")
     known = {
-        ASTER_COMMENTS_PROXY, ASTER_METADATA_PROXY, ASTER_SEARCH_PROXY,
+        ASTER_COMMENTS_PROXY, ASTER_METADATA_PROXY, ASTER_SEARCH_PROXY, ASTER_LIST_PROXY,
         ANSWERS_MAIL_PROXY, FOKUS_RIA_PROXY, IMAGE_PROXY, LOOP_GIFS_PROXY,
         MORROW_YAPPY_PROXY, NORTHLINE_PROXY, SVOD_WIKIPEDIA_PROXY,
         *(old for old, _ in _PROXY_REVISIONS),
