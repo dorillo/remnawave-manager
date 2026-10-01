@@ -1,8 +1,15 @@
 from __future__ import annotations
 
 import json
+import io
+import shlex
+import shutil
 import subprocess
+import tarfile
+import tempfile
+import threading
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -15,6 +22,70 @@ COMPATIBILITY = json.loads(
 
 
 class InstallScriptTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("curl"), "curl is required")
+    def test_archive_download_retries_partial_transfers_without_appending(self) -> None:
+        # Exercise the installer's actual curl arguments against an interrupted
+        # transfer. Only the origin/TLS and retry delay change for this local test.
+        invocation = INSTALL_SCRIPT.split("if ! curl ", 1)[1].split("; then", 1)[0]
+        args = ["curl", *shlex.split(invocation.replace("\\\n", "").replace(
+            '"${DOWNLOAD_CURL_OPTIONS[@]}"', "--location"
+        ))]
+        self.assertEqual(args[args.index("--max-time") + 1], "600")
+        payload = b"complete archive contents"
+        attempts = []
+        always_fail = False
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                attempts.append(self.path)
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(b"partial" if always_fail or len(attempts) == 1 else payload)
+
+            def log_message(self, *_):
+                pass
+
+        with ThreadingHTTPServer(("127.0.0.1", 0), Handler) as server:
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                for index, value in enumerate(args):
+                    if value.startswith("https://"):
+                        args[index] = f"http://127.0.0.1:{server.server_port}/archive"
+                args[args.index("--proto") + 1] = "=http"
+                with tempfile.TemporaryDirectory() as directory:
+                    output = Path(directory) / "archive.tar.gz"
+                    args[args.index("--output") + 1] = str(output)
+                    args += ["--retry-delay", "1", "--noproxy", "*"]
+                    result = subprocess.run(args, capture_output=True, timeout=15)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(len(attempts), 2)
+                    self.assertEqual(output.read_bytes(), payload)
+                    attempts.clear()
+                    always_fail = True
+                    result = subprocess.run(args, capture_output=True, timeout=15)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertEqual(len(attempts), 3, "retries must stay bounded")
+            finally:
+                server.shutdown()
+                thread.join()
+
+    @unittest.skipUnless(shutil.which("git") and (PROJECT_ROOT / ".git").exists(),
+                         "requires a Git checkout")
+    def test_source_archive_excludes_old_builds_but_keeps_installation_files(self) -> None:
+        archive = subprocess.check_output(
+            ["git", "archive", "--worktree-attributes", "--format=tar.gz", "HEAD"],
+            cwd=PROJECT_ROOT,
+        )
+        with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as source:
+            names = source.getnames()
+        self.assertFalse(any(name.startswith(".wheel-test/") for name in names))
+        for required in ("install.sh", "pyproject.toml", "README.md", "LICENSE", "NOTICE",
+                         "src/remnawave_manager/__init__.py", "docs/morrow.md",
+                         "src/remnawave_manager/data/disguises/03-morrow-coffee/app.js"):
+            self.assertIn(required, names)
+
     def test_installer_can_bootstrap_from_a_single_downloaded_script(self) -> None:
         bootstrap = INSTALL_SCRIPT.index("bootstrap_manager() {")
         source_check = INSTALL_SCRIPT.index(

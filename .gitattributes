@@ -1,0 +1,2 @@
+# Old packaging test artifacts are not needed in installation archives.
+/.wheel-test export-ignore

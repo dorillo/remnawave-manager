@@ -58,12 +58,12 @@ bootstrap_manager() {
     printf 'Загрузка Remnawave Manager из %s (%s)...\n' \
         "${DEFAULT_MANAGER_REPOSITORY}" "${DEFAULT_MANAGER_REF}"
     if ! curl --disable --fail --show-error "${DOWNLOAD_CURL_OPTIONS[@]}" --progress-bar \
-        --connect-timeout 15 --max-time 120 --speed-limit 1024 --speed-time 30 \
-        --retry 2 --retry-max-time 150 \
+        --connect-timeout 15 --max-time 600 --speed-limit 1024 --speed-time 60 \
+        --retry 2 --retry-all-errors --retry-max-time 1800 \
         --proto '=https' --proto-redir '=https' --tlsv1.2 \
         "https://api.github.com/repos/${DEFAULT_MANAGER_REPOSITORY}/tarball/${DEFAULT_MANAGER_REF}" \
         --output "${archive}"; then
-        die 'Не удалось скачать Remnawave Manager с GitHub.'
+        die 'Не удалось скачать Remnawave Manager с GitHub. Установленная версия не изменена. Можно скачать и распаковать архив на другом компьютере, перенести каталог на сервер и выполнить sudo bash install.sh install из этого каталога.'
     fi
 
     mkdir -- "${temporary_directory}/source"
