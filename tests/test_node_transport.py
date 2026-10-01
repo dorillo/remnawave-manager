@@ -70,10 +70,11 @@ def test_mixed_providers_and_quoted_proxy_target():
 
 
 @pytest.mark.parametrize("template", TEMPLATE_POLICIES)
-@pytest.mark.parametrize("provider", ["none", "yandex", "beeline-post"])
+@pytest.mark.parametrize("provider", ["none", "yandex", "beeline-get", "beeline-post"])
 def test_site_replacement_preserves_marked_transport_byte_for_byte(template, provider):
     transport = route(provider)
-    original = UPSTREAM + f'''server {{
+    header_limit = "large_client_header_buffers 8 8k;\n"
+    original = header_limit + UPSTREAM + f'''server {{
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
     root /var/www/html;
     add_header Content-Security-Policy "{NODE_CSP}" always;
@@ -82,6 +83,7 @@ def test_site_replacement_preserves_marked_transport_byte_for_byte(template, pro
 }}'''
     updated, count = upgrade_site_config(original, template, {"/var/www/html"})
     assert count == 1
+    assert updated.count(header_limit) == 1
     assert transport in updated
     assert transport_features(updated) == transport_features(original)
     again, _ = upgrade_site_config(updated, template, {"/var/www/html"})
@@ -90,7 +92,7 @@ def test_site_replacement_preserves_marked_transport_byte_for_byte(template, pro
 
 def test_inventory_refresh_does_not_accept_drift_or_modify_saved_object(tmp_path):
     config = tmp_path / "nginx.conf"
-    config.write_text(UPSTREAM + route("yandex"))
+    config.write_text("large_client_header_buffers 8 8k;\n" + UPSTREAM + route("yandex"))
     inv = Inventory(1, "node", str(tmp_path), str(tmp_path / "compose.yml"), None, "nginx",
                     nginx_files=[str(config)], managed_files=[ManagedFile(str(config), "0" * 64, "nginx")],
                     features={"yandex_cdn": False, "certbot_renewal": True})
