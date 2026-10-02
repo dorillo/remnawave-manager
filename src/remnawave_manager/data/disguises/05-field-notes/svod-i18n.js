@@ -40,8 +40,8 @@ const words = {
     "Could not save data. Please try again.",
   ],
   secureError: [
-    "Для аккаунтов откройте сайт по HTTPS или на localhost.",
-    "Accounts require HTTPS or localhost.",
+    "Для входа откройте сайт через защищённое соединение (HTTPS).",
+    "Open the site over a secure connection (HTTPS) to sign in.",
   ],
   loading: ["Загружаем…", "Loading…"],
   unavailable: ["Не удалось загрузить материал", "Unable to load content"],

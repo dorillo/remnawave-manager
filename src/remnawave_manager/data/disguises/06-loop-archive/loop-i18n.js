@@ -91,8 +91,8 @@ const messages = {
     "Could not save data. Please try again.",
   ],
   secureError: [
-    "Для входа нужен HTTPS или localhost.",
-    "Sign in requires HTTPS or localhost.",
+    "Для входа откройте сайт через защищённое соединение (HTTPS).",
+    "Open the site over a secure connection (HTTPS) to sign in.",
   ],
   hero: ["На любой случай. На любое настроение.", "Every mood. Every moment."],
   intro: [

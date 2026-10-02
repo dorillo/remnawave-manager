@@ -18,10 +18,10 @@ export const TOPICS = [
 ];
 const CACHE = 'aster:catalog:v1';
 const MAX_VIDEOS = 500;
-export const TOPIC_CATEGORIES = { movies: 3, series: 5, music: 6, entertainment: 57,
-  kids: 42, sport: 7, news: 8, science: 52, travel: 11, culture: 64 };
+export const TOPIC_CATEGORIES = { movies: 4, series: 5, music: 6, entertainment: 57,
+  kids: 7, sport: 16, news: 8, science: 52, travel: 11, culture: 64 };
 const categoryTopics = { ...Object.fromEntries(Object.entries(TOPIC_CATEGORIES).map(([topic, id]) => [id, topic])),
-  19: 'entertainment', 43: 'entertainment' };
+  19: 'entertainment', 43: 'entertainment', 42: 'kids' };
 function publicationDate(value) {
   const text = String(value || '').slice(0, 40);
   // Rutube's unzoned timestamps are Moscow time, not the viewer's local time.

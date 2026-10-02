@@ -1,7 +1,9 @@
 import { storage } from '../shared/storage.js';
 
 const words = {
-  liveUnavailable: ['Не удалось обновить видео из RUTUBE. Доступные материалы сохранены; попробуйте ещё раз.', 'Could not refresh videos from RUTUBE. Available videos are retained; please retry.'],
+  liveUnavailable: ['Не удалось загрузить видео', 'Could not load videos'],
+  liveRetryHint: ['Попробуйте ещё раз чуть позже.', 'Please try again in a moment.'],
+  liveRetainedHint: ['Уже загруженные видео доступны. Попробуйте ещё раз.', 'Previously loaded videos are still available. Please try again.'],
   general: ['Все видео', 'All videos'],
   movies: ['Фильмы', 'Movies'],
   series: ['Сериалы', 'Series'],

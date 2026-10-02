@@ -556,23 +556,50 @@ function grid(
     main.append(more);
   }
 }
+function skeletonGrid(className = '', count = 6) {
+  return el('div', { class: `video-grid skeleton-grid ${className}`.trim(), role: 'status', 'aria-label': t('loading') },
+    Array.from({ length: count }, () => el('div', { class: 'skeleton-card', 'aria-hidden': 'true' },
+      el('div', { class: 'thumb skeleton-block' }),
+      el('div', { class: 'card-body' },
+        el('div', { class: 'channel-avatar skeleton-block' }),
+        el('div', { class: 'card-copy' },
+          el('div', { class: 'skeleton-line skeleton-block' }),
+          el('div', { class: 'skeleton-line skeleton-block' }),
+          el('div', { class: 'skeleton-meta skeleton-block' }),
+        ),
+      ),
+    )),
+  );
+}
+function listError(status, hasVideos) {
+  status.replaceChildren(
+    el('h2', {}, t('liveUnavailable')),
+    el('p', {}, t(hasVideos ? 'liveRetainedHint' : 'liveRetryHint')),
+  );
+}
 function liveGrid(main, fetchPage, initialCursor, fallback, {
   select = videos => videos, className = '', pageSize = 24, moreLabel = 'moreVideos',
 } = {}) {
   const signal = pageController.signal;
   const content = el('div', { class: `video-grid ${className}`.trim() });
   const reserve = el('div');
-  const status = el('p', { role: 'status' });
+  const status = el('div', { class: 'list-status', role: 'status', hidden: true });
   const more = button(t(moreLabel), load, { class: 'more' });
-  const wrapper = el('section', { class: 'live-results' }, content, reserve, status, more);
+  const feedback = el('div', { class: 'list-feedback' }, status, more);
+  const wrapper = el('section', { class: 'live-results' }, content, reserve, feedback);
   main.append(wrapper);
   let cursor = initialCursor, items = [], visible = 0, ended = false, busy = false, repeats = 0;
   async function load() {
     if (busy || signal.aborted) return;
     busy = true;
     more.disabled = true;
-    more.replaceChildren(loadingNode(t('loading')));
+    more.hidden = true;
+    wrapper.setAttribute('aria-busy', 'true');
+    const pending = skeletonGrid(className, visible ? 3 : 6);
+    wrapper.insertBefore(pending, feedback);
     status.textContent = '';
+    status.hidden = true;
+    feedback.classList.remove('has-error');
     const target = visible + pageSize;
     let failed = false, partial = false;
     try {
@@ -595,6 +622,8 @@ function liveGrid(main, fetchPage, initialCursor, fallback, {
     } finally {
       busy = false;
       more.disabled = false;
+      pending.remove();
+      wrapper.setAttribute('aria-busy', 'false');
     }
     if (signal.aborted) return;
     const selected = select(items);
@@ -605,7 +634,9 @@ function liveGrid(main, fetchPage, initialCursor, fallback, {
       const saved = fallback();
       if (saved.length) grid(reserve, saved, true, className, pageSize, moreLabel);
     } else if (!selected.length && !partial) empty(reserve);
-    status.textContent = failed || partial ? t('liveUnavailable') : '';
+    status.hidden = !failed && !partial;
+    feedback.classList.toggle('has-error', failed || partial);
+    if (failed || partial) listError(status, !!wrapper.querySelector('.video-card'));
     more.textContent = t(failed || partial ? 'retry' : moreLabel);
     more.hidden = !failed && !partial && ended && visible >= selected.length;
   }
@@ -748,16 +779,18 @@ function searchResults(main, query) {
   }
   if (searchState.failed) {
     const retained = searchState.videos.length ? filtered(searchState.videos, false) : filtered(allVideos());
-    grid(main, retained, true, '', 24, 'moreVideos');
-    main.append(el('p', { role: 'status' }, t('liveUnavailable')),
-      button(t('retry'), () => loadSearchPage(query, searchState.page + 1)));
+    if (retained.length) grid(main, retained, true, '', 24, 'moreVideos');
+    const status = el('div', { class: 'list-status', role: 'status' });
+    listError(status, retained.length > 0);
+    main.append(el('div', { class: 'list-feedback has-error' }, status,
+      button(t('retry'), () => loadSearchPage(query, searchState.page + 1), { class: 'more' })));
     return;
   }
   const videos = filtered(searchState.videos, false);
   if (videos.length) grid(main, videos, false);
   else if (!searchState.loading) empty(main);
   if (searchState.loading)
-    main.append(el('div', { class: 'loading search-loading', role: 'status' }, loadingNode(t('loading'))));
+    main.append(skeletonGrid('', videos.length ? 3 : 6));
   else if (searchState.hasNext)
     main.append(
       button(
@@ -1350,7 +1383,7 @@ function profile(main) {
       el('h2', { id: 'profile-videos-title' }, t('profileVideos')),
       button(t('uploadVideo'), () => uploadVideo(account), { class: 'primary' }),
     ),
-    el('div', { class: 'profile-videos-loading', role: 'status' }, loadingNode(t('loading'))),
+    el('div', { class: 'profile-videos-loading' }, skeletonGrid()),
   );
   main.append(
     el(
@@ -1472,14 +1505,7 @@ function render() {
   if (page === 'profile') { profile(main); return; }
   if (loading) {
     heading(main, pageTitle);
-    main.append(
-      el('div', { class: 'loading', role: 'status' }, loadingNode(t('loading'))),
-      el(
-        'div',
-        { class: 'skeleton-grid', 'aria-hidden': true },
-        Array.from({ length: 6 }, () => el('div')),
-      ),
-    );
+    main.append(skeletonGrid());
     return;
   }
   if (page === 'watch') {

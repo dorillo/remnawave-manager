@@ -1131,7 +1131,7 @@ details p {
   font-size: 13px;
 }
 .comment-form > .primary {
-  margin-left: auto;
+  width: 100%;
   padding: 8px 20px;
 }
 .reply-context {

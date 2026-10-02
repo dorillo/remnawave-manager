@@ -10,7 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 TARGET = ROOT / "src/remnawave_manager/data/disguises/02-aster-observatory/data/catalog.json"
-CATEGORIES = {64: "culture", 57: "entertainment", 42: "kids", 8: "news", 5: "series", 6: "music", 19: "entertainment", 43: "entertainment", 3: "movies", 7: "sport"}
+CATEGORIES = {64: "culture", 57: "entertainment", 42: "kids", 7: "kids", 8: "news", 5: "series", 6: "music", 19: "entertainment", 43: "entertainment", 4: "movies", 16: "sport", 52: "science", 11: "travel"}
 CHANNEL_VIDEO_FIELDS = ("id", "title", "thumbnail", "duration", "published", "topic", "views", "publicLikes", "age", "language")
 
 
