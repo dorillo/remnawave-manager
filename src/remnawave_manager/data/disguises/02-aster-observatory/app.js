@@ -556,7 +556,7 @@ function grid(
     main.append(more);
   }
 }
-function skeletonGrid(className = '', count = 6) {
+function skeletonGrid(className = '', count = 24) {
   return el('div', { class: `video-grid skeleton-grid ${className}`.trim(), role: 'status', 'aria-label': t('loading') },
     Array.from({ length: count }, () => el('div', { class: 'skeleton-card', 'aria-hidden': 'true' },
       el('div', { class: 'thumb skeleton-block' }),
@@ -595,7 +595,7 @@ function liveGrid(main, fetchPage, initialCursor, fallback, {
     more.disabled = true;
     more.hidden = true;
     wrapper.setAttribute('aria-busy', 'true');
-    const pending = skeletonGrid(className, visible ? 3 : 6);
+    const pending = skeletonGrid(className, pageSize);
     wrapper.insertBefore(pending, feedback);
     status.textContent = '';
     status.hidden = true;
@@ -603,8 +603,9 @@ function liveGrid(main, fetchPage, initialCursor, fallback, {
     const target = visible + pageSize;
     let failed = false, partial = false;
     try {
-      // Filtered or small pages must not cause an unbounded request burst.
-      for (let step = 0; step < 2 && !ended && select(items).length < target; step++) {
+      // A provider page can shrink after filtering/deduplication. Fill the UI
+      // batch, with a request budget for very sparse or repetitive feeds.
+      for (let step = 0; step < 10 && !ended && select(items).length < target; step++) {
         const result = await fetchPage(cursor, signal);
         if (signal.aborted) return;
         rememberLive(result.videos);
@@ -627,7 +628,10 @@ function liveGrid(main, fetchPage, initialCursor, fallback, {
     }
     if (signal.aborted) return;
     const selected = select(items);
-    visible = Math.min(target, selected.length);
+    // Keep a short batch buffered while more results are available. Exhaustion
+    // or an error still exposes every received video, including the final row.
+    if (selected.length >= target || ended || failed || partial)
+      visible = Math.min(target, selected.length);
     content.replaceChildren(...selected.slice(0, visible).map(card));
     reserve.replaceChildren();
     if (failed && !items.length) {
@@ -790,7 +794,7 @@ function searchResults(main, query) {
   if (videos.length) grid(main, videos, false);
   else if (!searchState.loading) empty(main);
   if (searchState.loading)
-    main.append(skeletonGrid('', videos.length ? 3 : 6));
+    main.append(skeletonGrid());
   else if (searchState.hasNext)
     main.append(
       button(

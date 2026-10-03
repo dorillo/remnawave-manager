@@ -24,6 +24,8 @@ const raw = (n, channel = '7') => ({ id: id(n), title: `Fresh ${channel} video $
     const categories = { movies: 4, series: 5, music: 6, entertainment: 57,
       kids: 7, sport: 16, news: 8, science: 52, travel: 11, culture: 64 };
     let failedPage = 3, failFeed = false, failSearch = true, failEight = true, slowEight = false, releaseEight;
+    let sparseFeed = false;
+    const feedSizes = [24, 24, 24, 10, 12, 8, 7, 9, 10, 20, 9];
     page.on('pageerror', e => errors.push(e.message));
     await page.route('**/*', async route => {
       const u = new URL(route.request().url()), p = u.pathname;
@@ -43,6 +45,18 @@ const raw = (n, channel = '7') => ({ id: id(n), title: `Fresh ${channel} video $
         if (p === '/_aster/rutube-feed') {
           if (failFeed) return route.fulfill({ status: 502, body: '{}' });
           const offset = Number(u.searchParams.get('offset'));
+          if (sparseFeed === 'budget')
+            return json({ results: [raw(2001 + offset / 24)], has_next: offset < 24 * 24 });
+          if (sparseFeed === 'repeated')
+            return json({ results: [raw(3001)], has_next: true });
+          if (sparseFeed) {
+            const index = offset / 24;
+            const start = feedSizes.slice(0, index).reduce((sum, size) => sum + size, 0);
+            // Overlapping and unavailable results leave short normalized pages.
+            return json({ results: [raw(1001), { ...raw(9999), is_paid: true },
+              ...Array.from({ length: feedSizes[index] }, (_, i) => raw(1001 + start + i))],
+              has_next: index < feedSizes.length - 1 });
+          }
           return json({ results: Array.from({ length: 24 }, (_, i) => raw(offset + i + 101)), has_next: offset < 24 });
         }
         if (p.startsWith('/_aster/rutube-category/')) {
@@ -69,13 +83,15 @@ const raw = (n, channel = '7') => ({ id: id(n), title: `Fresh ${channel} video $
     const releaseFirst = hold('/_aster/rutube-channel/7?page=1');
     await page.goto(base + '#/channel/7');
     await page.locator('.live-results .skeleton-grid').waitFor();
-    assert.equal(await page.locator('.live-results .skeleton-card').count(), 6);
+    assert.equal(await page.locator('.live-results .skeleton-card').count(), 24);
     assert.equal(await page.locator('.live-results .ui-spinner').count(), 0);
-    for (const width of [375, 1440]) {
+    for (const width of [375, 768, 1440, 1920, 2334]) {
       await page.setViewportSize({ width, height: 900 });
       for (const theme of ['light', 'dark']) {
         await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
         assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'skeletons fit the viewport');
+        const columns = await page.locator('.skeleton-grid').evaluate(node => getComputedStyle(node).gridTemplateColumns.split(' ').length);
+        assert.equal(24 % columns, 0, `complete skeleton rows at ${width}`);
         await page.screenshot({ path: path.join(os.tmpdir(), `aster-skeleton-${theme}-${width}.png`) });
       }
     }
@@ -92,6 +108,7 @@ const raw = (n, channel = '7') => ({ id: id(n), title: `Fresh ${channel} video $
     await page.locator('.live-results > .list-feedback > .more').click();
     await page.locator('.live-results .skeleton-grid').waitFor();
     assert.equal(await page.locator('.video-card').count(), 24, 'loading continuation keeps existing cards');
+    assert.equal(await page.locator('.live-results .skeleton-card').count(), 24, 'continuation reserves a full batch');
     releaseMore(); await settled();
     assert.equal(await page.locator('.skeleton-grid').count(), 0, 'failed continuation clears skeletons');
     assert.equal(await page.locator('.video-card').count(), 40, 'failed continuation retains earlier pages');
@@ -105,6 +122,40 @@ const raw = (n, channel = '7') => ({ id: id(n), title: `Fresh ${channel} video $
     assert.match(await page.locator('.video-card').first().innerText(), /Fresh 7 video 101/);
     await page.locator('.live-results > .list-feedback > .more').click(); await settled();
     assert.equal(await page.locator('.video-card').count(), 48);
+    sparseFeed = true;
+    await page.reload(); await settled();
+    for (let batch = 1; batch <= 7; batch++) {
+      if (batch > 1) {
+        await page.locator('.live-results > .list-feedback > .more').click(); await settled();
+      }
+      assert.equal(await page.locator('.video-card').count(), Math.min(batch * 24, 157),
+        `batch ${batch} fills despite duplicates, unavailable videos and short pages`);
+    }
+    const links = await page.locator('.thumb').evaluateAll(nodes => nodes.map(node => node.hash));
+    assert.deepEqual(links, Array.from({ length: 157 }, (_, i) => '#/watch/' + id(1001 + i)),
+      'buffered results retain provider order without losing or repeating videos');
+    assert.equal(await page.locator('.live-results > .list-feedback > .more').isVisible(), false);
+    sparseFeed = 'budget';
+    let before = calls.length;
+    await page.reload(); await settled();
+    const feedCallsSince = () => calls.slice(before).filter(call => call.startsWith('/_aster/rutube-feed')).length;
+    assert.equal(feedCallsSince(), 10, 'sparse feeds respect the per-click request budget');
+    assert.equal(await page.locator('.video-card').count(), 0, 'short batches stay buffered');
+    await page.locator('.live-results > .list-feedback > .more').click(); await settled();
+    assert.equal(feedCallsSince(), 20);
+    await page.locator('.live-results > .list-feedback > .more').click(); await settled();
+    assert.equal(feedCallsSince(), 24);
+    assert.equal(await page.locator('.video-card').count(), 24, 'buffer survives multiple clicks');
+    await page.locator('.live-results > .list-feedback > .more').click(); await settled();
+    assert.equal(await page.locator('.video-card').count(), 25, 'the final partial row is never discarded');
+    sparseFeed = 'repeated';
+    before = calls.length;
+    await page.reload(); await settled();
+    assert.equal(feedCallsSince(), 4, 'repeated pages stop without a request loop');
+    assert.equal(await page.locator('.video-card').count(), 1);
+    assert.equal(await page.locator('.live-results > .list-feedback > .more').isVisible(), false);
+    sparseFeed = false;
+    await page.reload(); await settled();
     await visit('catalog?sort=newest');
     assert.match(await page.locator('.video-card').first().innerText(), /Fresh 7 video 101/);
     await visit('catalog?topic=news');
