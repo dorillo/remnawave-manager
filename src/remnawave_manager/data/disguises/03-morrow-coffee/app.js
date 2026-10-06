@@ -30,6 +30,7 @@ import { avatar } from "./morrow-files.js";
 import * as data from "./morrow-data.js";
 import { validId } from "./morrow-yappy.js";
 import { createFeed } from "./morrow-feed.js";
+import { createVideoQueue } from "./morrow-queue.js";
 import { createPlayer, pauseAll } from "./morrow-player.js";
 import { openComments } from "./morrow-comments.js";
 import {
@@ -362,6 +363,11 @@ function follow(author) {
   });
 }
 function videoCard(v) {
+  // Blob URLs belong to a mounted player, not a cached queue or a thumbnail.
+  if (v.local && v.file) {
+    const source = URL.createObjectURL(v.file);
+    v = { ...v, sources: { hd: source }, revokeSource: () => URL.revokeObjectURL(source) };
+  }
   const capturedStore = () => store;
   let recorded = null;
   const player = createPlayer(v, {
@@ -542,6 +548,13 @@ function videoCard(v) {
   };
 }
 const feedStates = new Map();
+const videoQueues = new Map();
+const queueKey = (source) => (account?.id || "guest") + source;
+function rememberQueue(source, queue) {
+  videoQueues.delete(queueKey(source));
+  videoQueues.set(queueKey(source), queue);
+  while (videoQueues.size > 8) videoQueues.delete(videoQueues.keys().next().value);
+}
 let mountedFeedKey = null;
 function feedTabs() {
   const tabs = el(
@@ -576,7 +589,7 @@ function feedTabs() {
   );
   return tabs;
 }
-function mountFeed(load) {
+function mountFeed(load, initial = null) {
   mountedFeedKey = (account?.id || "guest") + location.hash;
   const previous = feedStates.get(mountedFeedKey);
   main.className = "main watching";
@@ -588,7 +601,7 @@ function mountFeed(load) {
   });
   feed = createFeed({
     load: previous?.load || load,
-    initial: previous?.snapshot,
+    initial: previous?.snapshot || initial,
     onStale: (value) => {
       status.hidden = !value;
       status.textContent = t("stale");
@@ -613,13 +626,18 @@ function mountFeed(load) {
   );
   feed.start();
 }
-function appendTiles(container, items) {
+function appendTiles(container, items, source = location.hash) {
   for (const v of items) {
     const a = el(
       "a",
       {
-        href: v.local ? "#/video/local/" + v.id : "#/video/remote/" + v.id,
+        href: "#/video/" + (v.local ? "local/" : "remote/") + v.id +
+          "?from=" + encodeURIComponent(source),
         class: "video-tile",
+        onclick: (event) => {
+          if (event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey)
+            feedStates.delete(queueKey(event.currentTarget.hash));
+        },
       },
       el("img", {
         src: v.poster || "favicon.svg",
@@ -640,20 +658,20 @@ function appendTiles(container, items) {
     container.append(a);
   }
 }
-function grid(items) {
+function grid(items, source = location.hash) {
   const container = el("div", { class: "video-grid" });
-  appendTiles(container, items);
+  rememberQueue(source, createVideoQueue({ items }));
+  appendTiles(container, items, source);
   return container;
 }
 function localVideo(record) {
-  const source = URL.createObjectURL(record.file);
   return {
     id: record.id,
     local: true,
     description: record.description,
     poster: record.poster,
-    sources: { hd: source },
-    revokeSource: () => URL.revokeObjectURL(source),
+    file: record.file,
+    sources: {},
     author: {
       id: account.id,
       name: store.data.profile.name || account.login,
@@ -755,16 +773,70 @@ async function localVideoPage(id, signal) {
   const video = localVideo(record);
   mountFeed(async () => ({ items: [video], next: null }));
 }
+function profileVideos(tab) {
+  const d = store.data;
+  const ids = tab === "history" ? d.history.map((x) => x.id) : d[tab].toReversed();
+  return ids.map((id) => d.videos.find((v) => v.id === id)).filter(Boolean);
+}
+async function contextualVideoPage(id, source, signal) {
+  // Back/forward restores both the current slide and its original continuation.
+  if (feedStates.has(queueKey(location.hash))) {
+    mountFeed(null);
+    return;
+  }
+  let saved = videoQueues.get(queueKey(source));
+  if (!saved) {
+    // The URL carries the source too, so reloads and new tabs keep the list.
+    const [path, queryString] = source.replace(/^#/, "").split("?");
+    const params = new URLSearchParams(queryString);
+    const author = /^\/author\/remote\/([a-f0-9]{32})$/.exec(path);
+    if (author) {
+      saved = createVideoQueue({ ended: false,
+        fetchPage: (cursor, s) => data.getAuthorVideos(author[1], cursor, s) });
+    } else if (path === "/search" || path === "/explore") {
+      const query = params.get("q")?.slice(0, 120) || "";
+      saved = createVideoQueue({ cursor: 1, ended: false, fetchPage: async (page, s) => {
+        const result = query ? await data.search(query, page, s) : await data.getFeed(page, s);
+        return { ...result, next: result.next ? page + 1 : null };
+      } });
+    } else if (path === "/profile") {
+      if (!store) throw new Error("sessionExpired");
+      const tab = params.get("tab") || "likes";
+      let items;
+      if (tab === "myVideos") {
+        const records = await videosFor(account.id);
+        if (signal.aborted) return;
+        items = records.map(localVideo);
+      } else if (["likes", "saved", "history"].includes(tab)) items = profileVideos(tab);
+      else throw new Error("unavailable");
+      saved = createVideoQueue({ items });
+    } else throw new Error("unavailable");
+  }
+  const queue = createVideoQueue(saved.snapshot());
+  while (!queue.items.some((v) => v.id === id) && !queue.ended)
+    await queue.load(signal);
+  if (signal.aborted) return;
+  const index = queue.items.findIndex((v) => v.id === id);
+  if (index < 0) throw new Error("unavailable");
+  mountFeed((s) => queue.load(s), { items: queue.items, index, ended: queue.ended });
+}
 // Prefer complete rows, but never hide fetched videos behind a failed request.
 function pagedVideos(fetchPage, initialCursor, signal, fallback = () => []) {
-  const tiles = grid([]);
+  const source = location.hash;
+  const tiles = el("div", { class: "video-grid" });
+  let queue = createVideoQueue({ cursor: initialCursor, ended: false, fetchPage });
+  rememberQueue(source, queue);
   const status = el("p", { class: "pagination-status", role: "status" });
   const more = button(t("more"), load, "load-button");
   const element = el("div", {}, tiles, status, more);
-  const seen = new Set(), visited = new Set(), pending = [];
-  let cursor = initialCursor, exhausted = false, busy = false, stale = false;
+  let shown = 0, busy = false;
+  const reveal = (count) => {
+    const fresh = queue.items.slice(shown, shown + count);
+    appendTiles(tiles, fresh, source);
+    shown += fresh.length;
+  };
   async function load() {
-    if (busy || signal.aborted || exhausted && !pending.length) return;
+    if (busy || signal.aborted || queue.ended && shown === queue.items.length) return;
     busy = true;
     more.disabled = true;
     more.replaceChildren(...loadingLabel());
@@ -774,46 +846,31 @@ function pagedVideos(fetchPage, initialCursor, signal, fallback = () => []) {
     const target = Math.ceil((tiles.children.length + 24) / columns) * columns - tiles.children.length;
     try {
       // Small provider pages must not turn one click into a burst of requests.
-      for (let step = 0; pending.length < target && !exhausted && step < 2; step++) {
-        const result = await fetchPage(cursor);
-        if (signal.aborted) return;
-        stale ||= !!result.stale;
-        for (const video of result.items) {
-          if (seen.has(video.id)) continue;
-          seen.add(video.id);
-          pending.push(video);
-        }
-        visited.add(cursor);
-        exhausted = !result.next || visited.has(result.next);
-        cursor = result.next;
-      }
+      for (let step = 0; queue.items.length - shown < target && !queue.ended && step < 2; step++)
+        await queue.load(signal);
+      if (signal.aborted) return;
       // Show a short first batch too; further pages are explicitly requested.
-      const available = Math.min(target, pending.length);
+      const available = Math.min(target, queue.items.length - shown);
       const completeRows = Math.max(0,
         Math.floor((tiles.children.length + available) / columns) * columns - tiles.children.length);
-      const count = exhausted ? available
+      const count = queue.ended ? available
         : completeRows || (!tiles.children.length ? available : 0);
-      appendTiles(tiles, pending.splice(0, count));
-      more.hidden = exhausted && !pending.length;
-      if (exhausted && !seen.size) tiles.replaceChildren(empty());
-      if (stale) status.textContent = t("stale");
+      reveal(count);
+      more.hidden = queue.ended && shown === queue.items.length;
+      if (queue.ended && !queue.items.length) tiles.replaceChildren(empty());
+      if (queue.stale) status.textContent = t("stale");
     } catch (error) {
       if (signal.aborted) return;
       failed = true;
-      const cached = !seen.size ? fallback() : [];
+      const cached = !queue.items.length ? fallback() : [];
       if (cached.length) {
-        for (const video of cached) {
-          if (seen.has(video.id)) continue;
-          seen.add(video.id);
-          pending.push(video);
-        }
-        exhausted = true;
-        appendTiles(tiles, pending.splice(0, target));
-        more.hidden = !pending.length;
+        queue = createVideoQueue({ items: cached });
+        rememberQueue(source, queue);
       }
       // A later page may fail after earlier pages have already succeeded.
       // Keep the failed cursor for retry and reveal everything received so far.
-      if (!cached.length) appendTiles(tiles, pending.splice(0, target));
+      reveal(target);
+      more.hidden = queue.ended && shown === queue.items.length;
       status.textContent = t(cached.length ? "localSearch" : error.message);
     } finally {
       busy = false;
@@ -848,7 +905,7 @@ async function authorPage(id, signal) {
       followButton,
     ),
   );
-  const results = pagedVideos((cursor) => data.getAuthorVideos(id, cursor, signal), null, signal);
+  const results = pagedVideos((cursor, s) => data.getAuthorVideos(id, cursor, s), null, signal);
   main.replaceChildren(el("div", { class: "page-container" }, head, results.element));
   await results.load();
 }
@@ -867,8 +924,8 @@ async function searchPage(query, signal) {
     el("p", {}, t("discoverText")),
     button(t("start"), () => go("#/feed"), "primary"),
   );
-  const results = pagedVideos(async (page) => {
-    const result = query ? await data.search(query, page, signal) : await data.getFeed(page, signal);
+  const results = pagedVideos(async (page, s) => {
+    const result = query ? await data.search(query, page, s) : await data.getFeed(page, s);
     return { ...result, next: result.next ? page + 1 : null };
   }, 1, signal, () => data.cachedVideos().filter((video) => !query ||
     (video.description + " " + video.author.nickname).toLowerCase().includes(query.toLowerCase())));
@@ -967,11 +1024,7 @@ function profilePage() {
       );
     }
   } else {
-    const ids =
-      tab === "history" ? d.history.map((x) => x.id) : d[tab].toReversed();
-    const videos = ids
-      .map((id) => d.videos.find((v) => v.id === id))
-      .filter(Boolean);
+    const videos = profileVideos(tab);
     content.append(grid(videos));
     if (!videos.length) content.replaceChildren(emptyPrompt(({ likes: 'likedVideos', saved: 'savedVideos', history: 'historyVideo' })[tab], () => go('#/feed')));
   }
@@ -1173,6 +1226,7 @@ async function route() {
   const hash = location.hash.slice(1) || "/feed";
   const [path, queryString] = hash.split("?");
   const parts = path.split("/").filter(Boolean);
+  const source = new URLSearchParams(queryString).get("from");
   updateTitle();
   try {
     if (parts[0] === "feed" || !parts.length) {
@@ -1182,6 +1236,9 @@ async function route() {
         page++;
         return result;
       });
+    } else if (parts[0] === "video" && ["remote", "local"].includes(parts[1]) &&
+      validId(parts[2]) && source) {
+      await contextualVideoPage(parts[2], source, signal);
     } else if (
       parts[0] === "video" &&
       parts[1] === "remote" &&

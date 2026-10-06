@@ -56,11 +56,13 @@ export function createFeed({
   const observer = new IntersectionObserver(
     (entries) => {
       for (const e of entries)
-        if (e.isIntersecting && e.intersectionRatio > 0.55)
+        if (e.target === tail && e.isIntersecting) more();
+        else if (e.isIntersecting && e.intersectionRatio > 0.55)
           activate(Number(e.target.dataset.index));
     },
     { root, threshold: 0.6 },
   );
+  observer.observe(tail);
   function append(fresh) {
     for (const v of fresh) {
       const i = items.length;
@@ -118,7 +120,9 @@ export function createFeed({
       if (!ended) tail.append(button(t("more"), () => more()));
       onStale(!!result.stale);
       if (result.stale) tail.prepend(el("p", { role: "status" }, t("stale")));
-      if (!items.length && !ended) {
+      // activate() cannot prefetch while this request holds the busy flag.
+      // Short pages still need a following slide without clicking "more".
+      if (!ended && (!items.length || index >= items.length - 3)) {
         busy = false;
         return more();
       }
