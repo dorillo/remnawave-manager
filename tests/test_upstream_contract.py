@@ -66,7 +66,29 @@ class UpstreamContractTests(unittest.TestCase):
         capture("UpdateInternalSquadCommand", {"uuid": NODE, "inbounds": [{"uuid": INBOUND}]},
                 lambda: api.update_internal_squad_inbounds("test-admin-jwt", NODE, [INBOUND]))
 
-        # Exercise the actual WARP add/remove path, including read-back, without a server.
+        xhttp_config = {
+            "inbounds": [{
+                "tag": "VLESS_XHTTP_CDN",
+                "listen": "/dev/shm/xray-xhttp.sock,0666",
+                "protocol": "vless",
+                "settings": {"clients": [], "decryption": "none"},
+                "streamSettings": {
+                    "network": "xhttp", "security": "none",
+                    "xhttpSettings": {"path": "/cdn-assets/opaque/", "mode": "packet-up"},
+                    "sockopt": {"acceptProxyProtocol": True},
+                },
+            }],
+            "outbounds": [{"tag": "DIRECT", "protocol": "freedom"}],
+            "routing": {"rules": [{
+                "type": "field", "domain": ["domain:existing.example.test"],
+                "outboundTag": "DIRECT",
+            }]},
+        }
+        capture("CreateConfigProfileCommand", {"uuid": PROFILE, "inbounds": [{"uuid": INBOUND}]},
+                lambda: api.create_config_profile("test-admin-jwt", "XHTTP CDN", xhttp_config))
+
+        # Exercise WARP on both Reality and an existing XHTTP/CDN profile.
+        # These are real manager request bodies, validated by the upstream Zod schemas.
         def profile_request(method, path, **kwargs):
             nonlocal config
             if method == "PATCH":
@@ -77,13 +99,17 @@ class UpstreamContractTests(unittest.TestCase):
                 config = copy.deepcopy(kwargs["data"]["config"])
             return {"response": {"config": copy.deepcopy(config)}}
 
-        with tempfile.TemporaryDirectory() as directory:
-            store = StateStore(RuntimePaths(Path(directory)))
-            with mock.patch.object(api, "request", side_effect=profile_request):
-                configure_warp_routing(api, "test-admin-jwt", store, PROFILE, ["example.test"])
-                configure_warp_routing(api, "test-admin-jwt", store, PROFILE, [], remove=True)
+        for original in (copy.deepcopy(config), xhttp_config):
+            config = copy.deepcopy(original)
+            with tempfile.TemporaryDirectory() as directory:
+                store = StateStore(RuntimePaths(Path(directory)))
+                with mock.patch.object(api, "request", side_effect=profile_request):
+                    configure_warp_routing(api, "test-admin-jwt", store, PROFILE, ["example.test"])
+                    self.assertEqual(config["inbounds"], original["inbounds"])
+                    configure_warp_routing(api, "test-admin-jwt", store, PROFILE, [], remove=True)
+                self.assertEqual(config, original)
 
-        self.assertEqual(len(requests), 9)
+        self.assertEqual(len(requests), 12)
         result = subprocess.run(
             ["node", "-e", r"""
 const fs = require('node:fs');
@@ -98,10 +124,19 @@ for (const request of requests) {
     assert.equal(command.endpointDetails.REQUEST_METHOD, request.method.toLowerCase());
     const parsed = command.RequestBodySchema.safeParse(request.data);
     assert.ok(parsed.success, request.contract + ': ' + JSON.stringify(parsed.error));
-    // Zod silently strips unknown properties: reject such contract drift too.
-    for (const key of Object.keys(request.data)) {
-        assert.ok(key in parsed.data, request.contract + ': dropped field ' + key);
-    }
+    // Zod can silently strip nested fields too (configProfile/inbound/XHTTP).
+    const assertPreserved = (sent, parsed, path) => {
+        if (sent === null || typeof sent !== 'object') {
+            assert.deepEqual(parsed, sent, path);
+            return;
+        }
+        assert.ok(parsed && typeof parsed === 'object', path);
+        for (const key of Object.keys(sent)) {
+            assert.ok(Object.hasOwn(parsed, key), path + ': dropped field ' + key);
+            assertPreserved(sent[key], parsed[key], path + '.' + key);
+        }
+    };
+    assertPreserved(request.data, parsed.data, request.contract);
 }
 const subscriptionEndpoints = [
     'GetMetadataCommand', 'GetUserByUsernameCommand',

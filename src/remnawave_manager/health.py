@@ -7,6 +7,7 @@ import stat
 import time
 from pathlib import Path
 
+from .compat import component_target
 from .errors import NodeSecretValidationError, TransactionError, ValidationError
 from .models import Component, Inventory
 from .runner import Runner, sanitize_external_text
@@ -129,7 +130,7 @@ def validate_node_secret_payload(secret: str) -> str:
         payload = json.loads(decoded.decode("utf-8"))
     except (ValueError, UnicodeError, json.JSONDecodeError) as error:
         raise NodeSecretValidationError(
-            "Введённое значение не является SECRET_KEY Node 3.4.1. "
+            f"Введённое значение не является SECRET_KEY Node {component_target('node')['version']}. "
             "Скопируйте полный SECRET_KEY именно из конфигурации нужной Node в Panel; "
             "API-токен, UUID, Public Key и X25519-ключ для этого не подходят."
         ) from error
@@ -138,7 +139,7 @@ def validate_node_secret_payload(secret: str) -> str:
         for field in _NODE_SECRET_FIELDS
     ):
         raise NodeSecretValidationError(
-            "В SECRET_KEY отсутствует полный payload Node 3.4.1 "
+            f"В SECRET_KEY отсутствует полный payload Node {component_target('node')['version']} "
             "(caCertPem, jwtPublicKey, nodeCertPem и nodeKeyPem). "
             "Скопируйте SECRET_KEY из конфигурации нужной Node в Panel."
         )
@@ -621,7 +622,7 @@ def wait_node_runtime(
 
 
 def validate_node_secret(runner: Runner, image: str, secret: str) -> None:
-    """Validate the Node 3.4.1 SECRET_KEY contract without persisting the secret."""
+    """Validate the target Node SECRET_KEY contract without persisting the secret."""
     secret = validate_node_secret_payload(secret)
     result = runner.run(
         [
@@ -659,7 +660,7 @@ def validate_node_secret(runner: Runner, image: str, secret: str) -> None:
     )
     if result.returncode != 0 and failure_code in _NODE_SECRET_FAILURES:
         raise NodeSecretValidationError(
-            "SECRET_KEY отклонён валидатором Node 3.4.1: "
+            f"SECRET_KEY отклонён валидатором Node {component_target('node')['version']}: "
             + _NODE_SECRET_FAILURES[failure_code]
             + ". Скопируйте новый SECRET_KEY из конфигурации нужной Node "
             "в обновлённой Panel. "
@@ -667,7 +668,7 @@ def validate_node_secret(runner: Runner, image: str, secret: str) -> None:
         )
     if result.returncode != 0 or result.stdout.strip() != "RWM_NODE_SECRET_OK":
         raise TransactionError(
-            "Не удалось выполнить изолированный валидатор SECRET_KEY в образе Node 3.4.1. "
+            f"Не удалось выполнить изолированный валидатор SECRET_KEY в образе Node {component_target('node')['version']}. "
             "Это ошибка запуска preflight, а не подтверждение повреждения ключа; "
             "текущий образ Node не переключён."
         )

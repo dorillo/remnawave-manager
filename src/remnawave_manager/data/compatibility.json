@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
-  "verified_at": "2026-09-20",
+  "verified_at": "2026-10-06",
   "supported_os": {
     "id": "ubuntu",
     "version": "24.04"
   },
   "components": {
     "panel": {
-      "version": "3.4.4",
-      "upgrade_from": ["2.8.1", "3.0.0", "3.1.0", "3.2.0", "3.2.1", "3.2.2", "3.2.3", "3.3.0", "3.3.1", "3.3.2", "3.4.0", "3.4.1", "3.4.2", "3.4.3", "3.4.4"],
+      "version": "3.4.5",
+      "upgrade_from": ["2.8.1", "3.0.0", "3.1.0", "3.2.0", "3.2.1", "3.2.2", "3.2.3", "3.3.0", "3.3.1", "3.3.2", "3.4.0", "3.4.1", "3.4.2", "3.4.3", "3.4.4", "3.4.5"],
       "known_digests": {
         "2.8.1": "sha256:361f9bb0b183d4fcefea2f1f7163db490e2aa1ec3b4bdde016a9ab9229ce956b",
         "3.0.0": "sha256:ac871579de421c0a36b5903bc789214c4b24d68f100d4fb3cdb4689a97821356",
@@ -24,16 +24,17 @@
         "3.4.1": "sha256:461df4cb1a95a04aa40fb9c0068f4161e008d72d4931f873a15c015b2d70fd15",
         "3.4.2": "sha256:cef199b732c365ef01c3a907f56cc019733b8b1041d4b6161f5f7904e515a9ee",
         "3.4.3": "sha256:4ea85b2fc16bd3e5d367b61afc07ec219133eaa12dd7b5e898adc33c84515422",
-        "3.4.4": "sha256:63ef481550bbf49dabfa514c95d94109619cc85607730b308f7ad0b9b5599f06"
+        "3.4.4": "sha256:63ef481550bbf49dabfa514c95d94109619cc85607730b308f7ad0b9b5599f06",
+        "3.4.5": "sha256:b16d724b90fd7c9fec2df04bd28938a671cafc62894105068e11550ee3449c56"
       },
       "registries": {
         "docker-hub": {
-          "image": "remnawave/backend:3.4.4",
-          "digest": "sha256:63ef481550bbf49dabfa514c95d94109619cc85607730b308f7ad0b9b5599f06"
+          "image": "remnawave/backend:3.4.5",
+          "digest": "sha256:b16d724b90fd7c9fec2df04bd28938a671cafc62894105068e11550ee3449c56"
         },
         "ghcr": {
-          "image": "ghcr.io/remnawave/backend:3.4.4",
-          "digest": "sha256:63ef481550bbf49dabfa514c95d94109619cc85607730b308f7ad0b9b5599f06"
+          "image": "ghcr.io/remnawave/backend:3.4.5",
+          "digest": "sha256:b16d724b90fd7c9fec2df04bd28938a671cafc62894105068e11550ee3449c56"
         }
       }
     },
@@ -71,8 +72,8 @@
       }
     },
     "node": {
-      "version": "3.4.1",
-      "upgrade_from": ["2.8.0", "3.0.0", "3.1.0", "3.1.1", "3.2.0", "3.2.1", "3.2.2", "3.3.0", "3.3.1", "3.3.2", "3.4.0", "3.4.1"],
+      "version": "3.4.2",
+      "upgrade_from": ["2.8.0", "3.0.0", "3.1.0", "3.1.1", "3.2.0", "3.2.1", "3.2.2", "3.3.0", "3.3.1", "3.3.2", "3.4.0", "3.4.1", "3.4.2"],
       "known_digests": {
         "2.8.0": "sha256:03f14935751b4ab565181e2b1766ccd1a9ac349d6839acd3ee49014e543fa232",
         "3.0.0": "sha256:cac67deaa34cb16cb18439355fc185d60d4e3fc7eacca3838ae45af37f8c1c0a",
@@ -85,16 +86,17 @@
         "3.3.1": "sha256:e95373bdd8f186141bb7108863c45ab74e5e7ea29fbce6bd46b5b86b7ef68d0f",
         "3.3.2": "sha256:50708731676b87b239f3dff8c40f2c62ff88fbbba216bacfb0f683dcaf467763",
         "3.4.0": "sha256:a2057585e2c40b8e15659063fdc4e1d82aedf81c571e8e4e8ffbe3a5cfabb906",
-        "3.4.1": "sha256:0cdf386dd49f360fc885bb34bde21132e478e40f0deac62d616086ec0fa9257e"
+        "3.4.1": "sha256:0cdf386dd49f360fc885bb34bde21132e478e40f0deac62d616086ec0fa9257e",
+        "3.4.2": "sha256:1f97485b4bc7e4944f1ae95cc57d176376813b0022e9567b705f384f1a2e909d"
       },
       "registries": {
         "docker-hub": {
-          "image": "remnawave/node:3.4.1",
-          "digest": "sha256:0cdf386dd49f360fc885bb34bde21132e478e40f0deac62d616086ec0fa9257e"
+          "image": "remnawave/node:3.4.2",
+          "digest": "sha256:1f97485b4bc7e4944f1ae95cc57d176376813b0022e9567b705f384f1a2e909d"
         },
         "ghcr": {
-          "image": "ghcr.io/remnawave/node:3.4.1",
-          "digest": "sha256:0cdf386dd49f360fc885bb34bde21132e478e40f0deac62d616086ec0fa9257e"
+          "image": "ghcr.io/remnawave/node:3.4.2",
+          "digest": "sha256:1f97485b4bc7e4944f1ae95cc57d176376813b0022e9567b705f384f1a2e909d"
         }
       }
     }
@@ -141,9 +143,9 @@
       "requires_xray_config_preflight": true
     },
     "node_3_4": {
-      "requires_panel_version": "3.4.4",
+      "requires_panel_version": "3.4.5",
       "requires_panel_first": true,
-      "reason": "Node 3.4.1 and Panel 3.4.4 are the verified current release pair; update and verify Panel before Node."
+      "reason": "Node 3.4.2 and Panel 3.4.5 are the verified current release pair; update and verify Panel before Node."
     }
   }
 }

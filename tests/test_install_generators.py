@@ -76,11 +76,12 @@ class InstallGeneratorTests(unittest.TestCase):
             )
         )
 
-        self.assertTrue(panel.startswith("# Remnawave Panel 3.4.4."))
+        self.assertTrue(panel.startswith("# Remnawave Panel 3.4.5."))
         self.assertIn("SHORT_UUID_METHOD=nanoid\n", panel)
         self.assertIn("SHORT_UUID_LENGTH=16\n", panel)
+        self.assertIn("SERVICE_SNI_VERIFICATION=true\n", panel)
         self.assertTrue(
-            render_node_env("node-secret").startswith("# Remnawave Node 3.4.1.")
+            render_node_env("node-secret").startswith("# Remnawave Node 3.4.2.")
         )
         self.assertIn("NFTABLES_LOGGING=true\n", render_node_env("node-secret"))
         self.assertIn("SNI_VERIFICATION=false\n", render_node_env("node-secret"))

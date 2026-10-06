@@ -156,9 +156,25 @@ def copy_fixture(temporary: str, name: str) -> Path:
     return install_dir
 
 
-def adopt_fixture(temporary: str, name: str):  # type: ignore[no-untyped-def]
+def adopt_fixture(temporary: str, name: str, *, node_version: str | None = None):  # type: ignore[no-untyped-def]
     install_dir = copy_fixture(temporary, name)
+    if node_version is not None:
+        digest = load_manifest()["components"]["node"]["known_digests"][node_version]
+        node_image = f"remnawave/node:{node_version}@{digest}"
+        for filename in ("docker-compose.yml", "compose-config.json"):
+            path = install_dir / filename
+            path.write_text(
+                path.read_text(encoding="utf-8").replace("remnawave/node:latest", node_image),
+                encoding="utf-8",
+            )
+        env = EnvDocument.load(install_dir / ".env")
+        env.set("SNI_VERIFICATION", "true")
+        env.set("NFTABLES_LOGGING", "false")
+        env.set("NFTABLES_ACCEPT_REPLY_TRAFFIC", "true")
+        env.save(install_dir / ".env")
     runner = LegacyRunner(install_dir, name)
+    if node_version is not None:
+        runner.inspect_data["remnanode"]["Config"]["Image"] = node_image
     store = StateStore(RuntimePaths(Path(temporary) / "runtime"))
     role = "panel" if name == "legacy_panel_2_8_1" else "node"
     inventory = adopt(runner, store, directory=install_dir, requested_role=role)
@@ -237,8 +253,10 @@ class LegacyAdoptionTests(unittest.TestCase):
 class LegacyPanelMigrationTests(unittest.TestCase):
     def test_current_v3_panel_upgrade_preserves_environment_and_compose_settings(self) -> None:
         # Cover the previous release and a repeated update of the current release.
-        for source_version in ("3.4.3", "3.4.4"):
-            with self.subTest(source=source_version), tempfile.TemporaryDirectory() as temporary:
+        for source_version, sni in (
+            ("3.4.4", None), ("3.4.4", "false"), ("3.4.5", "true"), ("3.4.5", "false"),
+        ):
+            with self.subTest(source=source_version, sni=sni), tempfile.TemporaryDirectory() as temporary:
                 install_dir = copy_fixture(temporary, "legacy_panel_2_8_1")
                 source_digest = load_manifest()["components"]["panel"]["known_digests"][source_version]
                 sources = {
@@ -255,6 +273,10 @@ class LegacyPanelMigrationTests(unittest.TestCase):
                 env_path = install_dir / ".env"
                 env = EnvDocument.load(env_path)
                 env.migrate_panel_v3()
+                if sni is not None:
+                    env.set("SERVICE_SNI_VERIFICATION", sni)
+                env.set("SHORT_UUID_METHOD", "custom")
+                env.set("SHORT_UUID_CUSTOM_PATTERN", "{hex:16}-{hex:16}")
                 env.save(env_path)
                 original_env = env_path.read_bytes()
                 original_compose = (install_dir / "docker-compose.yml").read_text(encoding="utf-8")
@@ -1212,10 +1234,19 @@ class LegacyNodeMigrationTests(unittest.TestCase):
             self.assertEqual(list(Path(temporary).glob("rwm-xray-*.json")), [])
 
     def test_node_update_preserves_warp_xhttp_yandex_and_all_opaque_files(self) -> None:
+        self._assert_node_update_preserves_configuration()
+
+    def test_current_node_update_preserves_warp_xhttp_yandex_and_custom_env(self) -> None:
+        for version in ("3.4.1", "3.4.2"):
+            with self.subTest(source=version):
+                self._assert_node_update_preserves_configuration(node_version=version)
+
+    def _assert_node_update_preserves_configuration(self, *, node_version: str | None = None) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             install_dir, runner, store, inventory = adopt_fixture(
-                temporary, "legacy_node_2_8_0"
+                temporary, "legacy_node_2_8_0", node_version=node_version,
             )
+            original_image = inventory.components["node"].configured_image
             original_compose = (install_dir / "docker-compose.yml").read_text(encoding="utf-8")
             opaque_before = {
                 path: payload
@@ -1247,7 +1278,7 @@ class LegacyNodeMigrationTests(unittest.TestCase):
             self.assertEqual(result, backup)
             updated_compose = (install_dir / "docker-compose.yml").read_text(encoding="utf-8")
             self.assertEqual(
-                updated_compose.replace(TARGET_IMAGES["node"], "remnawave/node:latest"),
+                updated_compose.replace(TARGET_IMAGES["node"], original_image),
                 original_compose,
             )
             self.assertEqual(

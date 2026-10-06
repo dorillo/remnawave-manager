@@ -15,7 +15,7 @@ from remnawave_manager.state import StateStore
 
 class RegistrySecurityTests(unittest.TestCase):
     def test_node_pull_accepts_current_verified_manifest_digest(self) -> None:
-        digest = "sha256:0cdf386dd49f360fc885bb34bde21132e478e40f0deac62d616086ec0fa9257e"
+        digest = "sha256:1f97485b4bc7e4944f1ae95cc57d176376813b0022e9567b705f384f1a2e909d"
         runner = mock.Mock(spec=Runner)
         runner.run.side_effect = [
             mock.Mock(returncode=0, stdout="", stderr=""),
@@ -28,7 +28,7 @@ class RegistrySecurityTests(unittest.TestCase):
 
         image = pull_verified(runner, "node", "docker-hub")
 
-        self.assertEqual(image, "remnawave/node:3.4.1@" + digest)
+        self.assertEqual(image, "remnawave/node:3.4.2@" + digest)
 
     def test_node_pull_rejects_unverified_manifest_digest(self) -> None:
         runner = mock.Mock(spec=Runner)
@@ -41,7 +41,7 @@ class RegistrySecurityTests(unittest.TestCase):
             ),
         ]
 
-        with self.assertRaisesRegex(TransactionError, "Digest remnawave/node:3.4.1"):
+        with self.assertRaisesRegex(TransactionError, "Digest remnawave/node:3.4.2"):
             pull_verified(runner, "node", "docker-hub")
 
     def test_pull_error_sanitizes_external_registry_output(self) -> None:

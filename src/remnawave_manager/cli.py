@@ -449,7 +449,7 @@ def build_parser() -> RussianArgumentParser:
         help="Разрешить обновление, если digest исходного релиза не удалось определить.",
     )
     update.epilog = (
-        "Если текущий SECRET_KEY несовместим с Node 3.4.1, менеджер запросит новый "
+        f"Если текущий SECRET_KEY несовместим с Node {component_target('node')['version']}, менеджер запросит новый "
         "ключ для ручной вставки. Для автоматизации задайте его через RWM_NODE_SECRET_KEY."
     )
     _add_yes(update)
@@ -1211,11 +1211,11 @@ def dispatch(args: argparse.Namespace, context: CliContext) -> int:
                 if replacement_secret is None:
                     if context.json_output:
                         raise ValidationError(
-                            "Текущий SECRET_KEY несовместим с Node 3.4.1. "
+                            f"Текущий SECRET_KEY несовместим с Node {component_target('node')['version']}. "
                             "Задайте новый ключ через RWM_NODE_SECRET_KEY и повторите команду."
                         )
                     context.write(
-                        f"Текущий SECRET_KEY не совместим с Node 3.4.1: "
+                        f"Текущий SECRET_KEY не совместим с Node {component_target('node')['version']}: "
                         f"{current_secret_error}"
                     )
                     context.write(
@@ -1240,7 +1240,7 @@ def dispatch(args: argparse.Namespace, context: CliContext) -> int:
                     except NodeSecretValidationError as replacement_error:
                         if context.json_output or replacement_from_environment:
                             raise ValidationError(
-                                "Новый SECRET_KEY также отклонён Node 3.4.1. "
+                                f"Новый SECRET_KEY также отклонён Node {component_target('node')['version']}. "
                                 "Проверьте значение RWM_NODE_SECRET_KEY."
                             ) from replacement_error
                         context.error(

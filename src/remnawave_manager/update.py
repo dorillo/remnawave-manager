@@ -614,7 +614,7 @@ def _preflight_node_config(
             raise ValidationError(
                 "Reality inbound без явного minClientVer: "
                 + ", ".join(risky)
-                + ". Xray Core в Node 3.4.1 по умолчанию требует клиент 26.3.27. "
+                + f". Xray Core в Node {component_target('node')['version']} по умолчанию требует клиент 26.3.27. "
                 "Проверьте версии клиентов и повторите с --accept-reality-client-risk. "
                 "Менеджер не будет автоматически ставить небезопасное 0.0.0."
             )
@@ -676,7 +676,7 @@ def _node_secret(runner: Runner, inventory: Inventory) -> str:
         ]
     if len(candidates) != 1 or not candidates[0]:
         raise ValidationError(
-            "Не удалось безопасно получить SECRET_KEY текущей Node для preflight 3.4.1."
+            f"Не удалось безопасно получить SECRET_KEY текущей Node для preflight {component_target('node')['version']}."
         )
     return candidates[0]
 

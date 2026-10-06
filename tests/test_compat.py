@@ -65,9 +65,9 @@ class CompatibilityTests(unittest.TestCase):
 
         self.assertEqual(require_supported_source(runner, "database", component), "18.4")
 
-    def test_panel_target_is_3_4_4_and_identical_in_both_registries(self) -> None:
+    def test_panel_target_is_3_4_5_and_identical_in_both_registries(self) -> None:
         expected_digest = (
-            "sha256:63ef481550bbf49dabfa514c95d94109619cc85607730b308f7ad0b9b5599f06"
+            "sha256:b16d724b90fd7c9fec2df04bd28938a671cafc62894105068e11550ee3449c56"
         )
 
         docker_hub = component_target("panel", "docker-hub")
@@ -76,38 +76,38 @@ class CompatibilityTests(unittest.TestCase):
         self.assertEqual(
             docker_hub,
             {
-                "version": "3.4.4",
-                "image": "remnawave/backend:3.4.4",
+                "version": "3.4.5",
+                "image": "remnawave/backend:3.4.5",
                 "digest": expected_digest,
             },
         )
         self.assertEqual(
             ghcr,
             {
-                "version": "3.4.4",
-                "image": "ghcr.io/remnawave/backend:3.4.4",
+                "version": "3.4.5",
+                "image": "ghcr.io/remnawave/backend:3.4.5",
                 "digest": expected_digest,
             },
         )
 
-    def test_node_target_is_3_4_1_and_identical_in_both_registries(self) -> None:
+    def test_node_target_is_3_4_2_and_identical_in_both_registries(self) -> None:
         expected_digest = (
-            "sha256:0cdf386dd49f360fc885bb34bde21132e478e40f0deac62d616086ec0fa9257e"
+            "sha256:1f97485b4bc7e4944f1ae95cc57d176376813b0022e9567b705f384f1a2e909d"
         )
 
         self.assertEqual(
             component_target("node", "docker-hub"),
             {
-                "version": "3.4.1",
-                "image": "remnawave/node:3.4.1",
+                "version": "3.4.2",
+                "image": "remnawave/node:3.4.2",
                 "digest": expected_digest,
             },
         )
         self.assertEqual(
             component_target("node", "ghcr"),
             {
-                "version": "3.4.1",
-                "image": "ghcr.io/remnawave/node:3.4.1",
+                "version": "3.4.2",
+                "image": "ghcr.io/remnawave/node:3.4.2",
                 "digest": expected_digest,
             },
         )
@@ -174,6 +174,12 @@ class CompatibilityTests(unittest.TestCase):
                 "3.4.4",
             ),
             (
+                "panel",
+                "remnawave/backend:3.4.5",
+                "sha256:b16d724b90fd7c9fec2df04bd28938a671cafc62894105068e11550ee3449c56",
+                "3.4.5",
+            ),
+            (
                 "node",
                 "remnawave/node:3.4.0",
                 "sha256:a2057585e2c40b8e15659063fdc4e1d82aedf81c571e8e4e8ffbe3a5cfabb906",
@@ -184,6 +190,12 @@ class CompatibilityTests(unittest.TestCase):
                 "remnawave/node:3.4.1",
                 "sha256:0cdf386dd49f360fc885bb34bde21132e478e40f0deac62d616086ec0fa9257e",
                 "3.4.1",
+            ),
+            (
+                "node",
+                "remnawave/node:3.4.2",
+                "sha256:1f97485b4bc7e4944f1ae95cc57d176376813b0022e9567b705f384f1a2e909d",
+                "3.4.2",
             ),
         )
         for name, image, digest, version in cases:

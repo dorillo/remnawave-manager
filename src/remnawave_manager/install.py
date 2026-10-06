@@ -170,6 +170,7 @@ def render_panel_env(environment: PanelEnvironment) -> str:
         "EXPORT_TO_STREAM_MAXLEN=3000\n"
         "SHORT_UUID_METHOD=nanoid\n"
         "SHORT_UUID_LENGTH=16\n"
+        "SERVICE_SNI_VERIFICATION=true\n"
         "POSTGRES_USER=remnawave\n"
         f"POSTGRES_PASSWORD={environment.postgres_password}\n"
         "POSTGRES_DB=remnawave\n"
@@ -191,7 +192,7 @@ def render_subscription_env(api_token: str) -> str:
 def render_node_env(secret_key: str) -> str:
     selected = _secret_value(secret_key, "SECRET_KEY ноды")
     return (
-        "# Remnawave Node 3.4.1. Файл содержит секрет.\n"
+        f"# Remnawave Node {component_target('node')['version']}. Файл содержит секрет.\n"
         "NODE_PORT=2222\n"
         f"SECRET_KEY={_dotenv_value(selected)}\n"
         "NFTABLES_LOGGING=true\n"
